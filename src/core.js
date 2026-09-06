@@ -322,3 +322,42 @@ export function calcMACD(closes, fast = 12, slow = 26, signal = 9) {
   const hist = macd.map((m, i) => (isNum(m) && isNum(sig[i]) ? m - sig[i] : null));
   return { macd, signal: sig, hist };
 }
+
+/* ------------------------------------------------------------------ *
+ * Data merging & gaps
+ * ------------------------------------------------------------------ */
+
+/**
+ * Merge older (backfilled) bars in front of `existing`.
+ * Dedupes by time (existing bars win); only strictly older bars are prepended.
+ * @returns {{bars: Array, added: number}} merged array and count prepended.
+ */
+export function mergeOlderData(existing, older) {
+  if (!Array.isArray(older) || !older.length) return { bars: existing, added: 0 };
+  const first = existing.length ? existing[0].time : Infinity;
+  const seen = new Set(existing.map((b) => b.time));
+  const prepend = [];
+  for (const b of older) {
+    if (!b || !isNum(b.time)) continue;
+    if (existing.length && b.time >= first) continue;
+    if (seen.has(b.time)) continue;
+    seen.add(b.time);
+    prepend.push(b);
+  }
+  if (!prepend.length) return { bars: existing, added: 0 };
+  prepend.sort((a, b) => a.time - b.time);
+  return { bars: prepend.concat(existing), added: prepend.length };
+}
+
+/**
+ * Indices of visible bars whose time jump from the previous bar exceeds
+ * `threshold × dt` (sessions breaks, weekends, missing data).
+ */
+export function detectGaps(bars, i0, i1, dtMs, threshold = 3) {
+  const gaps = [];
+  const th = (dtMs > 0 ? dtMs : HOUR) * threshold;
+  for (let i = Math.max(1, i0); i <= i1; i++) {
+    if (bars[i].time - bars[i - 1].time > th) gaps.push(i);
+  }
+  return gaps;
+}

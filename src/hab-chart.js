@@ -19,7 +19,7 @@ import {
   clamp, isNum, numberFmt, fmtCompact, autoPrecision, niceStep, hexToRgba,
   FONT_STACK, axisFont, pillFont, roundRectPath,
   TIME_STEPS, HOUR, DAY, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
-  THEMES, calcSMA, calcEMA, calcRSI,
+  THEMES, calcSMA, calcEMA, calcRSI, mergeOlderData, detectGaps,
 } from './core.js';
 
 (() => {
@@ -134,6 +134,11 @@ import {
       this._pointers = new Map();
       this._pan = null;
       this._pinch = null;
+
+      // history backfill state
+      this.onloadmore = null; // (fromTime) => Promise<bars> — set by the host app
+      this._loadingMore = false;
+      this._noMore = false;
 
       this._onResize = () => this._invalidate();
       this._onPointerDown = (e) => this._pointerDown(e);
@@ -268,6 +273,7 @@ import {
       this._needsFit = true;
       this._auto = this._autoAttr();
       this._hover = null;
+      this._noMore = false;
       this._updateAria();
       this._invalidate();
     }
@@ -301,8 +307,55 @@ import {
       this._version++;
       this._hover = null;
       this._needsFit = true;
+      this._noMore = false;
       this._updateAria();
       this._invalidate();
+    }
+
+    /**
+     * Fetch older history when the view approaches the left edge.
+     * The host app assigns `chart.onloadmore = async (fromTime) => bars`.
+     * Bars strictly older than the current first bar are prepended and the
+     * view stays anchored. Return [] / null to signal "no more data".
+     */
+    _maybeLoadMore(iLeft) {
+      if (this._loadingMore || this._noMore) return;
+      if (typeof this.onloadmore !== 'function' || !this._data.length || !this._ly) return;
+      const threshold = Math.max(2, (this._ly.plotRight / this._view.spacing) * 0.08);
+      if (iLeft > threshold) return;
+      const fromTime = this._data[0].time;
+      this._loadingMore = true;
+      Promise.resolve(this.onloadmore(fromTime))
+        .then((bars) => {
+          this._loadingMore = false;
+          if (!this._connected) return;
+          if (!Array.isArray(bars) || !bars.length) {
+            this._noMore = true;
+            return;
+          }
+          const older = [];
+          for (const b of bars) {
+            const nb = HabChart._normBar(b);
+            if (nb) older.push(nb);
+          }
+          const { bars: merged, added } = mergeOlderData(this._data, older);
+          if (!added) {
+            this._noMore = true;
+            return;
+          }
+          this._data = merged;
+          this._version++;
+          this._computeDt();
+          // keep the exact same bars on screen: every index shifts by `added`
+          this._view.rightIndex += added;
+          if (this._hover) this._hover.index = Math.min(this._hover.index + added, this._data.length - 1);
+          this._clampView();
+          this._invalidate();
+        })
+        .catch(() => {
+          this._loadingMore = false;
+          this._noMore = true;
+        });
     }
 
     /** Reset zoom to the default view (last ~150 bars). */
@@ -763,6 +816,7 @@ import {
       const iLeft = v.rightIndex - count;
       const i0 = Math.max(0, Math.floor(iLeft) - 1);
       const i1 = Math.min(d.length - 1, Math.ceil(v.rightIndex) + 1);
+      this._maybeLoadMore(iLeft);
 
       const scale = this._mainScale(i0, i1);
       this._lastScale = scale;
@@ -938,6 +992,28 @@ import {
         ctx.stroke();
         ctx.lineWidth = 1;
       });
+
+      /* session / data-gap dividers */
+      {
+        const gaps = detectGaps(d, i0, i1, this._dt, 3);
+        if (gaps.length) {
+          ctx.save();
+          ctx.strokeStyle = pal.crosshair;
+          ctx.globalAlpha = 0.55;
+          ctx.setLineDash([2, 4]);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (const gi of gaps) {
+            const x =
+              Math.round((this._xFor(gi - 1) + this._xFor(gi)) / 2) + 0.5;
+            if (x < 0 || x > plotRight) continue;
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, plotBottom);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
 
       /* RSI pane */
       if (ly.rsi) {
