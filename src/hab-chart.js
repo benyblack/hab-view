@@ -21,6 +21,7 @@ import {
   TIME_STEPS, HOUR, DAY, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
+  positionPnl, checkAlertCross,
 } from './core.js';
 
 (() => {
@@ -97,16 +98,35 @@ import {
             pointer-events: none;
           }
           .nodata[hidden] { display: none; }
+          .hud {
+            position: absolute; right: 10px; top: 8px; z-index: 2;
+            display: flex; flex-direction: column; gap: 4px; align-items: flex-end;
+            pointer-events: none;
+            font: 600 11.5px/1.4 ${FONT_STACK};
+          }
+          .hud .pos {
+            display: inline-flex; gap: 9px; align-items: baseline; white-space: nowrap;
+            background: var(--hab-chip, rgba(127, 137, 153, 0.12));
+            border: 1px solid var(--hab-border, rgba(148, 163, 184, 0.2));
+            border-radius: 7px;
+            padding: 3px 9px;
+          }
+          .hud .k { color: var(--hab-text, #8b949e); font-weight: 500; }
+          .hud .v { color: var(--hab-text-strong, #e6edf3); font-variant-numeric: tabular-nums; }
+          .hud .up { color: var(--hab-up, #16c784); }
+          .hud .dn { color: var(--hab-down, #ea3943); }
         </style>
         <div class="wrap" part="wrap">
           <canvas part="canvas" role="img"></canvas>
           <div class="legend" part="legend" aria-hidden="true"></div>
+          <div class="hud" part="hud" aria-hidden="true"></div>
           <div class="nodata" hidden>No data</div>
         </div>`;
 
       this._canvas = root.querySelector('canvas');
       this._ctx = this._canvas.getContext('2d');
       this._legend = root.querySelector('.legend');
+      this._hud = root.querySelector('.hud');
       this._nodata = root.querySelector('.nodata');
 
       this._data = [];
@@ -140,6 +160,11 @@ import {
       this.onloadmore = null; // (fromTime) => Promise<bars> — set by the host app
       this._loadingMore = false;
       this._noMore = false;
+
+      // trading overlays
+      this._positions = [];
+      this._alerts = [];
+      this._seq = 0;
 
       this._onResize = () => this._invalidate();
       this._onPointerDown = (e) => this._pointerDown(e);
@@ -309,6 +334,7 @@ import {
       if (!b) return;
       const d = this._data;
       const last = d[d.length - 1];
+      this._checkAlerts(last ? last.close : NaN, b);
       if (!last || b.time > last.time) {
         d.push(b);
         if (d.length > 1) this._computeDt();
@@ -425,6 +451,94 @@ import {
     /** Current canvas as a PNG data URL. */
     exportPNG() {
       return this._canvas.toDataURL('image/png');
+    }
+
+    /* ------------------------------------------------------------ *
+     * Positions & alerts
+     * ------------------------------------------------------------ */
+
+    /**
+     * Visualize a position / order.
+     * @param {{id?: string, side?: 'long'|'short', entry: number,
+     *          stop?: number, target?: number, qty?: number}} pos
+     * @returns {string} the position id
+     */
+    addPosition(pos) {
+      if (!pos || !isNum(pos.entry)) return null;
+      const p = {
+        id: pos.id != null ? String(pos.id) : 'pos-' + ++this._seq,
+        side: pos.side === 'short' ? 'short' : 'long',
+        entry: pos.entry,
+        stop: isNum(pos.stop) ? pos.stop : null,
+        target: isNum(pos.target) ? pos.target : null,
+        qty: isNum(pos.qty) ? pos.qty : null,
+      };
+      const i = this._positions.findIndex((x) => x.id === p.id);
+      if (i >= 0) this._positions[i] = p;
+      else this._positions.push(p);
+      this._posVersion = (this._posVersion || 0) + 1;
+      this._invalidate();
+      return p.id;
+    }
+
+    removePosition(id) {
+      this._positions = this._positions.filter((p) => p.id !== String(id));
+      this._posVersion = (this._posVersion || 0) + 1;
+      this._invalidate();
+    }
+
+    clearPositions() {
+      this._positions = [];
+      this._posVersion = (this._posVersion || 0) + 1;
+      this._invalidate();
+    }
+
+    /**
+     * Price alert. Fires `hab:alert` ({id, price, bar}) on an edge crossing
+     * during streaming updates.
+     * @param {{id?: string, price: number, direction?: 'above'|'below'|'cross',
+     *          once?: boolean}} alert
+     * @returns {string} the alert id
+     */
+    addAlert(alert) {
+      if (!alert || !isNum(alert.price)) return null;
+      const a = {
+        id: alert.id != null ? String(alert.id) : 'alert-' + ++this._seq,
+        price: alert.price,
+        direction: alert.direction || 'cross',
+        once: alert.once !== false,
+        fired: false,
+      };
+      const i = this._alerts.findIndex((x) => x.id === a.id);
+      if (i >= 0) this._alerts[i] = a;
+      else this._alerts.push(a);
+      this._invalidate();
+      return a.id;
+    }
+
+    removeAlert(id) {
+      this._alerts = this._alerts.filter((a) => a.id !== String(id));
+      this._invalidate();
+    }
+
+    clearAlerts() {
+      this._alerts = [];
+      this._invalidate();
+    }
+
+    /** Check alerts against an incoming bar (prev close → new close). */
+    _checkAlerts(prevClose, bar) {
+      if (!this._alerts.length || !isNum(prevClose)) return;
+      for (const a of [...this._alerts]) {
+        if (a.fired) continue;
+        if (checkAlertCross(a, prevClose, bar.close)) {
+          a.fired = true;
+          this.dispatchEvent(
+            new CustomEvent('hab:alert', { detail: { id: a.id, price: a.price, bar } })
+          );
+          if (a.once) this._alerts = this._alerts.filter((x) => x !== a);
+        }
+      }
     }
 
     /* reflected properties */
@@ -848,6 +962,7 @@ import {
       this._nodata.hidden = d.length > 0;
       if (!d.length) {
         this._legend.innerHTML = '';
+        this._hud.innerHTML = '';
         this._legendKey = 'empty';
         return;
       }
@@ -901,6 +1016,21 @@ import {
         ctx.lineTo(x, plotBottom);
       }
       ctx.stroke();
+
+      /* position zones (under series) */
+      for (const pos of this._positions) {
+        const yE = clamp(yOf(pos.entry), main.y0, main.y1);
+        if (isNum(pos.target)) {
+          const yT = clamp(yOf(pos.target), main.y0, main.y1);
+          ctx.fillStyle = hexToRgba(pal.up, 0.07);
+          ctx.fillRect(0, Math.min(yE, yT), plotRight, Math.abs(yT - yE));
+        }
+        if (isNum(pos.stop)) {
+          const yS = clamp(yOf(pos.stop), main.y0, main.y1);
+          ctx.fillStyle = hexToRgba(pal.down, 0.07);
+          ctx.fillRect(0, Math.min(yE, yS), plotRight, Math.abs(yS - yE));
+        }
+      }
 
       /* volume overlay */
       if (this._ind.volume) {
@@ -1066,6 +1196,66 @@ import {
           }
           ctx.stroke();
           ctx.restore();
+        }
+      }
+
+      /* position lines, tags & price alerts */
+      if (this._positions.length || this._alerts.length) {
+        const fP = numberFmt(this._prec(scale.rawHi || 1));
+
+        // alerts: dashed lines + diamond marker at the right edge
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = pal.overlay[0];
+        for (const a of this._alerts) {
+          if (a.fired) continue;
+          const y = yOf(a.price);
+          if (y < main.y0 || y > main.y1) continue;
+          ctx.globalAlpha = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(0, Math.round(y) + 0.5);
+          ctx.lineTo(plotRight, Math.round(y) + 0.5);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = pal.overlay[0];
+          const mx = plotRight - 7;
+          ctx.beginPath();
+          ctx.moveTo(mx, y - 4);
+          ctx.lineTo(mx + 4, y);
+          ctx.lineTo(mx, y + 4);
+          ctx.lineTo(mx - 4, y);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+
+        for (const pos of this._positions) {
+          const yE = clamp(yOf(pos.entry), main.y0, main.y1);
+          ctx.strokeStyle = pal.accent;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(0, Math.round(yE) + 0.5);
+          ctx.lineTo(plotRight, Math.round(yE) + 0.5);
+          ctx.stroke();
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+          for (const [lv, col] of [
+            [pos.stop, pal.down],
+            [pos.target, pal.up],
+          ]) {
+            if (!isNum(lv)) continue;
+            const y = clamp(yOf(lv), main.y0, main.y1);
+            ctx.strokeStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(0, Math.round(y) + 0.5);
+            ctx.lineTo(plotRight, Math.round(y) + 0.5);
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+          const tag = `${pos.side === 'short' ? 'S' : 'L'} ${fP.format(pos.entry)}`;
+          ctx.font = pillFont();
+          const tw = ctx.measureText(tag).width + 10;
+          this._pill(plotRight - tw - 8, yE, tag, pal.accent, pal.pillText, 'left', tw);
         }
       }
 
@@ -1355,7 +1545,10 @@ import {
       }
       const hoverIdx = this._hover ? this._hover.index : d.length - 1;
       const idx = clamp(hoverIdx, 0, d.length - 1);
-      const key = [idx, this._version, this._type, this._label, this._theme, this.getAttribute('indicators')].join('|');
+      const key = [
+        idx, this._version, this._type, this._label, this._theme,
+        this.getAttribute('indicators'), this._positions.length, this._posVersion || 0,
+      ].join('|');
       if (key === this._legendKey) return;
       this._legendKey = key;
 
@@ -1401,6 +1594,36 @@ import {
       });
 
       this._legend.innerHTML = html;
+      this._updateHud();
+    }
+
+    /** Position P&L chips (top-right HTML overlay). */
+    _updateHud() {
+      const hud = this._hud;
+      if (!this._positions.length) {
+        if (hud.innerHTML) hud.innerHTML = '';
+        return;
+      }
+      const d = this._data;
+      const price = d.length ? d[d.length - 1].close : NaN;
+      const f = numberFmt(this._prec(price || 1));
+      const esc = (s) =>
+        String(s).replace(/[&<>"']/g, (c) =>
+          ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+        );
+      let html = '';
+      for (const p of this._positions) {
+        const pnl = positionPnl(p, price);
+        const pct = p.entry ? (pnl / p.entry) * 100 : 0;
+        const cls = pnl >= 0 ? 'up' : 'dn';
+        const qtyStr = p.qty != null ? ' ' + p.qty : '';
+        html +=
+          `<div class="pos">` +
+          `<span class="k">${esc(p.side === 'short' ? 'SHORT' : 'LONG')}${esc(qtyStr)} @ ${f.format(p.entry)}</span>` +
+          `<span class="v ${cls}">${pnl >= 0 ? '+' : ''}${f.format(pnl)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)</span>` +
+          `</div>`;
+      }
+      hud.innerHTML = html;
     }
 
     /* ------------------------------------------------------------ *

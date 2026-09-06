@@ -146,6 +146,25 @@ Return an empty array (or throw) when history is exhausted and the chart stops
 asking. Data gaps (weekends, session breaks) are marked with subtle dashed
 dividers on the time axis.
 
+### Positions & alerts
+
+Visualize trades directly on the chart — entry/stop/target zones, a live P&L
+chip, and price alerts that fire during streaming updates:
+
+```js
+chart.addPosition({ side: 'long', entry: 64200, stop: 62900, target: 66800, qty: 0.5 });
+chart.addPosition({ id: 'x1', side: 'short', entry: 66000, qty: 1 });
+chart.removePosition('x1');
+
+chart.addAlert({ price: 65000, direction: 'above' }); // 'above' | 'below' | 'cross'
+chart.addEventListener('hab:alert', (e) => {
+  console.log('crossed!', e.detail.id, e.detail.price);
+});
+```
+
+The P&L chip recalculates on every streamed bar. Alerts are edge-triggered
+(fire once per crossing) and one-shot by default (`once: false` to re-arm).
+
 Reflected properties (`chart.type = 'line'`) work for `theme`, `type`, `label`,
 `indicators`.
 
