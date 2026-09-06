@@ -361,3 +361,125 @@ export function detectGaps(bars, i0, i1, dtMs, threshold = 3) {
   }
   return gaps;
 }
+
+/* ------------------------------------------------------------------ *
+ * Indicator registry
+ * ------------------------------------------------------------------ */
+
+/**
+ * Normalize an indicator compute() result to
+ * `{ lines: [{name, values, color?}], histogram: number[] | null }`.
+ */
+export function normalizeIndicatorResult(res) {
+  if (!res) return { lines: [], histogram: null };
+  if (Array.isArray(res)) return { lines: [{ name: '', values: res }], histogram: null };
+  return {
+    lines: Array.isArray(res.lines) ? res.lines : [],
+    histogram: Array.isArray(res.histogram) ? res.histogram : null,
+  };
+}
+
+const closesOf = (bars) => bars.map((b) => b.close);
+
+/** Built-in indicator definitions (name → def). */
+export const BUILTIN_INDICATORS = new Map(
+  Object.entries({
+    sma: {
+      kind: 'overlay',
+      params: { period: 20 },
+      compute: (bars, p) => calcSMA(closesOf(bars), p.period),
+    },
+    ema: {
+      kind: 'overlay',
+      params: { period: 50 },
+      compute: (bars, p) => calcEMA(closesOf(bars), p.period),
+    },
+    bb: {
+      kind: 'overlay',
+      params: { period: 20, mult: 2 },
+      compute: (bars, p) => {
+        const { mid, upper, lower } = calcBollinger(closesOf(bars), p.period, p.mult);
+        return {
+          lines: [
+            { name: 'upper', values: upper },
+            { name: 'mid', values: mid },
+            { name: 'lower', values: lower },
+          ],
+        };
+      },
+    },
+    rsi: {
+      kind: 'pane',
+      params: { period: 14 },
+      guides: [30, 70],
+      range: [0, 100],
+      fmt: 'fixed1',
+      color: 'rsi',
+      compute: (bars, p) => calcRSI(closesOf(bars), p.period),
+    },
+    macd: {
+      kind: 'pane',
+      params: { fast: 12, slow: 26, signal: 9 },
+      guides: [0],
+      fmt: 'price',
+      compute: (bars, p) => {
+        const r = calcMACD(closesOf(bars), p.fast, p.slow, p.signal);
+        return {
+          lines: [
+            { name: 'macd', values: r.macd },
+            { name: 'signal', values: r.signal },
+          ],
+          histogram: r.hist,
+        };
+      },
+    },
+  })
+);
+
+/**
+ * Parse an `indicators` attribute string against a registry.
+ * Token: `name[:param[/param…]][@color]`, plus the `volume` keyword.
+ * @returns {{overlays: Array, panes: Array, volume: boolean, unknown: string[]}}
+ */
+export function parseIndicators(str, registry) {
+  const out = { overlays: [], panes: [], volume: false, unknown: [] };
+  if (str == null || str === '') return out;
+  const seen = new Set();
+  for (const raw of String(str).split(/[\s,;]+/)) {
+    if (!raw) continue;
+    const m = raw.match(/^([A-Za-z][A-Za-z0-9_]*)(?::([^@]*))?(@.+)?$/);
+    if (!m) continue;
+    const [, name, paramStr, colorStr] = m;
+    if (name === 'volume') {
+      out.volume = true;
+      continue;
+    }
+    const key = name.toLowerCase();
+    const def = registry.get(key);
+    if (!def) {
+      out.unknown.push(name);
+      continue;
+    }
+    const dedupe = key + ':' + (paramStr || '');
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+
+    const defaults = def.params || {};
+    const params = {};
+    const parts = paramStr ? paramStr.split('/').map((s) => parseFloat(s)) : [];
+    Object.keys(defaults).forEach((k, i) => {
+      params[k] = isNum(parts[i]) ? parts[i] : defaults[k];
+    });
+
+    const entry = {
+      name: key,
+      def,
+      params,
+      color: colorStr ? colorStr.slice(1) : null,
+      key: dedupe,
+    };
+    if (def.kind === 'pane') out.panes.push(entry);
+    else out.overlays.push(entry);
+  }
+  return out;
+}
