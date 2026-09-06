@@ -91,6 +91,22 @@ chart.setData([
 | `setVisibleRange({from, to})`   | Jump to a time window                             |
 | `exportPNG()`                   | → PNG data URL of the current canvas              |
 
+### Infinite history (`loadMore`)
+
+Assign a callback and the chart fetches older bars whenever the user scrolls
+toward the left edge — the view stays anchored while data is prepended:
+
+```js
+chart.onloadmore = async (fromTime) => {
+  const res = await fetch(`/api/bars?before=${fromTime}&limit=500`);
+  return res.json(); // [{ time, open, high, low, close, volume }, …]
+};
+```
+
+Return an empty array (or throw) when history is exhausted and the chart stops
+asking. Data gaps (weekends, session breaks) are marked with subtle dashed
+dividers on the time axis.
+
 Reflected properties (`chart.type = 'line'`) work for `theme`, `type`, `label`,
 `indicators`.
 

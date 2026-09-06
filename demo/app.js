@@ -44,6 +44,14 @@ const chart = document.getElementById('chart');
  * Synthetic data (works fully offline)
  * ------------------------------------------------------------------ */
 
+const HIST_LEN = 2600; // long synthetic history; the chart loads it in chunks
+const CHUNK = 500; // initial slice handed to the chart
+const histCache = new Map();
+
+function historyKey(symbol, tfId) {
+  return symbol + ':' + tfId;
+}
+
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
@@ -72,7 +80,7 @@ function hashStr(s) {
   return h >>> 0;
 }
 
-function genSynthetic(symbol, tfSec, n = 600) {
+function genSynthetic(symbol, tfSec, n = CHUNK) {
   const rnd = mulberry32(hashStr(symbol + ':' + tfSec) ^ 0x9e3779b9);
   const tfMs = tfSec * 1000;
   const t0 = Math.floor(Date.now() / tfMs) * tfMs - (n - 1) * tfMs;
@@ -105,6 +113,25 @@ function genSynthetic(symbol, tfSec, n = 600) {
   return bars;
 }
 
+/** Long synthetic history for a symbol+timeframe (generated once). */
+function getHistory(symbol, tfId) {
+  const key = historyKey(symbol, tfId);
+  let hist = histCache.get(key);
+  if (!hist) {
+    const tfSec = TFS.find((t) => t.id === tfId).sec;
+    hist = genSynthetic(symbol, tfSec, HIST_LEN);
+    histCache.set(key, hist);
+  }
+  return hist;
+}
+
+/** Older synthetic bars preceding `fromTime` (for chart.onloadmore). */
+function olderSynthetic(symbol, tfId, fromTime, limit = CHUNK) {
+  const hist = getHistory(symbol, tfId);
+  const older = hist.filter((b) => b.time < fromTime);
+  return older.slice(-limit);
+}
+
 /** Stateful synthetic live stream: mutates the current bar, rolls on boundary. */
 function makeSynthStream(symbol, tfSec, startPrice) {
   const tfMs = tfSec * 1000;
@@ -131,11 +158,11 @@ function makeSynthStream(symbol, tfSec, startPrice) {
  * Binance feed (real data, graceful fallback)
  * ------------------------------------------------------------------ */
 
-async function fetchKlines(symbol, tfId, limit = 600) {
+async function fetchKlines(symbol, tfId, limit = CHUNK, endTime) {
   const pair = BINANCE[symbol];
-  const res = await fetch(
-    `https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${tfId}&limit=${limit}`
-  );
+  let url = `https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${tfId}&limit=${limit}`;
+  if (endTime) url += `&endTime=${endTime - 1}`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
   const rows = await res.json();
   return rows.map((k) => ({
@@ -277,11 +304,11 @@ function startFeed({ syntheticFallbackToast = false } = {}) {
 
 async function loadSymbol() {
   const { symbol, tf } = state;
-  const tfCfg = TFS.find((t) => t.id === tf);
   chart.setAttribute('label', `${symbol} · ${tf}`);
 
   if (symbol === 'DEMO' || !BINANCE[symbol]) {
-    chart.setData(genSynthetic(symbol, tfCfg.sec));
+    chart.onloadmore = (fromTime) => olderSynthetic(symbol, tf, fromTime);
+    chart.setData(getHistory(symbol, tf).slice(-CHUNK));
     startFeed();
     return;
   }
@@ -289,11 +316,13 @@ async function loadSymbol() {
   setStatus('warn', `loading ${BINANCE[symbol]} ${tf}…`);
   try {
     const bars = await fetchKlines(symbol, tf);
+    chart.onloadmore = (fromTime) => fetchKlines(symbol, tf, CHUNK, fromTime);
     chart.setData(bars);
     startFeed({ syntheticFallbackToast: true });
   } catch (err) {
     toast(`Couldn't reach Binance (${err.message}) — showing synthetic data.`);
-    chart.setData(genSynthetic(symbol, tfCfg.sec));
+    chart.onloadmore = (fromTime) => olderSynthetic(symbol, tf, fromTime);
+    chart.setData(getHistory(symbol, tf).slice(-CHUNK));
     startFeed();
   }
 }
