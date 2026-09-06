@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HabView — modern charting web component</title>
+  <meta name="description" content="Demo of <hab-chart>: a zero-dependency financial charting web component." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%236366f1'/%3E%3Crect x='6' y='9' width='3.4' height='7' rx='1' fill='white'/%3E%3Crect x='14.5' y='7' width='3.4' height='5' rx='1' fill='white' opacity='.6'/%3E%3C/svg%3E" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#g)" />
+        <path d="M7.2 6.5v11" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".9"/>
+        <rect x="5.6" y="9" width="3.2" height="6" rx="0.8" fill="#fff"/>
+        <path d="M16.8 6.5v11" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
+        <rect x="15.2" y="8" width="3.2" height="4.4" rx="0.8" fill="#fff" opacity=".55"/>
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="24" y2="24">
+            <stop stop-color="#6366f1"/><stop offset="1" stop-color="#22d3ee"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <span class="brand-name">Hab<b>View</b></span>
+      <span class="brand-tag">component</span>
+    </div>
+
+    <nav class="controls" aria-label="Chart controls">
+      <div class="seg" id="seg-symbol" role="group" aria-label="Symbol"></div>
+      <div class="seg" id="seg-tf" role="group" aria-label="Timeframe"></div>
+      <div class="seg" id="seg-type" role="group" aria-label="Chart type">
+        <button type="button" data-type="candles" class="active" aria-pressed="true" title="Candlesticks">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+            <path d="M7 4v3.2M7 14.8V20M17 4v2.2M17 13.8V20"/>
+            <rect x="4.8" y="7.2" width="4.4" height="7.6" rx="1"/>
+            <rect x="14.8" y="6.2" width="4.4" height="7.6" rx="1"/>
+          </svg><span>Candles</span>
+        </button>
+        <button type="button" data-type="line" aria-pressed="false" title="Line">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 16.5l5-6 4 3.4L21 5"/>
+          </svg><span>Line</span>
+        </button>
+        <button type="button" data-type="area" aria-pressed="false" title="Area">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 15.5l5-6 4 3.4L21 6" />
+            <path d="M3 15.5l5-6 4 3.4L21 6v12H3z" fill="currentColor" fill-opacity=".18" stroke="none"/>
+          </svg><span>Area</span>
+        </button>
+      </div>
+      <div class="chips" id="chips" role="group" aria-label="Indicators"></div>
+    </nav>
+
+    <div class="topbar-right">
+      <button type="button" class="icon-btn" id="btn-live" aria-pressed="true" title="Pause / resume live updates">
+        <span class="live-dot" aria-hidden="true"></span>
+        <svg id="ico-pause" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
+          <rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/>
+        </svg>
+        <svg id="ico-play" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor" style="display:none">
+          <path d="M8 5.5v13l10-6.5z"/>
+        </svg>
+        <span id="live-label">Live</span>
+      </button>
+      <button type="button" class="icon-btn" id="btn-theme" title="Toggle light / dark theme">
+        <svg id="ico-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"/>
+        </svg>
+        <svg id="ico-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="display:none">
+          <circle cx="12" cy="12" r="4.2"/>
+          <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5 5l1.6 1.6M17.4 17.4L19 19M19 5l-1.6 1.6M6.6 17.4L5 19"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="chart-area">
+    <hab-chart id="chart" theme="dark" type="candles" indicators="volume"></hab-chart>
+  </main>
+
+  <footer class="statusbar">
+    <span class="status"><span class="dot" id="status-dot"></span><span id="status-text">starting…</span></span>
+    <span class="range mono" id="range-text"></span>
+    <span class="hint">scroll to zoom · drag to pan · double-click to reset · keyboard: ← → + − home end</span>
+  </footer>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+</body>
+</html>

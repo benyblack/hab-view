@@ -1,0 +1,97 @@
+# HabView Roadmap
+
+North star: **"TradingView-class usefulness inside a zero-dependency custom element."**
+Every feature must survive the test: *one tag, zero build step, sane defaults*.
+
+Current state (v0.1): candles/line/area, volume, SMA/EMA overlays, RSI pane,
+crosshair + OHLC legend, zoom/pan/pinch/keyboard, streaming, theming, PNG
+export, ~0.2 ms per frame at default zoom.
+
+Effort: **S** ≤ a day · **M** a few days · **L** a week+. Order within a track
+is suggested priority.
+
+---
+
+## Track 1 — Real-world data (make it drop-in for production apps)
+
+| Feature | What & why | Effort | Notes |
+|---|---|---|---|
+| History backfill (`loadMore`) | `chart.onloadmore = (fromTime) => Promise<bars>` — fetch older bars when the user scrolls past the left edge. Every serious app needs this. | M | Renderer is index-based: shift `rightIndex` by the prepended count to keep the view anchored. |
+| Session / gap handling | Optional axis "gap" dividers when bar intervals jump (weekends, market close). | S | x-axis is already index-space, so gaps compress naturally; only axis *labels* need honesty — boundary-based ticks already give most of this. Add `sessions="0930-1600"` attr later. |
+| Second symbol overlay | `compare="ETH"` — normalized (% from window start) second line. | S | New overlay series type; legend shows both. |
+| Tick → bar aggregation | `aggregate="volume\|dollar\|tick"` — build advanced bars from a trade stream client-side. | M | Quant-grade feature no mainstream web chart ships built-in. Feed layer first, component second. |
+| Multi-pane series sync | Link crosshairs/ranges across several `<hab-chart>`s. | S | `hab:range`/`hab:crosshair` events already exist — a small `<hab-grid>` wrapper component finishes it. |
+
+## Track 2 — Series & indicators (breadth without bloat)
+
+| Feature | What & why | Effort | Notes |
+|---|---|---|---|
+| OHLC bars, hollow candles, Heikin-Ashi | Cheap breadth traders expect. | S | Transforms in the candle draw path. |
+| Baseline & step-line types | Round out `type=`. | S | |
+| Bollinger, VWAP, Donchian, PSAR | Most-requested overlays. | S each | Bollinger = SMA + rolling stdev; VWAP needs session anchor. |
+| MACD, Stochastic, OBV, ATR panes | The pane system already stacks N panes (RSI proves it); generalize pane *producers*. | M | MACD = histogram + 2 lines in one pane. |
+| **Custom indicator registry** | `HabChart.registerIndicator('myInd', { type:'overlay'\|'pane', compute(bars, params), defaults })` then use `indicators="myInd:14"`. | M | The ecosystem unlock — everything after this is community-extensible. |
+| Per-indicator styling | `indicators="sma:20@#f0b429"` syntax + `--hab-*` vars. | S | |
+| Indicator settings UX in demo | Chips get a popover (period/color). | S | |
+
+## Track 3 — Trading usefulness (the "more useful than TradingView" layer)
+
+| Feature | What & why | Effort | Notes |
+|---|---|---|---|
+| **Positions & orders visualization** | `chart.addPosition({ entry, stop, target, qty })` → entry/stop/target zone with live P&L readout against streaming price. TradingView gates this behind Pro. | M | Highest-impact single feature for traders. |
+| Price alerts | `addAlert({ price, direction })` → line + `hab:alert` event on cross; optional browser Notification. | S–M | Checked inside `update()`. |
+| Measure tool | Shift-drag A→B: Δprice, ±%, Δtime, bar count overlay. | S–M | |
+| **Stats panel** | Visible-range analytics: return %, annualized vol, max drawdown, up/down bars, avg volume. | S | Pure functions over visible slice; huge "useful" per line of code. |
+| **Replay mode** | `chart.replay(fromIndex)` + play/pause/speed — scrub history bar-by-bar for practice & demos. | S–M | Renderer is data-driven; slice + reuse auto-follow. |
+| Candle countdown | Time remaining in the current bar (legend pill). | S | 1 s timer, no re-render cost (HTML overlay). |
+| Shareable chart state | `getState()/setState()`; demo maps to URL hash (`#BTC-1h-sma20-rsi`). | S | Stickiness + marketing. |
+
+## Track 4 — Inventions & differentiators (things TradingView doesn't do)
+
+| Idea | What & why | Effort |
+|---|---|---|
+| **Volume profile** | Side histogram with POC/VAH/VAL over the visible range. Classic pro tool, rarely free. | M–L |
+| **Declarative `<hab-feed>` element** | `<hab-feed binance="BTCUSDT" tf="1h"></hab-feed><hab-chart>` — a fully live chart with **zero JavaScript written**. The ultimate "modern, simpler" demo. | M |
+| **Smart annotations** | Auto-badge volume spikes, RSI divergences, gaps, N-bar highs/lows; hover for a one-line insight. "Explain mode" for charts. | M |
+| Volatility-regime shading | Background tint by realized-vol percentile — market state at a glance. | S–M |
+| **HabScript mini-language** | `indicators="expr: close - sma(close,20)"` — safe expression parser (shunting-yard, no `eval`) over builtins. Community recipes without a build step. | L |
+| Cross-tab co-view | BroadcastChannel syncs crosshair/markings between two open tabs. Great demo flex, tiny code. | S–M |
+| Sonification toggle | Pitch maps to price movement — screen-reader traders get trend by ear. Rare a11y win. | S–M |
+| AI-ready data hook | `getDataWindow()` + demo "Explain this chart" button (sends visible-window summary to an LLM). Data stays local until user acts. | S |
+| Branded snapshot/report export | exportPNG + stats table + watermark composed into one shareable image. | M |
+| Spread & ratio charts | `formula="BTC/ETH"` live derived series. | M |
+
+## Track 5 — Engineering & scale (continuous)
+
+- **Tests**: unit tests for pure functions (indicators, ticks, scales), Playwright
+  visual-regression diffs, and a **perf-budget CI gate** from the benchmark
+  script we already wrote (fail if default-view render > 1 ms). *M*
+- **Incremental indicators**: O(1) online updates on stream ticks instead of
+  full recompute per version. *S–M*
+- **Columnar typed-array store** internally (accept objects, convert once). *M*
+- **Min/max downsampling** per pixel column for extreme zoom-outs. *M*
+- Offscreen hover layer (crosshair-only repaint). *M*
+- Web Worker compute path for 1M+ bars; Rust/WASM only if profiling ever
+  demands (see perf analysis — canvas, not JS, is the floor). *M–L*
+- Packaging: JSDoc types → `.d.ts`, npm publish + CDN links, semver/changelog,
+  `useHabChart` React hook + Vue/Svelte examples. *S–M*
+- i18n for built-in labels; `preset="minimal|pro"` attribute. *S*
+
+### Explicit non-goals
+
+Full drawing-tools parity with TradingView (we'll ship trendline/horizontal/
+fib only if a real use demands), any backend/social layer, an indicator
+marketplace (before the registry proves itself), and a WebGL renderer (the
+Canvas 2D floor is ~1 ms at our scale — revisit only with profiler evidence).
+
+---
+
+## Recommended next five PRs (value ÷ effort)
+
+1. **`loadMore` backfill + gap dividers** — unblocks real production apps.
+2. **Indicator registry + Bollinger + MACD** — proves extensibility, most requested.
+3. **Positions/orders + alerts** — the headline "more useful than TradingView" feature.
+4. **Stats panel + measure tool** — two cheap, high-visibility wins.
+5. **`getState()/setState()` + URL sharing** — stickiness and shareable links.
+
+Each PR lands with the perf gate green (<1 ms default view, <8 ms max zoom-out).
