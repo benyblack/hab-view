@@ -511,3 +511,68 @@ export function checkAlertCross(alert, prevPrice, price) {
   if (dir === 'below') return prevPrice >= p && price < p;
   return (prevPrice <= p && price > p) || (prevPrice >= p && price < p);
 }
+
+/* ------------------------------------------------------------------ *
+ * Visible-range statistics
+ * ------------------------------------------------------------------ */
+
+/**
+ * Statistics over a visible slice of bars.
+ * @returns null when fewer than 2 bars, else
+ *  { n, changePct, min, max, maxDDPct, annVolPct, up, dn, avgVolume }
+ */
+export function computeStats(bars, i0, i1, dtMs) {
+  const n = i1 - i0 + 1;
+  if (!bars.length || n < 2 || i0 < 0 || i1 >= bars.length) return null;
+  const first = bars[i0].close;
+  const last = bars[i1].close;
+  let min = Infinity;
+  let max = -Infinity;
+  let peak = -Infinity;
+  let maxDD = 0;
+  let up = 0;
+  let dn = 0;
+  let volSum = 0;
+  let volBars = 0;
+  let lrSum = 0;
+  let lrSumSq = 0;
+  let lrN = 0;
+  let prev = first;
+  for (let i = i0; i <= i1; i++) {
+    const b = bars[i];
+    if (b.close < min) min = b.close;
+    if (b.close > max) max = b.close;
+    if (b.close > peak) peak = b.close;
+    const dd = peak > 0 ? (peak - b.close) / peak : 0;
+    if (dd > maxDD) maxDD = dd;
+    if (i > i0) {
+      if (b.close >= prev) up++;
+      else dn++;
+      if (prev > 0 && b.close > 0) {
+        const lr = Math.log(b.close / prev);
+        lrSum += lr;
+        lrSumSq += lr * lr;
+        lrN++;
+      }
+    }
+    if (isNum(b.volume) && b.volume > 0) {
+      volSum += b.volume;
+      volBars++;
+    }
+    prev = b.close;
+  }
+  const variance = lrN > 1 ? Math.max(0, lrSumSq / lrN - (lrSum / lrN) * (lrSum / lrN)) : 0;
+  const sd = Math.sqrt(variance);
+  const periodsPerYear = dtMs > 0 ? (365 * 24 * 3600e3) / dtMs : 252;
+  return {
+    n,
+    changePct: first ? ((last - first) / first) * 100 : 0,
+    min,
+    max,
+    maxDDPct: maxDD * 100,
+    annVolPct: sd * Math.sqrt(periodsPerYear) * 100,
+    up,
+    dn,
+    avgVolume: volBars ? volSum / volBars : 0,
+  };
+}

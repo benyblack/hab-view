@@ -37,6 +37,7 @@ const state = {
   type: 'candles',
   live: true,
   theme: 'dark',
+  stats: false,
   indicators: new Set(['volume']),
 };
 
@@ -442,6 +443,12 @@ document.getElementById('btn-live').addEventListener('click', (e) => {
     stopFeed();
     setStatus('off', 'paused');
   }
+});
+
+document.getElementById('btn-stats').addEventListener('click', (e) => {
+  state.stats = !state.stats;
+  chart.setAttribute('stats', String(state.stats));
+  e.currentTarget.setAttribute('aria-pressed', String(state.stats));
 });
 
 document.getElementById('btn-theme').addEventListener('click', () => {

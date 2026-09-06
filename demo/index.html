@@ -67,6 +67,12 @@
     </nav>
 
     <div class="topbar-right">
+      <button type="button" class="icon-btn" id="btn-stats" aria-pressed="false" title="Toggle visible-range statistics">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+          <path d="M4 19V9M10 19V5M16 19v-7M21 19H3"/>
+        </svg>
+        <span>Stats</span>
+      </button>
       <button type="button" class="icon-btn" id="btn-live" aria-pressed="true" title="Pause / resume live updates">
         <span class="live-dot" aria-hidden="true"></span>
         <svg id="ico-pause" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
@@ -96,7 +102,7 @@
   <footer class="statusbar">
     <span class="status"><span class="dot" id="status-dot"></span><span id="status-text">starting…</span></span>
     <span class="range mono" id="range-text"></span>
-    <span class="hint">scroll to zoom · drag to pan · double-click to reset · keyboard: ← → + − home end</span>
+    <span class="hint">scroll to zoom · drag to pan · shift-drag to measure · double-click to reset</span>
   </footer>
 
   <div id="toasts" class="toasts" aria-live="polite"></div>

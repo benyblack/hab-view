@@ -21,7 +21,7 @@ import {
   TIME_STEPS, HOUR, DAY, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
-  positionPnl, checkAlertCross,
+  positionPnl, checkAlertCross, computeStats,
 } from './core.js';
 
 (() => {
@@ -33,7 +33,7 @@ import {
 
   class HabChart extends HTMLElement {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats'];
     }
 
     constructor() {
@@ -111,6 +111,16 @@ import {
             border-radius: 7px;
             padding: 3px 9px;
           }
+          .hud .statsrow {
+            display: inline-flex; gap: 12px; white-space: nowrap;
+            background: var(--hab-chip, rgba(127, 137, 153, 0.12));
+            border: 1px solid var(--hab-border, rgba(148, 163, 184, 0.2));
+            border-radius: 7px;
+            padding: 3px 10px;
+            color: var(--hab-text, #8b949e);
+            font-variant-numeric: tabular-nums;
+          }
+          .hud .statsrow b { color: var(--hab-text-strong, #e6edf3); font-weight: 600; }
           .hud .k { color: var(--hab-text, #8b949e); font-weight: 500; }
           .hud .v { color: var(--hab-text-strong, #e6edf3); font-variant-numeric: tabular-nums; }
           .hud .up { color: var(--hab-up, #16c784); }
@@ -119,7 +129,10 @@ import {
         <div class="wrap" part="wrap">
           <canvas part="canvas" role="img"></canvas>
           <div class="legend" part="legend" aria-hidden="true"></div>
-          <div class="hud" part="hud" aria-hidden="true"></div>
+          <div class="hud" part="hud" aria-hidden="true">
+            <div class="poss"></div>
+            <div class="statsrow"></div>
+          </div>
           <div class="nodata" hidden>No data</div>
         </div>`;
 
@@ -127,6 +140,8 @@ import {
       this._ctx = this._canvas.getContext('2d');
       this._legend = root.querySelector('.legend');
       this._hud = root.querySelector('.hud');
+      this._poss = root.querySelector('.poss');
+      this._statsRow = root.querySelector('.statsrow');
       this._nodata = root.querySelector('.nodata');
 
       this._data = [];
@@ -150,6 +165,10 @@ import {
       this._log = false;
       this._precision = null;
       this._label = '';
+      this._stats = false;
+      this._statsKey = '';
+      this._measure = null; // { iA, pA, iB, pB, done }
+      this._measuring = false;
       this._ind = { overlays: [], panes: [], volume: true };
 
       this._pointers = new Map();
@@ -246,6 +265,10 @@ import {
           break;
         case 'indicators':
           this._ind = parseIndicators(val, HabChart._registry());
+          break;
+        case 'stats':
+          this._stats = val != null && val !== 'false';
+          this._statsKey = '';
           break;
       }
       this._invalidate();
@@ -962,7 +985,8 @@ import {
       this._nodata.hidden = d.length > 0;
       if (!d.length) {
         this._legend.innerHTML = '';
-        this._hud.innerHTML = '';
+        this._poss.innerHTML = '';
+        this._statsRow.innerHTML = '';
         this._legendKey = 'empty';
         return;
       }
@@ -1517,6 +1541,71 @@ import {
         );
       }
 
+      /* measure tool overlay */
+      if (this._measure && this._measure.pA != null && this._measure.pB != null) {
+        const m = this._measure;
+        const xa = this._xFor(m.iA);
+        const xb = this._xFor(m.iB);
+        const ya = clamp(yOf(m.pA), main.y0, main.y1);
+        const yb = clamp(yOf(m.pB), main.y0, main.y1);
+        const rx0 = Math.min(xa, xb);
+        const rx1 = Math.max(xa, xb);
+        const ry0 = Math.min(ya, yb);
+        const ry1 = Math.max(ya, yb);
+        if (rx1 - rx0 > 2 && ry1 - ry0 > 2) {
+          ctx.save();
+          ctx.fillStyle = hexToRgba(pal.accent, 0.06);
+          ctx.fillRect(rx0, ry0, rx1 - rx0, ry1 - ry0);
+          ctx.strokeStyle = pal.crosshair;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(Math.round(rx0) + 0.5, Math.round(ry0) + 0.5, rx1 - rx0, ry1 - ry0);
+          ctx.restore();
+        }
+        const barsN = Math.abs(m.iB - m.iA);
+        const ms = Math.abs((d[m.iB] ? d[m.iB].time : 0) - (d[m.iA] ? d[m.iA].time : 0));
+        const hrs = Math.floor(ms / 3600e3);
+        const dP = m.pB - m.pA;
+        const dPct = m.pA ? (dP / m.pA) * 100 : 0;
+        const label =
+          `${dP >= 0 ? '+' : ''}${f.format(dP)} (${dPct >= 0 ? '+' : ''}${dPct.toFixed(2)}%)` +
+          ` · ${barsN} bars` +
+          ` · ${hrs >= 24 ? Math.floor(hrs / 24) + 'd ' + (hrs % 24) + 'h' : hrs + 'h'}`;
+        ctx.font = pillFont();
+        const tw = ctx.measureText(label).width + 14;
+        this._pill(
+          clamp((rx0 + rx1) / 2 - tw / 2, 2, plotRight - tw - 2),
+          clamp((ry0 + ry1) / 2, 10, plotBottom - 10),
+          label,
+          pal.crosshairBg,
+          pal.crosshairText,
+          'left',
+          tw
+        );
+      }
+
+      /* visible-range stats chip */
+      if (this._stats) {
+        const st = computeStats(d, i0, i1, this._dt);
+        const skey = st ? `${i0}:${i1}:${this._version}` : 'none';
+        if (skey !== this._statsKey) {
+          this._statsKey = skey;
+          if (st) {
+            const pct = (v, dgt = 2) => `${v >= 0 ? '+' : ''}${v.toFixed(dgt)}%`;
+            this._statsRow.innerHTML =
+              `<span><b>${pct(st.changePct)}</b></span>` +
+              `<span>maxDD ${st.maxDDPct.toFixed(1)}%</span>` +
+              `<span>ann.vol ${st.annVolPct.toFixed(0)}%</span>` +
+              `<span>up ${st.up} / dn ${st.dn}</span>` +
+              `<span>vol ${fmtCompact(st.avgVolume)}</span>`;
+          } else {
+            this._statsRow.innerHTML = '';
+          }
+        }
+      } else if (this._statsRow.innerHTML) {
+        this._statsRow.innerHTML = '';
+        this._statsKey = '';
+      }
+
       this._updateLegend();
     }
 
@@ -1599,9 +1688,9 @@ import {
 
     /** Position P&L chips (top-right HTML overlay). */
     _updateHud() {
-      const hud = this._hud;
+      const poss = this._poss;
       if (!this._positions.length) {
-        if (hud.innerHTML) hud.innerHTML = '';
+        if (poss.innerHTML) poss.innerHTML = '';
         return;
       }
       const d = this._data;
@@ -1623,7 +1712,7 @@ import {
           `<span class="v ${cls}">${pnl >= 0 ? '+' : ''}${f.format(pnl)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)</span>` +
           `</div>`;
       }
-      hud.innerHTML = html;
+      poss.innerHTML = html;
     }
 
     /* ------------------------------------------------------------ *
@@ -1650,6 +1739,20 @@ import {
           midX: mid.x,
         };
         this._pan = null;
+        this._measuring = false;
+      } else if (e.shiftKey && this._data.length) {
+        // shift+drag → measure tool
+        this._measuring = true;
+        const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
+        this._measure = {
+          iA: idx,
+          pA: this._yToPrice(pt.y),
+          iB: idx,
+          pB: this._yToPrice(pt.y),
+          done: false,
+        };
+        this._pan = null;
+        this._invalidate();
       } else {
         this._pan = { x: pt.x, rightIndex: this._view.rightIndex, moved: false };
         this._canvas.classList.add('grabbing');
@@ -1680,6 +1783,14 @@ import {
         return;
       }
 
+      if (this._measuring && this._pointers.has(e.pointerId)) {
+        const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
+        this._measure.iB = idx;
+        this._measure.pB = this._yToPrice(pt.y);
+        this._invalidate();
+        return;
+      }
+
       if (this._pan && this._pointers.has(e.pointerId) && ly) {
         const dx = pt.x - this._pan.x;
         if (Math.abs(dx) > 3) this._pan.moved = true;
@@ -1704,16 +1815,40 @@ import {
       if (this._pointers.size < 2) this._pinch = null;
       if (this._pointers.size === 0) {
         this._canvas.classList.remove('grabbing');
-        if (this._pan && had && !this._pan.moved && this._data.length) {
-          // tap / click select
-          const pt = this._localPoint(e);
-          const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
-          const price = this._yToPrice(pt.y);
-          this.dispatchEvent(
-            new CustomEvent('hab:select', {
-              detail: { index: idx, bar: this._data[idx], price },
-            })
-          );
+        if (this._measuring) {
+          this._measuring = false;
+          if (this._measure) {
+            this._measure.done = true;
+            const m = this._measure;
+            const d = this._data;
+            const barA = d[clamp(m.iA, 0, d.length - 1)];
+            const barB = d[clamp(m.iB, 0, d.length - 1)];
+            this.dispatchEvent(
+              new CustomEvent('hab:measure', {
+                detail: {
+                  from: { index: m.iA, time: barA.time, price: m.pA },
+                  to: { index: m.iB, time: barB.time, price: m.pB },
+                  bars: Math.abs(m.iB - m.iA),
+                },
+              })
+            );
+          }
+        } else if (this._pan && had && !this._pan.moved && this._data.length) {
+          if (this._measure) {
+            // a plain click clears a finished measurement
+            this._measure = null;
+            this._invalidate();
+          } else {
+            // tap / click select
+            const pt = this._localPoint(e);
+            const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
+            const price = this._yToPrice(pt.y);
+            this.dispatchEvent(
+              new CustomEvent('hab:select', {
+                detail: { index: idx, bar: this._data[idx], price },
+              })
+            );
+          }
         }
         this._pan = null;
       }
@@ -1796,6 +1931,8 @@ import {
         this._emitRange();
       } else if (key === 'Escape') {
         this._hover = null;
+        this._measure = null;
+        this._measuring = false;
         this._emitCrosshair(null);
         this._invalidate();
       } else if (key === 'Enter' || key === ' ') {
