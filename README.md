@@ -165,6 +165,17 @@ chart.addEventListener('hab:alert', (e) => {
 The P&L chip recalculates on every streamed bar. Alerts are edge-triggered
 (fire once per crossing) and one-shot by default (`once: false` to re-arm).
 
+### Stats & measure
+
+`<hab-chart stats>` shows live statistics of the visible range — return %,
+max drawdown, annualized volatility, up/down bar counts, average volume —
+recalculated as you pan and zoom.
+
+Hold **Shift and drag** across the chart to measure a move: an overlay shows
+Δprice, Δ%, bar count and elapsed time, and a `hab:measure` event fires on
+release (`detail.from` / `detail.to` carry index, time and price). Click or
+press `Esc` to clear.
+
 Reflected properties (`chart.type = 'line'`) work for `theme`, `type`, `label`,
 `indicators`.
 
