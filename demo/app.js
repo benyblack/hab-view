@@ -25,7 +25,9 @@ const BASE_PRICES = { DEMO: 64250, BTC: 64250, ETH: 3120, SOL: 148 };
 const INDICATORS = [
   { id: 'sma:20', label: 'SMA 20', color: '#f0b429' },
   { id: 'ema:50', label: 'EMA 50', color: '#38bdf8' },
+  { id: 'bb:20', label: 'BB 20', color: '#e64980' },
   { id: 'rsi:14', label: 'RSI 14', color: '#a78bfa' },
+  { id: 'macd:12/26/9', label: 'MACD', color: '#34d399' },
   { id: 'volume', label: 'Volume', color: '#7c8598' },
 ];
 

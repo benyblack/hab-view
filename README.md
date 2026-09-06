@@ -71,13 +71,52 @@ chart.setData([
 | ------------- | ---------- | ------------------------------------------------------------------ |
 | `theme`       | `dark`     | `dark` or `light`                                                   |
 | `type`        | `candles`  | `candles`, `line`, or `area`                                        |
-| `indicators`  | `volume`*  | Space/comma-separated: `sma:20`, `ema:50`, `rsi:14`, `volume`      |
+| `indicators`  | `volume`*  | Space/comma-separated: `sma:20`, `ema:50`, `bb:20`, `rsi:14`, `macd:12/26/9`, `volume`, or any registered indicator |
 | `label`       | –          | Text shown in the legend (e.g. `"BTC · 1h"`)                        |
 | `log`         | off        | Logarithmic price scale                                             |
 | `auto`        | on         | Keep the right edge pinned to the latest bar while streaming        |
 | `precision`   | auto       | Forced decimal places for prices (auto-detected from magnitude)    |
 
-\* `indicators=""` disables everything, including volume.
+\* `indicators=""` disables everything, including volume. Token syntax:
+`name[:param[/param…]][@color]` — e.g. `sma:20@#ff0000`, `macd:12/26/9`.
+
+### Built-in indicators
+
+| Name | Kind | Params | Notes |
+|---|---|---|---|
+| `sma` | overlay | `period` (20) | |
+| `ema` | overlay | `period` (50) | |
+| `bb` | overlay | `period`, `mult` (20, 2) | Bollinger bands (3 lines) |
+| `rsi` | pane | `period` (14) | fixed 0–100 scale, 30/70 guides |
+| `macd` | pane | `fast/slow/signal` (12/26/9) | 2 lines + histogram |
+| `volume` | overlay | – | histogram at the bottom of the price pane |
+
+### Custom indicators
+
+Register your own — anything from a one-liner moving average to a multi-line
+pane:
+
+```js
+HabChart.registerIndicator('vwap', {
+  kind: 'overlay',               // or 'pane'
+  params: { period: 20 },        // defaults; set via indicators="vwap:30"
+  compute(bars, params) {        // bars: normalized {time,open,high,low,close,volume}
+    const out = new Array(bars.length).fill(null);
+    let pv = 0, vv = 0;
+    for (let i = 0; i < bars.length; i++) {
+      pv += bars[i].close * bars[i].volume;
+      vv += bars[i].volume;
+      out[i] = vv ? pv / vv : null;
+    }
+    return out;                  // single series — or { lines:[{name,values}], histogram }
+  },
+  // pane-only extras: guides:[30,70], range:[0,100], fmt:'price'|'fixed1'
+});
+chart.indicators = 'vwap:20';
+```
+
+`document.querySelector('hab-chart').constructor` gives you the `HabChart`
+class for registration.
 
 ## Methods
 

@@ -19,7 +19,8 @@ import {
   clamp, isNum, numberFmt, fmtCompact, autoPrecision, niceStep, hexToRgba,
   FONT_STACK, axisFont, pillFont, roundRectPath,
   TIME_STEPS, HOUR, DAY, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
-  THEMES, calcSMA, calcEMA, calcRSI, mergeOlderData, detectGaps,
+  THEMES, mergeOlderData, detectGaps,
+  parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
 } from './core.js';
 
 (() => {
@@ -129,7 +130,7 @@ import {
       this._log = false;
       this._precision = null;
       this._label = '';
-      this._ind = { overlays: [], rsi: null, volume: true };
+      this._ind = { overlays: [], panes: [], volume: true };
 
       this._pointers = new Map();
       this._pan = null;
@@ -219,33 +220,58 @@ import {
           this._label = val || '';
           break;
         case 'indicators':
-          this._ind = HabChart._parseIndicators(val);
+          this._ind = parseIndicators(val, HabChart._registry());
           break;
       }
       this._invalidate();
     }
 
-    static _parseIndicators(str) {
-      const ind = { overlays: [], rsi: null, volume: false };
-      if (str == null || str === '') return ind; // empty string = nothing
-      const seen = new Set();
-      for (const tok of String(str).split(/[\s,;]+/)) {
-        if (!tok) continue;
-        const m = tok.toLowerCase().match(/^([a-z]+)(?::(\d+))?$/);
-        if (!m) continue;
-        const [, kind, pStr] = m;
-        const p = pStr ? clamp(parseInt(pStr, 10), 1, 1000) : null;
-        if (kind === 'volume') ind.volume = true;
-        else if (kind === 'rsi') ind.rsi = { period: p || 14 };
-        else if (kind === 'sma' || kind === 'ema') {
-          const key = kind + ':' + (p || (kind === 'sma' ? 20 : 50));
-          if (!seen.has(key)) {
-            seen.add(key);
-            ind.overlays.push({ kind, period: p || (kind === 'sma' ? 20 : 50) });
-          }
-        }
+    /* ------------------------------------------------------------ *
+     * Indicator registry
+     * ------------------------------------------------------------ */
+
+    static _registryMap = null;
+
+    /** Lazily-built registry, seeded with the built-in indicators. */
+    static _registry() {
+      if (!HabChart._registryMap) {
+        HabChart._registryMap = new Map(BUILTIN_INDICATORS);
       }
-      return ind;
+      return HabChart._registryMap;
+    }
+
+    /**
+     * Register a custom indicator.
+     *
+     *   HabChart.registerIndicator('vwap', {
+     *     kind: 'overlay',                    // or 'pane'
+     *     params: { period: 20 },             // defaults; settable via name:period
+     *     compute(bars, params) {             // bars: normalized {time,o,h,l,c,v}
+     *       return smaOfCloses;               // single series…
+     *       // …or { lines: [{name, values}], histogram } for multi-line/panes
+     *     },
+     *     guides: [30, 70],                   // pane only: dashed guide levels
+     *     range: [0, 100],                    // pane only: fixed scale
+     *     fmt: 'price' | 'fixed1',            // legend/axis number format
+     *   });
+     *   chart.indicators = 'vwap:20';
+     */
+    static registerIndicator(name, def) {
+      if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) {
+        throw new Error('registerIndicator: invalid name');
+      }
+      if (!def || typeof def.compute !== 'function') {
+        throw new Error('registerIndicator: def.compute must be a function');
+      }
+      HabChart._registry().set(name.toLowerCase(), {
+        kind: def.kind === 'pane' ? 'pane' : 'overlay',
+        ...def,
+      });
+    }
+
+    /** The custom element class (also exported implicitly for users). */
+    static get elementName() {
+      return 'hab-chart';
     }
 
     /* ------------------------------------------------------------ *
@@ -532,19 +558,30 @@ import {
       return pal;
     }
 
-    _series(kind, period) {
+    /** Compute (and cache per data version) an indicator entry's series. */
+    _indicatorSeries(entry) {
       if (this._cache.v !== this._version) {
         this._cache = { v: this._version, map: {} };
       }
-      const key = kind + period;
-      if (this._cache.map[key]) return this._cache.map[key];
-      const closes = this._data.map((b) => b.close);
-      let s;
-      if (kind === 'sma') s = calcSMA(closes, period);
-      else if (kind === 'ema') s = calcEMA(closes, period);
-      else s = calcRSI(closes, period);
-      this._cache.map[key] = s;
-      return s;
+      const k = 'ind:' + entry.key;
+      if (!this._cache.map[k]) {
+        let res;
+        try {
+          res = entry.def.compute(this._data, entry.params);
+        } catch (err) {
+          res = null;
+        }
+        this._cache.map[k] = normalizeIndicatorResult(res);
+      }
+      return this._cache.map[k];
+    }
+
+    /** Resolve a line color: #hex / palette key ('rsi', 'up', …) / cycle. */
+    _lineColor(entry, line, pal, cycleIdx) {
+      const raw = (line && line.color) || (entry && entry.color) || (entry && entry.def && entry.def.color) || null;
+      if (!raw) return pal.overlay[cycleIdx % pal.overlay.length];
+      if (raw[0] === '#') return raw;
+      return pal[raw] || pal.overlay[cycleIdx % pal.overlay.length];
     }
 
     /* ------------------------------------------------------------ *
@@ -634,12 +671,15 @@ import {
         }
       }
       for (const ov of this._ind.overlays) {
-        const s = this._series(ov.kind, ov.period);
-        for (let i = i0; i <= i1; i++) {
-          const v = s[i];
-          if (isNum(v)) {
-            if (v < lo) lo = v;
-            if (v > hi) hi = v;
+        const res = this._indicatorSeries(ov);
+        for (const ln of res.lines) {
+          const s = ln.values;
+          for (let i = i0; i <= i1; i++) {
+            const v = s[i];
+            if (isNum(v)) {
+              if (v < lo) lo = v;
+              if (v > hi) hi = v;
+            }
           }
         }
       }
@@ -778,9 +818,19 @@ import {
       const timeH = 26;
       const plotRight = Math.max(30, W - priceW);
       const plotBottom = H - timeH;
-      const hasRsi = !!this._ind.rsi;
-      const rsiH = hasRsi ? clamp(Math.round(plotBottom * 0.24), 60, 190) : 0;
-      const mainH = plotBottom - (hasRsi ? rsiH + 1 : 0);
+      const paneList = this._ind.panes;
+      const paneArea = paneList.length
+        ? Math.min(
+            Math.round(plotBottom * 0.55),
+            paneList.length * clamp(Math.round(plotBottom * 0.26), 60, 190)
+          )
+        : 0;
+      const eachPaneH = paneList.length ? Math.floor(paneArea / paneList.length) : 0;
+      const mainH = plotBottom - (paneList.length ? paneList.length * (eachPaneH + 1) : 0);
+      const panes = paneList.map((entry, k) => {
+        const y0 = mainH + 1 + k * (eachPaneH + 1);
+        return { entry, y0, y1: y0 + eachPaneH - 1, h: eachPaneH - 1 };
+      });
       const ly = (this._ly = {
         W,
         H,
@@ -789,7 +839,7 @@ import {
         plotRight,
         plotBottom,
         main: { y0: 0, y1: mainH, h: mainH },
-        rsi: hasRsi ? { y0: mainH + 1, y1: plotBottom, h: rsiH - 1 } : null,
+        panes,
       });
 
       /* background */
@@ -968,28 +1018,32 @@ import {
       }
 
       /* overlay indicators */
-      this._ind.overlays.forEach((ov, idx) => {
-        const s = this._series(ov.kind, ov.period);
-        const color = pal.overlay[idx % pal.overlay.length];
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.5;
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        let started = false;
-        for (let i = i0; i <= i1; i++) {
-          const val = s[i];
-          if (!isNum(val)) {
-            started = false;
-            continue;
+      this._ind.overlays.forEach((entry, idx) => {
+        const res = this._indicatorSeries(entry);
+        res.lines.forEach((ln, li) => {
+          const s = ln.values;
+          if (!s) return;
+          const color = this._lineColor(entry, ln, pal, idx + li);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          let started = false;
+          for (let i = i0; i <= i1; i++) {
+            const val = s[i];
+            if (!isNum(val)) {
+              started = false;
+              continue;
+            }
+            const x = this._xFor(i);
+            const y = yOf(val);
+            if (!started) {
+              ctx.moveTo(x, y);
+              started = true;
+            } else ctx.lineTo(x, y);
           }
-          const x = this._xFor(i);
-          const y = yOf(val);
-          if (!started) {
-            ctx.moveTo(x, y);
-            started = true;
-          } else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
+          ctx.stroke();
+        });
         ctx.lineWidth = 1;
       });
 
@@ -1015,74 +1069,148 @@ import {
         }
       }
 
-      /* RSI pane */
-      if (ly.rsi) {
-        const rp = ly.rsi;
-        const ryOf = (val) => rp.y0 + 5 + ((100 - val) / 100) * (rp.h - 10);
-        const rsiS = this._series('rsi', this._ind.rsi.period);
+      /* indicator panes */
+      for (const pr of ly.panes) {
+        const entry = pr.entry;
+        const res = this._indicatorSeries(entry);
+        if (!res.lines.length && !res.histogram) continue;
+        const fmtV = (v) =>
+          entry.def.fmt === 'fixed1'
+            ? numberFmt(1).format(v)
+            : numberFmt(this._prec(scale.rawHi || 1)).format(v);
+
+        // pane scale (fixed range or autoscaled from visible values)
+        let pmin = Infinity;
+        let pmax = -Infinity;
+        if (Array.isArray(entry.def.range) && entry.def.range.length === 2) {
+          pmin = entry.def.range[0];
+          pmax = entry.def.range[1];
+        } else {
+          const scan = (arr) => {
+            for (let i = i0; i <= i1; i++) {
+              const v = arr[i];
+              if (isNum(v)) {
+                if (v < pmin) pmin = v;
+                if (v > pmax) pmax = v;
+              }
+            }
+          };
+          for (const ln of res.lines) scan(ln.values);
+          if (res.histogram) scan(res.histogram);
+          if (!isFinite(pmin) || !isFinite(pmax)) {
+            pmin = 0;
+            pmax = 1;
+          }
+          if (pmax === pmin) {
+            const e = Math.abs(pmax) * 0.05 || 1;
+            pmax += e;
+            pmin -= e;
+          }
+          const pad = (pmax - pmin) * 0.08;
+          pmin -= pad;
+          pmax += pad;
+        }
+        const pyOf = (v) => pr.y0 + 5 + ((pmax - v) / (pmax - pmin)) * (pr.h - 10);
+        const invPy = (y) => pmax - ((y - pr.y0 - 5) / (pr.h - 10)) * (pmax - pmin);
+        pr.pyOf = pyOf;
+        pr.invPy = invPy;
 
         ctx.save();
+        // guides
         ctx.strokeStyle = pal.guide;
         ctx.setLineDash([3, 4]);
-        for (const lvl of [30, 50, 70]) {
-          const y = Math.round(ryOf(lvl)) + 0.5;
+        for (const g of entry.def.guides || []) {
+          const y = Math.round(pyOf(g)) + 0.5;
+          if (y < pr.y0 || y > pr.y1) continue;
           ctx.beginPath();
           ctx.moveTo(0, y);
           ctx.lineTo(plotRight, y);
-          ctx.globalAlpha = lvl === 50 ? 0.5 : 1;
           ctx.stroke();
         }
         ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
 
-        ctx.strokeStyle = pal.rsi;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        let started = false;
-        for (let i = i0; i <= i1; i++) {
-          const val = rsiS[i];
-          if (!isNum(val)) {
-            started = false;
-            continue;
+        // histogram (e.g. MACD)
+        if (res.histogram) {
+          const bodyW = Math.max(1, Math.floor(sp * 0.55));
+          const y0 = clamp(pyOf(0), pr.y0, pr.y1);
+          ctx.globalAlpha = 0.55;
+          for (let pass = 0; pass < 2; pass++) {
+            ctx.fillStyle = pass === 0 ? pal.up : pal.down;
+            for (let i = i0; i <= i1; i++) {
+              const v = res.histogram[i];
+              if (!isNum(v)) continue;
+              if ((v >= 0) !== (pass === 0)) continue;
+              const y = pyOf(v);
+              const x = this._xFor(i);
+              ctx.fillRect(
+                Math.round(x - bodyW / 2),
+                Math.min(y, y0),
+                bodyW,
+                Math.max(1, Math.abs(y - y0))
+              );
+            }
           }
-          const x = this._xFor(i);
-          const y = ryOf(val);
-          if (!started) {
-            ctx.moveTo(x, y);
-            started = true;
-          } else ctx.lineTo(x, y);
+          ctx.globalAlpha = 1;
         }
-        ctx.stroke();
+
+        // lines
+        res.lines.forEach((ln, li) => {
+          const color = this._lineColor(entry, ln, pal, li);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          let started = false;
+          for (let i = i0; i <= i1; i++) {
+            const val = ln.values[i];
+            if (!isNum(val)) {
+              started = false;
+              continue;
+            }
+            const x = this._xFor(i);
+            const y = pyOf(val);
+            if (!started) {
+              ctx.moveTo(x, y);
+              started = true;
+            } else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        });
+        ctx.lineWidth = 1;
         ctx.restore();
 
-        // pane label
+        // right-axis labels for guide levels
+        ctx.font = axisFont(400);
+        ctx.fillStyle = pal.text;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (const g of entry.def.guides || []) {
+          ctx.fillText(fmtV(g), W - 6, pyOf(g));
+        }
+
+        // pane label + live values
+        const hi = this._hover ? clamp(this._hover.index, 0, d.length - 1) : d.length - 1;
+        const vals = res.lines
+          .map((ln) => (isNum(ln.values[hi]) ? fmtV(ln.values[hi]) : '—'))
+          .join('  ');
         ctx.font = axisFont(600);
         ctx.fillStyle = pal.text;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         ctx.globalAlpha = 0.9;
         ctx.fillText(
-          `RSI ${this._ind.rsi.period}`,
+          `${entry.name.toUpperCase()} ${Object.values(entry.params).join(' ')}${vals ? '   ' + vals : ''}`,
           8,
-          rp.y0 + 5
+          pr.y0 + 5
         );
         ctx.globalAlpha = 1;
-
-        // right axis labels for RSI
-        ctx.font = axisFont(400);
-        ctx.fillStyle = pal.text;
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        for (const lvl of [30, 70]) {
-          ctx.fillText(String(lvl), W - 6, ryOf(lvl));
-        }
       }
 
       /* pane separators & axis borders */
       ctx.strokeStyle = pal.border;
       ctx.beginPath();
-      if (ly.rsi) {
-        const y = Math.round(ly.rsi.y0) + 0.5 - 1;
+      for (const pr of ly.panes) {
+        const y = Math.round(pr.y0) - 0.5;
         ctx.moveTo(0, y);
         ctx.lineTo(W, y);
       }
@@ -1148,8 +1276,10 @@ import {
           ctx.lineTo(cx, plotBottom);
         }
         const inMain = h.y <= main.y1;
-        const inRsi = !!ly.rsi && h.y > ly.rsi.y0 && h.y <= ly.rsi.y1;
-        if (inMain || inRsi) {
+        const paneUnder = inMain
+          ? null
+          : ly.panes.find((p) => h.y >= p.y0 && h.y <= p.y1);
+        if (inMain || paneUnder) {
           const hy = Math.round(h.y) + 0.5;
           ctx.moveTo(0, hy);
           ctx.lineTo(plotRight, hy);
@@ -1167,13 +1297,19 @@ import {
             pal.crosshairText,
             'left'
           );
-        } else if (inRsi) {
-          const val = clamp(
-            100 - ((h.y - ly.rsi.y0 - 5) / (ly.rsi.h - 10)) * 100,
-            0,
-            100
+        } else if (paneUnder) {
+          const fmtV =
+            paneUnder.entry.def.fmt === 'fixed1'
+              ? (v) => v.toFixed(1)
+              : (v) => f.format(v);
+          this._pill(
+            plotRight + 2,
+            h.y,
+            fmtV(paneUnder.invPy(h.y)),
+            pal.crosshairBg,
+            pal.crosshairText,
+            'left'
           );
-          this._pill(plotRight + 2, h.y, val.toFixed(1), pal.crosshairBg, pal.crosshairText, 'left');
         }
 
         // time pill
@@ -1250,14 +1386,18 @@ import {
       }
       html += `</div>`;
 
-      this._ind.overlays.forEach((ov, i) => {
-        const s = this._series(ov.kind, ov.period);
-        const val = s[idx];
-        const color = (this._pal && this._pal.overlay[i % this._pal.overlay.length]) || '#f0b429';
+      const palNow = this._palette();
+      this._ind.overlays.forEach((entry, i) => {
+        const res = this._indicatorSeries(entry);
+        if (!res.lines.length) return;
+        const dotColor = this._lineColor(entry, res.lines[0], palNow, i);
+        const vals = res.lines
+          .map((ln) => (isNum(ln.values[idx]) ? f.format(ln.values[idx]) : '—'))
+          .join('  ');
         html +=
           `<div class="row"><span class="ind">` +
-          `<i style="background:${color}"></i>${ov.kind.toUpperCase()} ${ov.period}` +
-          `</span><span class="v">${isNum(val) ? f.format(val) : '—'}</span></div>`;
+          `<i style="background:${dotColor}"></i>${entry.name.toUpperCase()} ${Object.values(entry.params).join(' ')}` +
+          `</span><span class="v">${vals}</span></div>`;
       });
 
       this._legend.innerHTML = html;
