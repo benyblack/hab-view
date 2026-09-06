@@ -456,6 +456,45 @@ chart.addEventListener('hab:select', (e) => {
   console.log('hab:select', e.detail.bar.time, '@', e.detail.price?.toFixed(2));
 });
 
+/* ---------------- trade demo: positions & alerts ---------------- */
+
+let demoPosCount = 0;
+let demoAlertCount = 0;
+
+document.getElementById('btn-long').addEventListener('click', () => {
+  const d = chart.data;
+  if (!d.length) return;
+  const entry = d[d.length - 1].close;
+  demoPosCount += 1;
+  chart.addPosition({
+    id: 'demo-' + demoPosCount,
+    side: 'long',
+    entry,
+    stop: entry * 0.98,
+    target: entry * 1.04,
+    qty: 0.5,
+  });
+});
+
+document.getElementById('btn-alert').addEventListener('click', () => {
+  const d = chart.data;
+  if (!d.length) return;
+  const price = d[d.length - 1].close * 1.01;
+  demoAlertCount += 1;
+  const id = chart.addAlert({ id: 'demo-' + demoAlertCount, price, direction: 'above' });
+  toast(`Alert set at ${price.toFixed(2)} — fires when price crosses above.`);
+  void id;
+});
+
+document.getElementById('btn-clear-trade').addEventListener('click', () => {
+  chart.clearPositions();
+  chart.clearAlerts();
+});
+
+chart.addEventListener('hab:alert', (e) => {
+  toast(`Alert ${e.detail.id}: price crossed ${e.detail.price.toFixed(2)}`);
+});
+
 /* ---------------- boot ---------------- */
 
 loadSymbol();

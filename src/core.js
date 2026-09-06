@@ -483,3 +483,31 @@ export function parseIndicators(str, registry) {
   }
   return out;
 }
+
+/* ------------------------------------------------------------------ *
+ * Trading overlays
+ * ------------------------------------------------------------------ */
+
+/**
+ * Unrealized P&L of a position at `price`.
+ * @param {{side?: 'long'|'short', entry: number, qty?: number}} pos
+ */
+export function positionPnl(pos, price) {
+  if (!pos || !isNum(pos.entry) || !isNum(price)) return 0;
+  const dir = pos.side === 'short' ? -1 : 1;
+  const qty = isNum(pos.qty) ? pos.qty : 1;
+  return (price - pos.entry) * dir * qty;
+}
+
+/**
+ * Edge-triggered alert crossing test between two consecutive prices.
+ * @param {{price: number, direction?: 'above'|'below'|'cross'}} alert
+ */
+export function checkAlertCross(alert, prevPrice, price) {
+  if (!alert || !isNum(alert.price) || !isNum(prevPrice) || !isNum(price)) return false;
+  const p = alert.price;
+  const dir = alert.direction || 'cross';
+  if (dir === 'above') return prevPrice <= p && price > p;
+  if (dir === 'below') return prevPrice >= p && price < p;
+  return (prevPrice <= p && price > p) || (prevPrice >= p && price < p);
+}
