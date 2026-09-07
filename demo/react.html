@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WickChart — React demo</title>
+  <meta name="description" content="Using <wick-chart> from React: the WickChart component + useWickChart hook from wickchart/react." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%236366f1'/%3E%3Crect x='6' y='9' width='3.4' height='7' rx='1' fill='white'/%3E%3Crect x='14.5' y='7' width='3.4' height='5' rx='1' fill='white' opacity='.6'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .react-wrap { display: flex; flex-direction: column; height: 100vh; }
+    .react-main { flex: 1; display: flex; min-height: 0; }
+    .react-chart { flex: 1 1 auto; min-width: 0; }
+    .react-chart wick-chart { width: 100%; height: 100%; display: block; }
+    .react-side {
+      flex: 0 0 300px; border-left: 1px solid var(--border); background: var(--panel);
+      padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
+    }
+    .side-title {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .evt-list { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; }
+    .evt { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+    .evt b { color: var(--accent); font-weight: 600; }
+    .evt span { color: var(--text-muted); font-family: var(--font-mono, ui-monospace, monospace); font-size: 10.5px; }
+    .evt-empty { color: var(--text-muted); font-size: 11.5px; font-style: italic; }
+    .ai-out {
+      margin: 0; white-space: pre-wrap; font-size: 10.5px; line-height: 1.5;
+      font-family: var(--font-mono, ui-monospace, monospace); color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel-2);
+      max-height: 300px; overflow-y: auto;
+    }
+    .topbar-links { margin-left: auto; display: flex; gap: 8px; }
+    .topbar-links a { color: var(--text-muted); font-size: 12px; text-decoration: none; font-weight: 600; }
+    .topbar-links a:hover { color: var(--accent); }
+    @media (max-width: 900px) {
+      .react-main { flex-direction: column; }
+      .react-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); }
+      .react-chart { min-height: 55vh; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19",
+        "react-dom/client": "https://esm.sh/react-dom@19/client?external=react"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    /* React demo — every control is React state; props map to attributes,
+       `data` assigns the bar array as a property, `onXxx` subscribes to
+       `wick:*` events, and the ref exposes the imperative API. */
+    import { createElement as h, useState, useRef, useEffect, useCallback } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { WickChart } from '../src/react.js';
+
+    const TF = 3600e3;
+    const fmt = (ms) => new Date(ms).toISOString().slice(5, 16).replace('T', ' ');
+
+    function nextBar(last, time) {
+      const drift = (Math.random() - 0.5) * last.close * 0.01;
+      const open = last.close;
+      const close = Math.max(1, open + drift);
+      return {
+        time, open, close,
+        high: Math.max(open, close) * (1 + Math.random() * 0.004),
+        low: Math.min(open, close) * (1 - Math.random() * 0.004),
+        volume: 50 + Math.random() * 150,
+      };
+    }
+
+    function genBars(n = 300) {
+      const bars = [];
+      let t = Date.now() - n * TF;
+      let seed = { close: 120 + Math.random() * 380 };
+      for (let i = 0; i < n; i++) {
+        const bar = nextBar(seed, t);
+        bars.push(bar);
+        seed = bar;
+        t += TF;
+      }
+      return bars;
+    }
+
+    const IND_PRESETS = ['none', 'sma:20', 'sma:20 ema:50', 'sma:20 volume'];
+
+    function App() {
+      const [bars, setBars] = useState(genBars);
+      const [type, setType] = useState('candles');
+      const [indIdx, setIndIdx] = useState(3);
+      const [vsh, setVsh] = useState(false);
+      const [live, setLive] = useState(false);
+      const [events, setEvents] = useState([]);
+      const [ai, setAi] = useState(null);
+      const chartRef = useRef(null);
+
+      const push = useCallback((name, text) => {
+        setEvents((list) => [...list.slice(-5), { name, text }]);
+      }, []);
+
+      // Live stream: append a bar on an interval. A fresh array is what
+      // triggers the chart update — never mutate the state array in place.
+      useEffect(() => {
+        if (!live) return undefined;
+        const timer = setInterval(() => {
+          setBars((prev) => {
+            const last = prev[prev.length - 1];
+            return [...prev.slice(-599), nextBar(last, last.time + TF)];
+          });
+        }, 900);
+        return () => clearInterval(timer);
+      }, [live]);
+
+      const indicators = IND_PRESETS[indIdx] === 'none' ? null : IND_PRESETS[indIdx];
+
+      const explain = () => {
+        const win = chartRef.current && chartRef.current.getDataWindow();
+        setAi(win ? win.text : '(no window)');
+      };
+
+      const addAlert = () => {
+        const chart = chartRef.current;
+        if (!chart || !chart.data || !chart.data.length) return;
+        const price = chart.data[chart.data.length - 1].close * 1.01;
+        chart.addAlert({ id: 'react-' + Math.floor(performance.now()), price, direction: 'above' });
+      };
+
+      const seg = (id, items, value, onPick) =>
+        h('div', { className: 'seg', id }, items.map(([val, label]) =>
+          h('button', {
+            key: val, type: 'button', className: val === value ? 'active' : '',
+            'aria-pressed': String(val === value), onClick: () => onPick(val),
+          }, label)));
+
+      return h('div', { className: 'react-wrap' },
+        h('header', { className: 'topbar' },
+          h('div', { className: 'brand' },
+            h('span', { className: 'brand-name' }, 'Wick', h('b', null, 'Chart')),
+            h('span', { className: 'brand-tag' }, 'React')),
+          seg('seg-type', [['candles', 'Candles'], ['line', 'Line'], ['area', 'Area']], type, setType),
+          seg('seg-ind', IND_PRESETS.map((p, i) => [i, p]), indIdx, setIndIdx),
+          h('button', {
+            id: 'btn-vsh', type: 'button', className: 'icon-btn' + (vsh ? ' active' : ''),
+            'aria-pressed': String(vsh), onClick: () => setVsh((v) => !v),
+            title: 'Toggle volatility-regime shading',
+          }, 'Vol shade'),
+          h('button', {
+            id: 'btn-live', type: 'button', className: 'icon-btn' + (live ? ' active' : ''),
+            'aria-pressed': String(live), onClick: () => setLive((v) => !v),
+            title: 'Stream a new bar every 900 ms',
+          }, live ? '⏸ Pause' : '▶ Live'),
+          h('button', {
+            id: 'btn-regen', type: 'button', className: 'icon-btn',
+            onClick: () => setBars(genBars()), title: 'Regenerate the random walk',
+          }, '↻ New data'),
+          h('button', { id: 'btn-alert', type: 'button', className: 'icon-btn', onClick: addAlert, title: 'Add a price alert 1% above the last close' }, '+ Alert'),
+          h('button', { id: 'btn-explain', type: 'button', className: 'icon-btn', onClick: explain, title: 'getDataWindow() — AI-ready summary of the visible range' }, 'Explain'),
+          h('nav', { className: 'topbar-links', 'aria-label': 'More demos' },
+            h('a', { href: './index.html' }, 'Full demo'),
+            h('a', { href: './declarative.html' }, 'Declarative'),
+            h('a', { href: 'https://github.com/benyblack/wickchart' }, 'GitHub'))),
+
+        h('main', { className: 'react-main' },
+          h('div', { className: 'react-chart' },
+            h(WickChart, {
+              ref: chartRef,
+              theme: 'dark',
+              type,
+              indicators,
+              volshading: vsh,
+              label: 'REACT · 1h · random walk',
+              data: bars,
+              onRange: (e) => push('wick:range', fmt(e.detail.from) + ' → ' + fmt(e.detail.to)),
+              onSelect: (e) => push('wick:select', 'bar @ ' + fmt(e.detail.time)),
+              onAlert: (e) => push('wick:alert', 'crossed ' + e.detail.price.toFixed(2)),
+              id: 'react-chart',
+            })),
+          h('aside', { className: 'react-side', id: 'react-side' },
+            h('div', null,
+              h('div', { className: 'side-title' }, 'Events (live)'),
+              h('div', { className: 'evt-list', id: 'evt-list' },
+                events.length === 0
+                  ? h('div', { className: 'evt-empty' }, 'Pan, zoom or select a bar — wick:* events land here via React props.')
+                  : events.map((ev, i) => h('div', { className: 'evt', key: i },
+                      h('b', null, ev.name), h('br', null), h('span', null, ev.text))))),
+            h('div', null,
+              h('div', { className: 'side-title' }, 'Explain — getDataWindow()'),
+              ai === null
+                ? h('div', { className: 'evt-empty' }, 'Press “Explain” to pull the AI-ready summary through the React ref.')
+                : h('pre', { className: 'ai-out', id: 'ai-out' }, ai)))));
+
+    }
+
+    createRoot(document.getElementById('root')).render(h(App));
+  </script>
+</body>
+</html>

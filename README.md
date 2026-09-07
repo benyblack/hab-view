@@ -17,6 +17,7 @@ npm install wickchart
 import 'wickchart';                       // registers <wick-chart>
 import WickChart from 'wickchart';         // for WickChart.registerIndicator(...)
 import { encodeStateQuery } from 'wickchart/core';  // pure helpers
+import { WickChart } from 'wickchart/react';        // React bindings (optional)
 ```
 
 Or straight from a CDN — no install, no build:
@@ -86,7 +87,8 @@ bet:
 
 The demo site is deployed to GitHub Pages:
 **https://benyblack.github.io/wickchart/** — a landing page with a live hero
-chart, the full interactive demo, and the zero-JavaScript declarative page.
+chart, the full interactive demo, the zero-JavaScript declarative page, and a
+[React demo](./demo/react.html) driven entirely by React state.
 
 ## Run the demo locally
 
@@ -102,6 +104,99 @@ The demo ships with an offline synthetic feed (random walk with volatility
 regimes + live ticking), and optionally loads **real Binance data** (REST +
 WebSocket) for BTC/ETH/SOL when the API is reachable from your network —
 with graceful fallback to synthetic data if it isn't.
+
+---
+
+## Frameworks
+
+`<wick-chart>` is framework-agnostic — attributes, one `data` property,
+standard DOM events. The one opinionated wrapper ships as `wickchart/react`,
+which turns that contract into idiomatic React with proper event
+subscription/cleanup. `react` is an **optional** peer dependency: nothing
+changes if you never import `wickchart/react`.
+
+### React
+
+```bash
+npm install wickchart react
+```
+
+```jsx
+import { WickChart, useWickChart } from 'wickchart/react';
+
+// drop-in component — props map 1:1 onto the element
+export function PriceChart({ bars, onRange }) {
+  return (
+    <WickChart
+      type="candles"
+      indicators="sma:20 ema:50 volume"
+      volshading
+      label="BTC · 1h"
+      data={bars}                 // bars are assigned as a property
+      onRange={onRange}           // subscribes to wick:range
+      onAlert={(e) => toast(`crossed ${e.detail.price}`)}
+      style={{ height: 420 }}
+    />
+  );
+}
+
+// or the hook, when you need the imperative API
+function PracticeChart({ bars }) {
+  const { ref, chart } = useWickChart({ data: bars, indicators: 'sma:20' });
+  // chart.getDataWindow(), chart.addAlert(...), chart.getState() … after mount
+  return <wick-chart ref={ref} style={{ height: 420 }} />;
+}
+```
+
+Rules of thumb:
+
+- **Pass a fresh array** to `data` when the bars change — the binding compares
+  by reference, and reassignment is what triggers a redraw (don't mutate).
+- **String/number/boolean props become attributes** (`type`, `indicators`,
+  `volshading`, …); `className`/`style`/`id` reach React as usual.
+- **`onXxx` subscribes to `wick:xxx`** with cleanup on unmount; an
+  `events={{ range: fn }}` object works too.
+- Works the same on React 16.8 → 19 — no custom-element event caveats.
+
+No build step? The [React demo](./demo/react.html) runs straight off a CDN
+import map — `react` and `react-dom` from esm.sh, the bindings from the
+package source.
+
+### Vue 3
+
+```vue
+<script setup>
+import { ref, onMounted } from 'vue';
+import 'wickchart';
+const chart = ref(null);
+const bars = ref([]);
+onMounted(async () => {
+  bars.value = await loadBars();
+  chart.value.data = bars.value;
+  chart.value.addEventListener('wick:range', (e) => console.log(e.detail));
+});
+</script>
+
+<template>
+  <wick-chart ref="chart" type="candles" indicators="sma:20"
+              style="height: 420px"></wick-chart>
+</template>
+```
+
+### Svelte
+
+```svelte
+<script>
+  import 'wickchart';
+  let el;
+  let bars = [];
+  $: if (el && bars.length) el.data = bars;
+</script>
+
+<wick-chart bind:this={el} type="candles" indicators="sma:20"
+            on:wick:alert={(e) => console.log(e.detail)}
+            style="height: 420px"></wick-chart>
+```
 
 ---
 
