@@ -68,6 +68,7 @@
  * @property {boolean} [log]
  * @property {boolean} [stats]
  * @property {boolean} [profile] volume profile overlay (POC + value area)
+ * @property {boolean} [annotations] smart annotations (spikes/gaps/pivots/divergences)
  * @property {string} [label]
  * @property {string} [indicators]
  * @property {{from: number, to: number}} [view] visible time window (ms)
@@ -533,6 +534,107 @@ export function buildColumns(bars, i0, i1, xOf, plotRight) {
 }
 
 /**
+ * Detect notable events over a visible bar window.
+ * Volume spikes (> volMult × SMA(volume)), price gaps beyond the previous
+ * bar's range (> gapMult × average range), pivot highs/lows (± pivot bars),
+ * and RSI divergences (later higher high with weaker RSI, and symmetric lows).
+ *
+ * @param {Bar[]} bars full dataset (raw)
+ * @param {number} i0 first visible index
+ * @param {number} i1 last visible index
+ * @param {Array<number|null>|null} rsi precomputed RSI series (or null to skip divergences)
+ * @param {{pivot?: number, volMult?: number, gapMult?: number, divDist?: number}} [opts]
+ * @returns {Array<{type: string, side: 'high'|'low', i: number, note: string}>}
+ */
+export function detectAnnotations(bars, i0, i1, rsi, opts = {}) {
+  const N = opts.pivot ?? 20;
+  const volK = opts.volMult ?? 3;
+  const gapK = opts.gapMult ?? 0.5;
+  const minDist = opts.divDist ?? 10;
+  const out = [];
+  if (!bars.length || i0 < 0 || i1 < i0 || i1 >= bars.length) return out;
+  const n = bars.length;
+
+  const period = Math.min(20, Math.max(2, Math.floor(n / 2)));
+  const volSma = calcSMA(bars.map((b) => b.volume), period);
+  const rngSma = calcSMA(bars.map((b) => b.high - b.low), period);
+
+  for (let i = i0; i <= i1; i++) {
+    const b = bars[i];
+    const vs = volSma[i];
+    if (isNum(vs) && vs > 0 && b.volume > volK * vs) {
+      out.push({
+        type: 'volspike',
+        side: 'high',
+        i,
+        note: `Volume ${(b.volume / vs).toFixed(1)}× average`,
+      });
+      continue;
+    }
+    if (i > 0) {
+      const prev = bars[i - 1];
+      const rs = rngSma[i];
+      if (isNum(rs) && rs > 0 && prev.close > 0) {
+        const upGap = b.open - prev.high;
+        const dnGap = prev.low - b.open;
+        if (upGap > gapK * rs) {
+          out.push({ type: 'gap', side: 'low', i, note: `Gapped up +${((upGap / prev.close) * 100).toFixed(2)}%` });
+        } else if (dnGap > gapK * rs) {
+          out.push({ type: 'gap', side: 'low', i, note: `Gapped down −${((dnGap / prev.close) * 100).toFixed(2)}%` });
+        }
+      }
+    }
+  }
+
+  // pivot highs / lows (strict extremum over the ±N window)
+  for (let i = Math.max(i0, N); i <= Math.min(i1, n - 1 - N); i++) {
+    let isHigh = true;
+    let isLow = true;
+    const hi = bars[i].high;
+    const lo = bars[i].low;
+    for (let j = i - N; j <= i + N && (isHigh || isLow); j++) {
+      if (j === i) continue;
+      if (bars[j].high >= hi) isHigh = false;
+      if (bars[j].low <= lo) isLow = false;
+    }
+    if (isHigh) out.push({ type: 'pivothigh', side: 'high', i, note: `${2 * N + 1}-bar high` });
+    if (isLow) out.push({ type: 'pivotlow', side: 'low', i, note: `${2 * N + 1}-bar low` });
+  }
+
+  // RSI divergences between the two strongest extremes of the window
+  if (rsi) {
+    const top2 = (value) => {
+      let e1 = -1;
+      for (let i = i0; i <= i1; i++) if (e1 < 0 || value(i) > value(e1)) e1 = i;
+      let e2 = -1;
+      for (let i = i0; i <= i1; i++) {
+        if (Math.abs(i - e1) < minDist) continue;
+        if (e2 < 0 || value(i) > value(e2)) e2 = i;
+      }
+      return [e1, e2];
+    };
+    const [h1, h2] = top2((i) => bars[i].high);
+    if (h1 >= 0 && h2 >= 0 && isNum(rsi[h1]) && isNum(rsi[h2])) {
+      const later = Math.max(h1, h2);
+      const earlier = Math.min(h1, h2);
+      if (bars[later].high > bars[earlier].high && rsi[later] < rsi[earlier] - 2) {
+        out.push({ type: 'divbear', side: 'high', i: later, note: 'Bearish RSI divergence' });
+      }
+    }
+    const [l1, l2] = top2((i) => -bars[i].low);
+    if (l1 >= 0 && l2 >= 0 && isNum(rsi[l1]) && isNum(rsi[l2])) {
+      const later = Math.max(l1, l2);
+      const earlier = Math.min(l1, l2);
+      if (bars[later].low < bars[earlier].low && rsi[later] > rsi[earlier] + 2) {
+        out.push({ type: 'divbull', side: 'low', i: later, note: 'Bullish RSI divergence' });
+      }
+    }
+  }
+
+  return out.length > 80 ? out.slice(0, 80) : out;
+}
+
+/**
  * Volume profile over a visible bar range: volume distributed into price
  * rows, with POC and the value area (greedy expansion around the POC).
  * @param {Bar[]} bars
@@ -892,6 +994,7 @@ export function encodeStateQuery(state) {
   if (state.log) p.set('log', '1');
   if (state.stats) p.set('stats', '1');
   if (state.profile) p.set('profile', '1');
+  if (state.annotations) p.set('ann', '1');
   if (state.indicators) p.set('ind', state.indicators.trim().replace(/\s+/g, ','));
   if (state.view) {
     if (isNum(state.view.from)) p.set('from', String(Math.floor(state.view.from / 1000)));
@@ -915,6 +1018,7 @@ export function decodeStateQuery(str) {
   if (p.get('log') === '1') state.log = true;
   if (p.get('stats') === '1') state.stats = true;
   if (p.get('profile') === '1') state.profile = true;
+  if (p.get('ann') === '1') state.annotations = true;
   const ind = p.get('ind');
   if (ind) state.indicators = ind.split(',').map((s) => s.trim()).filter(Boolean).join(' ');
   const from = p.get('from');

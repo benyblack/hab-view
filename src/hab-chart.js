@@ -23,6 +23,7 @@ import {
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
   positionPnl, checkAlertCross, computeStats, safeColor,
   SERIES_TYPES, calcHeikinAshi, buildColumns, computeVolumeProfile,
+  calcRSI, detectAnnotations,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -31,7 +32,7 @@ import {
 
   class HabChart extends HTMLElement {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations'];
     }
 
     constructor() {
@@ -88,6 +89,14 @@ import {
           }
           .legend .ind i { width: 8px; height: 2.5px; border-radius: 2px; display: inline-block; }
           .legend .ind .v { font-size: 12px; }
+          .legend .insight {
+            color: var(--hab-accent, #4c8dff);
+            background: var(--hab-chip, rgba(127, 137, 153, 0.12));
+            border-radius: 6px;
+            padding: 1px 8px;
+            font-size: 11.5px;
+            font-weight: 600;
+          }
           .nodata {
             position: absolute; inset: 0;
             display: flex; align-items: center; justify-content: center;
@@ -168,6 +177,9 @@ import {
       this._profile = false;
       this._profileKey = '';
       this._profileRes = null;
+      this._annotations = false;
+      this._annoKey = '';
+      this._annoList = null;
       this._measure = null; // { iA, pA, iB, pB, done }
       this._measuring = false;
       this._ind = { overlays: [], panes: [], volume: true };
@@ -273,6 +285,10 @@ import {
         case 'profile':
           this._profile = val != null && val !== 'false';
           this._profileKey = '';
+          break;
+        case 'annotations':
+          this._annotations = val != null && val !== 'false';
+          this._annoKey = '';
           break;
       }
       this._invalidate();
@@ -524,6 +540,7 @@ import {
         log: this._log,
         stats: this._stats,
         profile: this._profile,
+        annotations: this._annotations,
         indicators: ind.join(' '),
         view: range ? { from: range.from, to: range.to } : null,
         positions: this._positions.map((p) => ({
@@ -547,6 +564,7 @@ import {
       if (typeof state.log === 'boolean') this.toggleAttribute('log', state.log);
       if (typeof state.stats === 'boolean') this.setAttribute('stats', String(state.stats));
       if (typeof state.profile === 'boolean') this.setAttribute('profile', String(state.profile));
+      if (typeof state.annotations === 'boolean') this.setAttribute('annotations', String(state.annotations));
       if (typeof state.label === 'string') this.setAttribute('label', state.label);
       if (typeof state.indicators === 'string') {
         this.setAttribute('indicators', state.indicators);
@@ -824,6 +842,17 @@ import {
         this._cache.map.__heikin = calcHeikinAshi(this._data);
       }
       return this._cache.map.__heikin;
+    }
+
+    /** RSI(14) over raw closes, cached per data version (annotation input). */
+    _cachedRSI14() {
+      if (this._cache.v !== this._version) {
+        this._cache = { v: this._version, map: {} };
+      }
+      if (!this._cache.map.__rsi14) {
+        this._cache.map.__rsi14 = calcRSI(this._data.map((b) => b.close), 14);
+      }
+      return this._cache.map.__rsi14;
     }
 
     /** Compute (and cache per data version) an indicator entry's series. */
@@ -1294,6 +1323,51 @@ import {
           ctx.font = axisFont(500);
           ctx.fillText(`VAH ${fp.format(pr.vah)}`, W - 6, yOf(pr.vah));
           ctx.fillText(`VAL ${fp.format(pr.val)}`, W - 6, yOf(pr.val));
+        }
+      }
+
+      /* smart annotations (skipped at deep zoom where bars collapse into columns) */
+      if (this._annotations && !cols) {
+        const akey = `${i0}:${i1}:${this._version}`;
+        if (this._annoKey !== akey) {
+          this._annoList = detectAnnotations(this._data, i0, i1, this._cachedRSI14());
+          this._annoKey = akey;
+          this._legendKey = ''; // legend may now show insights at the hovered bar
+          this.dispatchEvent(
+            new CustomEvent('hab:annotations', { detail: { annotations: this._annoList } })
+          );
+        }
+        const A = this._annoList;
+        if (A.length) {
+          const BADGE_BG = {
+            volspike: '#f0b429',
+            gap: '#22d3ee',
+            pivothigh: '#8b949e',
+            pivotlow: '#8b949e',
+            divbear: '#ea3943',
+            divbull: '#16c784',
+          };
+          const BADGE_TXT = { volspike: 'V', gap: 'G', pivothigh: 'H', pivotlow: 'L', divbear: 'D', divbull: 'D' };
+          for (const a of A) {
+            const x = this._xFor(a.i);
+            if (x < 10 || x > plotRight - 10) continue;
+            const b = d[a.i];
+            if (!b) continue;
+            const y = a.side === 'high' ? yOf(b.high) - 9 : yOf(b.low) + 9;
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.fillStyle = BADGE_BG[a.type] || '#8b949e';
+            ctx.fill();
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = pal.bg && pal.bg !== 'transparent' ? pal.bg : '#0d1117';
+            ctx.stroke();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `700 7.5px ${FONT_STACK}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(BADGE_TXT[a.type] || '?', x, y + 0.5);
+          }
+          ctx.lineWidth = 1;
         }
       }
 
@@ -1996,6 +2070,13 @@ import {
           `<i style="background:${dotColor}"></i>${entry.name.toUpperCase()} ${Object.values(entry.params).join(' ')}` +
           `</span><span class="v">${vals}</span></div>`;
       });
+
+      if (this._annotations && this._annoList) {
+        const notes = this._annoList.filter((a) => a.i === idx).map((a) => a.note);
+        if (notes.length) {
+          html += `<div class="row"><span class="insight">${notes.map(esc).join(' · ')}</span></div>`;
+        }
+      }
 
       this._legend.innerHTML = html;
       this._updateHud();
