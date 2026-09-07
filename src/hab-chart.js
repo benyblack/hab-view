@@ -24,6 +24,7 @@ import {
   positionPnl, checkAlertCross, computeStats, safeColor,
   SERIES_TYPES, calcHeikinAshi, buildColumns, computeVolumeProfile,
   calcRSI, detectAnnotations, priceToFreq,
+  calcRealizedVol, volRegimeBands, percentileOfSorted, parseVolShading,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -36,7 +37,7 @@ const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class
 
 class HabChart extends HTMLElementBase {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'co-view', 'sonify'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'co-view', 'sonify'];
     }
 
     constructor() {
@@ -184,6 +185,7 @@ class HabChart extends HTMLElementBase {
       this._annotations = false;
       this._annoKey = '';
       this._annoList = null;
+      this._volshade = null;
 
       // cross-tab co-view state
       this._coviewName = null;
@@ -315,6 +317,10 @@ class HabChart extends HTMLElementBase {
         case 'annotations':
           this._annotations = val != null && val !== 'false';
           this._annoKey = '';
+          break;
+        case 'volshading':
+          this._volshade = val != null && val !== 'false' ? parseVolShading(val) : null;
+          this._legendKey = '';
           break;
         case 'co-view':
           this._coviewName = val || null;
@@ -575,6 +581,9 @@ class HabChart extends HTMLElementBase {
         stats: this._stats,
         profile: this._profile,
         annotations: this._annotations,
+        volshading: this._volshade
+          ? `${this._volshade.p1}/${this._volshade.p2}`
+          : false,
         indicators: ind.join(' '),
         view: range ? { from: range.from, to: range.to } : null,
         positions: this._positions.map((p) => ({
@@ -599,6 +608,8 @@ class HabChart extends HTMLElementBase {
       if (typeof state.stats === 'boolean') this.setAttribute('stats', String(state.stats));
       if (typeof state.profile === 'boolean') this.setAttribute('profile', String(state.profile));
       if (typeof state.annotations === 'boolean') this.setAttribute('annotations', String(state.annotations));
+      if (state.volshading === true) this.setAttribute('volshading', 'true');
+      else if (typeof state.volshading === 'string' && state.volshading) this.setAttribute('volshading', state.volshading);
       if (typeof state.label === 'string') this.setAttribute('label', state.label);
       if (typeof state.indicators === 'string') {
         this.setAttribute('indicators', state.indicators);
@@ -887,6 +898,23 @@ class HabChart extends HTMLElementBase {
         this._cache.map.__rsi14 = calcRSI(this._data.map((b) => b.close), 14);
       }
       return this._cache.map.__rsi14;
+    }
+
+    /** Volatility-regime data (realized vol + percentile bands), cached per data version. */
+    _volShadeCache() {
+      if (!this._volshade) return null;
+      if (this._cache.v !== this._version) {
+        this._cache = { v: this._version, map: {} };
+      }
+      if (!this._cache.map.__volshade) {
+        const closes = this._data.map((b) => b.close);
+        const vol = calcRealizedVol(closes, this._volshade.period);
+        this._cache.map.__volshade = {
+          vol,
+          ...volRegimeBands(vol, this._volshade.p1, this._volshade.p2),
+        };
+      }
+      return this._cache.map.__volshade;
     }
 
     /** Compute (and cache per data version) an indicator entry's series. */
@@ -1287,6 +1315,32 @@ class HabChart extends HTMLElementBase {
         ctx.lineTo(x, plotBottom);
       }
       ctx.stroke();
+
+      /* volatility-regime shading (behind everything but the grid) */
+      if (this._volshade) {
+        const vs = this._volShadeCache();
+        if (vs) {
+          const flushRun = (val, a, b) => {
+            if (val !== 0 && val !== 2) return;
+            const xa = clamp(this._xFor(a) - sp * 0.5, 0, plotRight);
+            const xb = clamp(this._xFor(b) + sp * 0.5, 0, plotRight);
+            if (xb <= xa) return;
+            ctx.fillStyle = val === 0 ? hexToRgba(pal.accent, 0.05) : hexToRgba(pal.down, 0.07);
+            ctx.fillRect(xa, main.y0, xb - xa, main.h);
+          };
+          let runVal = -2;
+          let runA = i0;
+          for (let i = i0; i <= i1; i++) {
+            const rv = vs.regimes[i] == null ? -1 : vs.regimes[i];
+            if (rv !== runVal) {
+              flushRun(runVal, runA, i - 1);
+              runVal = rv;
+              runA = i;
+            }
+          }
+          flushRun(runVal, runA, i1);
+        }
+      }
 
       /* position zones (under series) */
       for (const pos of this._positions) {
@@ -2103,7 +2157,8 @@ class HabChart extends HTMLElementBase {
       const idx = clamp(hoverIdx, 0, d.length - 1);
       const key = [
         idx, this._version, this._type, this._label, this._theme,
-        this.getAttribute('indicators'), this._positions.length, this._posVersion || 0,
+        this.getAttribute('indicators'), this.getAttribute('volshading'),
+        this._positions.length, this._posVersion || 0,
       ].join('|');
       if (key === this._legendKey) return;
       this._legendKey = key;
@@ -2150,6 +2205,21 @@ class HabChart extends HTMLElementBase {
             : `${entry.name.toUpperCase()} ${Object.values(entry.params).join(' ')}`;
         html += `<div class="row"><span class="ind"><i style="background:${dotColor}"></i>${label}</span><span class="v">${vals}</span></div>`;
       });
+
+      if (this._volshade) {
+        const vs = this._volShadeCache();
+        const rv = vs ? vs.regimes[idx] : -1;
+        if (vs && rv >= 0) {
+          const pct = percentileOfSorted(vs.sorted, vs.vol[idx]);
+          const name = rv === 0 ? 'calm' : rv === 2 ? 'hot' : 'normal';
+          const dot = rv === 0 ? palNow.accent : rv === 2 ? palNow.down : palNow.text;
+          html +=
+            `<div class="row"><span class="ind">` +
+            `<i style="background:${dot}"></i>VOL ${this._volshade.p1}/${this._volshade.p2} · ${name}` +
+            `${isNum(pct) ? ` · ${pct.toFixed(0)}%ile` : ''}` +
+            `</span></div>`;
+        }
+      }
 
       if (this._annotations && this._annoList) {
         const notes = this._annoList.filter((a) => a.i === idx).map((a) => a.note);
