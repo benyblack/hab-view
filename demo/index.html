@@ -32,18 +32,13 @@
         <span class="brand-tag">component</span>
       </div>
 
-      <div class="group">
-        <span class="group-label">Market</span>
-        <div class="group-body">
-          <div class="seg" id="seg-symbol" role="group" aria-label="Symbol"></div>
-          <div class="seg" id="seg-tf" role="group" aria-label="Timeframe"></div>
-        </div>
+      <div class="cluster" aria-label="Market">
+        <div class="seg" id="seg-symbol" role="group" aria-label="Symbol"></div>
+        <div class="seg" id="seg-tf" role="group" aria-label="Timeframe"></div>
       </div>
 
-      <div class="group">
-        <span class="group-label">Style</span>
-        <div class="group-body">
-          <div class="seg" id="seg-type" role="group" aria-label="Chart type">
+      <div class="cluster" aria-label="Chart style">
+        <div class="seg" id="seg-type" role="group" aria-label="Chart type">
         <button type="button" data-type="candles" class="active" aria-pressed="true" title="Candlesticks">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
             <path d="M7 4v3.2M7 14.8V20M17 4v2.2M17 13.8V20"/>
@@ -82,7 +77,6 @@
             <rect x="14.9" y="7.3" width="4.2" height="8.2" rx="1" fill="currentColor" fill-opacity=".3"/>
           </svg><span>Heikin</span>
         </button>
-          </div>
         </div>
       </div>
 
@@ -118,77 +112,70 @@
     </div>
 
     <div class="topbar-row topbar-second">
-      <div class="group group-studies">
-        <span class="group-label">Studies</span>
-        <div class="group-body">
-          <div class="chips" id="chips" role="group" aria-label="Indicators"></div>
-          <div class="chips" id="script-chips" role="group" aria-label="Custom indicators"></div>
-          <div class="script-row">
-            <input id="script-input" type="text" spellcheck="false" autocomplete="off"
-                   placeholder="add a study… e.g. close - sma(close,20)"
-                   aria-label="Custom indicator expression (WickScript)" />
-            <label class="script-pane" title="Draw in its own pane instead of on the price chart">
-              <input type="checkbox" id="script-pane" /> pane
-            </label>
-            <button type="button" id="script-add" class="script-add" title="Add the expression as an indicator">+ Expr</button>
-            <span id="script-error" class="script-error" role="status" aria-live="polite"></span>
-          </div>
+      <div class="cluster cluster-studies" aria-label="Studies">
+        <div class="chips" id="chips" role="group" aria-label="Indicators"></div>
+        <div class="chips" id="script-chips" role="group" aria-label="Custom indicators"></div>
+        <div class="script-row">
+          <input id="script-input" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="add a study… e.g. close - sma(close,20)"
+                 aria-label="Custom indicator expression (WickScript)" />
+          <label class="script-pane" title="Draw in its own pane instead of on the price chart">
+            <input type="checkbox" id="script-pane" /> pane
+          </label>
+          <button type="button" id="script-add" class="script-add" title="Add the expression as an indicator">+ Expr</button>
+          <span id="script-error" class="script-error" role="status" aria-live="polite"></span>
         </div>
       </div>
 
-      <div class="group group-view">
-        <span class="group-label">View</span>
-        <div class="group-body">
-          <button type="button" class="icon-btn" id="btn-sonify" aria-pressed="false" title="Toggle sonification — arrow keys play the chart as pitch">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 5L6 9H3v6h3l5 4V5z"/>
-              <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/>
-            </svg>
-            <span>Sound</span>
-          </button>
-          <button type="button" class="icon-btn" id="btn-play" title="Play the visible range as a pitch sweep">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
-              <path d="M8 5.5v13l10-6.5z"/>
-            </svg>
-            <span>Play</span>
-          </button>
-          <button type="button" class="icon-btn" id="btn-coview" aria-pressed="false" title="Share your pointer across tabs (co-view)">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2.5" y="4" width="12" height="12" rx="2"/>
-              <rect x="9.5" y="8" width="12" height="12" rx="2"/>
-            </svg>
-            <span>Co-view</span>
-          </button>
-          <button type="button" class="icon-btn" id="btn-volshading" aria-pressed="false" title="Toggle volatility-regime shading (calm/normal/hot by realized-vol percentile)">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 12h3l3-7 4 14 3-7h7"/>
-            </svg>
-            <span>Vol shade</span>
-          </button>
-          <button type="button" class="icon-btn" id="btn-annotations" aria-pressed="false" title="Toggle smart annotations (spikes, gaps, pivots, divergences)">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3l2.2 5.6L20 10l-5.8 1.4L12 17l-2.2-5.6L4 10l5.8-1.4z"/>
-              <path d="M19 16.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>
-            </svg>
-            <span>Annotate</span>
-          </button>
-          <button type="button" class="icon-btn" id="btn-profile" aria-pressed="false" title="Toggle volume profile (POC + value area)">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-              <path d="M20 6h-9M20 11h-5M20 16h-12M20 21h-16"/>
-            </svg>
-            <span>Profile</span>
-          </button>
-          <button type="button" class="icon-btn" id="btn-stats" aria-pressed="false" title="Toggle visible-range statistics">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-              <path d="M4 19V9M10 19V5M16 19v-7M21 19H3"/>
-            </svg>
-            <span>Stats</span>
-          </button>
-        </div>
+      <div class="cluster cluster-view" aria-label="View toggles">
+        <button type="button" class="icon-btn" id="btn-sonify" aria-pressed="false" aria-label="Sound" title="Toggle sonification — arrow keys play the chart as pitch">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 5L6 9H3v6h3l5 4V5z"/>
+            <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/>
+          </svg>
+          <span>Sound</span>
+        </button>
+        <button type="button" class="icon-btn" id="btn-play" aria-label="Play" title="Play the visible range as a pitch sweep">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
+            <path d="M8 5.5v13l10-6.5z"/>
+          </svg>
+          <span>Play</span>
+        </button>
+        <button type="button" class="icon-btn" id="btn-coview" aria-pressed="false" aria-label="Co-view" title="Share your pointer across tabs (co-view)">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="4" width="12" height="12" rx="2"/>
+            <rect x="9.5" y="8" width="12" height="12" rx="2"/>
+          </svg>
+          <span>Co-view</span>
+        </button>
+        <button type="button" class="icon-btn" id="btn-volshading" aria-pressed="false" aria-label="Vol shade" title="Toggle volatility-regime shading (calm/normal/hot by realized-vol percentile)">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12h3l3-7 4 14 3-7h7"/>
+          </svg>
+          <span>Vol shade</span>
+        </button>
+        <button type="button" class="icon-btn" id="btn-annotations" aria-pressed="false" aria-label="Annotate" title="Toggle smart annotations (spikes, gaps, pivots, divergences)">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l2.2 5.6L20 10l-5.8 1.4L12 17l-2.2-5.6L4 10l5.8-1.4z"/>
+            <path d="M19 16.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>
+          </svg>
+          <span>Annotate</span>
+        </button>
+        <button type="button" class="icon-btn" id="btn-profile" aria-pressed="false" aria-label="Profile" title="Toggle volume profile (POC + value area)">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+            <path d="M20 6h-9M20 11h-5M20 16h-12M20 21h-16"/>
+          </svg>
+          <span>Profile</span>
+        </button>
+        <button type="button" class="icon-btn" id="btn-stats" aria-pressed="false" aria-label="Stats" title="Toggle visible-range statistics">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+            <path d="M4 19V9M10 19V5M16 19v-7M21 19H3"/>
+          </svg>
+          <span>Stats</span>
+        </button>
       </div>
 
-      <div class="group group-trade">
-        <span class="group-label">Trade</span>
+      <div class="cluster cluster-trade" aria-label="Trade">
         <div class="seg" id="seg-trade" role="group" aria-label="Trading">
           <button type="button" id="btn-long" title="Add a demo long position (stop −2%, target +4%)">
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>+ Long</span>
