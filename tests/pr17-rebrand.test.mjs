@@ -30,7 +30,10 @@ test('indicator registry is module-scoped and shared', () => {
 
 test('package manifest points at the renamed files', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(pkg.version, '1.0.0');
+  // Rebrand shipped in 1.0.0; the manifest must never regress below it.
+  assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+  const [major, minor] = pkg.version.split('.').map(Number);
+  assert.ok(major > 1 || (major === 1 && minor >= 0), 'version >= 1.0.0');
   assert.equal(pkg.main, 'src/wick-chart.js');
   assert.ok(existsSync(new URL('../' + pkg.main, import.meta.url)));
   for (const sub of ['.', './core', './feed']) {

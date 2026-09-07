@@ -80,8 +80,9 @@ is suggested priority.
 - Offscreen hover layer (crosshair-only repaint). *M*
 - Web Worker compute path for 1M+ bars; Rust/WASM only if profiling ever
   demands (see perf analysis — canvas, not JS, is the floor). *M–L*
-- Packaging: JSDoc types → `.d.ts`, npm publish + CDN links, semver/changelog,
-  `useWickChart` React hook + Vue/Svelte examples. *S–M*
+- Packaging: ~~JSDoc types → `.d.ts`, npm publish + CDN links~~ ✅, ~~`useWickChart`
+  React hook + Vue/Svelte examples~~ ✅ shipped as `wickchart/react` (+ live
+  `demo/react.html`); semver/changelog policy pending. *S–M*
 - i18n for built-in labels; `preset="minimal|pro"` attribute. *S*
 
 ### Explicit non-goals

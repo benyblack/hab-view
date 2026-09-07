@@ -252,6 +252,22 @@ chart.getDataWindow();    <span class="cmt">// AI-ready summary</span></pre>
           <p class="hint">Also exported: <code>wickchart/core</code> (pure functions — indicators, stats, the WickScript engine) and <code>wickchart/feed</code> (the declarative element).</p>
         </div>
       </div>
+
+      <h3>From React (or Vue, or Svelte)</h3>
+      <div class="cols">
+        <div>
+          <pre class="code"><span class="tag">npm</span> install wickchart react
+
+<span class="tag">import</span> { WickChart } <span class="tag">from</span> <span class="str">'wickchart/react'</span>;
+
+<span class="cmt">// props → attributes · data → bars · onXxx → wick:* events</span>
+&lt;<span class="tag">WickChart</span> <span class="attr">type</span>=<span class="str">"candles"</span> <span class="attr">indicators</span>=<span class="str">"sma:20"</span> <span class="attr">volshading</span>
+           <span class="attr">data</span>={bars} <span class="attr">onRange</span>={handleRange} /&gt;</pre>
+        </div>
+        <div>
+          <p>The full source of <a href="./demo/react.html">the live React demo</a> is ~130 lines with no build step — every control on that page is React state driving the same element. Vue and Svelte snippets are in the <a href="https://github.com/benyblack/wickchart#frameworks">README</a>.</p>
+        </div>
+      </div>
     </section>
 
     <footer>
@@ -259,6 +275,7 @@ chart.getDataWindow();    <span class="cmt">// AI-ready summary</span></pre>
       <a href="https://github.com/benyblack/wickchart">GitHub</a>
       <a href="https://www.npmjs.com/package/wickchart">npm</a>
       <a href="./demo/declarative.html">Declarative demo</a>
+      <a href="./demo/react.html">React demo</a>
       <span class="sep">0.x <code>hab-*</code> names still work — see the README migration notes.</span>
     </footer>
   </div>
