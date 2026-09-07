@@ -168,6 +168,57 @@ chart.indicators = 'vwap:20';
 `HabChart.registerIndicator(...)` (the element is registered as a side effect
 of importing the package).
 
+### HabScript — custom indicators as expressions
+
+No build step, no JS: write an indicator inline in the attribute. `expr:{…}`
+draws on the price chart; `pexpr:{…}` gets its own pane. Add an optional
+`@color`, mix freely with named indicators, and it all round-trips through
+shareable URLs.
+
+```html
+<hab-chart indicators="sma:20 expr:{(close - sma(close,20)) / sma(close,20) * 100}@ff6a00"></hab-chart>
+
+<!-- oscillator in its own pane -->
+<hab-chart indicators="pexpr:{rsi(close,14)} pexpr:{change(close) / close * 100}"></hab-chart>
+```
+
+| Series variables | |
+|---|---|
+| `open` `high` `low` `close` `volume` | raw bar fields |
+| `hl2` `hlc3` `ohlc4` | classic derived prices |
+
+| Functions | |
+|---|---|
+| `sma(x,n)` `ema(x,n)` `wma(x,n)` `stddev(x,n)` | moving stats (window `n` must be a whole number ≥ 1) |
+| `rsi(x,n)` | RSI of any series |
+| `hh(x,n)` `ll(x,n)` | rolling highest / lowest |
+| `prev(x[,k])` `change(x)` | shifted series / bar-to-bar delta |
+| `abs(x)` `sqrt(x)` `log(x)` `min(a,b)` `max(a,b)` | element-wise math |
+| `crossup(a,b)` `crossdown(a,b)` | 1 on a strict cross, else 0 |
+
+Operators are `+ - * / %` with usual precedence, unary `-`, and parentheses.
+Values before a window fills are `NaN` (not drawn), division by zero yields
+`NaN`, and identifiers are case-insensitive.
+
+The expression is compiled by a hand-written tokenizer + recursive-descent
+parser in `wickchart/core` — **no `eval`, no `new Function`** — with caps on
+length (512), tokens (128) and nesting (24). Invalid scripts are reported via
+the parse result's `unknown` list and simply not drawn; they can never execute
+anything.
+
+Programmatically, compile once and reuse, or register it under a name for the
+attribute syntax:
+
+```js
+import { scriptIndicator } from 'wickchart/core';
+
+HabChart.registerIndicator('spread', scriptIndicator('close - ema(close,21)'));
+chart.indicators = 'spread';   // now usable like any built-in
+```
+
+The demo has a live input for it (type an expression, optionally tick *pane*,
+press **+ Expr** — invalid expressions show the compiler's error inline).
+
 ### Sonification — the chart by ear
 
 `<hab-chart sonify>` maps price to pitch (180–880 Hz across the visible

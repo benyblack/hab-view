@@ -57,13 +57,13 @@ is suggested priority.
 
 | Idea | What & why | Effort |
 |---|---|---|
-| **Volume profile** | Side histogram with POC/VAH/VAL over the visible range. Classic pro tool, rarely free. | M–L |
-| **Declarative `<hab-feed>` element** | `<hab-feed binance="BTCUSDT" tf="1h"></hab-feed><hab-chart>` — a fully live chart with **zero JavaScript written**. The ultimate "modern, simpler" demo. | M |
-| **Smart annotations** | Auto-badge volume spikes, RSI divergences, gaps, N-bar highs/lows; hover for a one-line insight. "Explain mode" for charts. | M |
+| ~~**Volume profile**~~ ✅ shipped | Side histogram with POC/VAH/VAL over the visible range. Classic pro tool, rarely free. | M–L |
+| ~~**Declarative `<hab-feed>` element**~~ ✅ shipped | `<hab-feed binance="BTCUSDT" tf="1h"></hab-feed><hab-chart>` — a fully live chart with **zero JavaScript written**. The ultimate "modern, simpler" demo. | M |
+| ~~**Smart annotations**~~ ✅ shipped | Auto-badge volume spikes, RSI divergences, gaps, N-bar highs/lows; hover for a one-line insight. "Explain mode" for charts. | M |
 | Volatility-regime shading | Background tint by realized-vol percentile — market state at a glance. | S–M |
-| **HabScript mini-language** | `indicators="expr: close - sma(close,20)"` — safe expression parser (shunting-yard, no `eval`) over builtins. Community recipes without a build step. | L |
-| Cross-tab co-view | BroadcastChannel syncs crosshair/markings between two open tabs. Great demo flex, tiny code. | S–M |
-| Sonification toggle | Pitch maps to price movement — screen-reader traders get trend by ear. Rare a11y win. | S–M |
+| ~~**HabScript mini-language**~~ ✅ shipped | `indicators="expr:{close - sma(close,20)}"` / `pexpr:{…}` — hand-written tokenizer + recursive-descent parser (no `eval`) over builtins, URL-safe, live demo input. | L |
+| ~~Cross-tab co-view~~ ✅ shipped | BroadcastChannel syncs crosshair/markings between two open tabs. Great demo flex, tiny code. | S–M |
+| ~~Sonification toggle~~ ✅ shipped | Pitch maps to price movement — screen-reader traders get trend by ear. Rare a11y win. | S–M |
 | AI-ready data hook | `getDataWindow()` + demo "Explain this chart" button (sends visible-window summary to an LLM). Data stays local until user acts. | S |
 | Branded snapshot/report export | exportPNG + stats table + watermark composed into one shareable image. | M |
 | Spread & ratio charts | `formula="BTC/ETH"` live derived series. | M |

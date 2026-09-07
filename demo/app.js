@@ -1,6 +1,6 @@
 /* HabView demo — data feeds & UI wiring around <hab-chart>. */
 import HabChart from '../src/hab-chart.js';
-import { encodeStateQuery, decodeStateQuery } from '../src/core.js';
+import { encodeStateQuery, decodeStateQuery, splitIndicatorTokens, compileScript } from '../src/core.js';
 import {
   genSynthetic,
   makeSynthStream,
@@ -78,6 +78,7 @@ const state = {
   profile: false,
   annotations: false,
   indicators: new Set(['volume']),
+  scripts: new Set(),
 };
 
 const chart = document.getElementById('chart');
@@ -289,7 +290,7 @@ function buildSeg(container, items, getActive, onSelect) {
 }
 
 function applyIndicators() {
-  chart.setAttribute('indicators', [...state.indicators].join(' '));
+  chart.setAttribute('indicators', [...state.indicators, ...state.scripts].join(' '));
 }
 
 /* ---------------- URL sharing ---------------- */
@@ -301,7 +302,7 @@ function writeHash() {
   hashTimer = setTimeout(() => {
     const chartState = chart.getState();
     const q = new URLSearchParams(
-      encodeStateQuery({ ...chartState, indicators: [...state.indicators].join(' ') })
+      encodeStateQuery({ ...chartState, indicators: [...state.indicators, ...state.scripts].join(' ') })
     );
     q.set('sym', state.symbol);
     q.set('tf', state.tf);
@@ -323,9 +324,23 @@ function readHash() {
   if (typeof s.profile === 'boolean') state.profile = s.profile;
   if (typeof s.annotations === 'boolean') state.annotations = s.annotations;
   if (s.indicators) {
-    state.indicators = new Set(
-      s.indicators.split(/\s+/).filter((id) => INDICATORS.some((i) => i.id === id))
-    );
+    state.indicators = new Set();
+    state.scripts = new Set();
+    for (const tok of splitIndicatorTokens(s.indicators)) {
+      const m = tok.match(/^(p?expr):\{([^{}]*)\}(@\S*)?$/i);
+      if (m) {
+        try {
+          compileScript(m[2]); // invalid scripts from URLs are dropped, never rendered
+          state.scripts.add(tok);
+        } catch (err) {
+          /* ignore */
+        }
+      } else if (INDICATORS.some((i) => i.id === tok)) {
+        state.indicators.add(tok);
+      }
+    }
+    // the chart gets exactly the validated tokens (chips and chart stay in sync)
+    s.indicators = [...state.indicators, ...state.scripts].join(' ') || undefined;
   }
   return s;
 }
@@ -396,6 +411,60 @@ for (const ind of INDICATORS) {
   });
   chips.appendChild(btn);
 }
+
+/* ---------------- custom HabScript indicators ---------------- */
+
+const scriptChips = document.getElementById('script-chips');
+const scriptInput = document.getElementById('script-input');
+const scriptPane = document.getElementById('script-pane');
+const scriptError = document.getElementById('script-error');
+
+function renderScriptChips() {
+  scriptChips.textContent = '';
+  for (const tok of state.scripts) {
+    const m = tok.match(/^(p?expr):\{([^{}]*)\}/i);
+    const src = m ? m[2].trim() : tok;
+    const label = src.length > 22 ? src.slice(0, 21) + '…' : src;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'on';
+    btn.title = src + ' — click to remove';
+    btn.appendChild(document.createElement('i'));
+    btn.appendChild(
+      document.createTextNode((m && m[1].toLowerCase() === 'pexpr' ? 'pane · ' : '') + label)
+    );
+    btn.addEventListener('click', () => {
+      state.scripts.delete(tok);
+      renderScriptChips();
+      applyIndicators();
+      writeHash();
+    });
+    scriptChips.appendChild(btn);
+  }
+}
+
+function addScript() {
+  const src = scriptInput.value.trim();
+  scriptError.textContent = '';
+  if (!src) return;
+  try {
+    compileScript(src);
+  } catch (err) {
+    scriptError.textContent = err.message.replace(/^script:\s*/, '');
+    return;
+  }
+  state.scripts.add((scriptPane.checked ? 'pexpr:{' : 'expr:{') + src + '}');
+  scriptInput.value = '';
+  renderScriptChips();
+  applyIndicators();
+  writeHash();
+}
+
+document.getElementById('script-add').addEventListener('click', addScript);
+scriptInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addScript();
+});
+renderScriptChips();
 
 document.getElementById('btn-live').addEventListener('click', (e) => {
   state.live = !state.live;
