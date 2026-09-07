@@ -408,6 +408,21 @@ document.getElementById('btn-live').addEventListener('click', (e) => {
   }
 });
 
+document.getElementById('btn-sonify').addEventListener('click', (e) => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', String(on));
+  document.getElementById('chart').setAttribute('sonify', String(on));
+  toast(
+    on
+      ? 'Sound on — hover or use arrow keys to hear the price as pitch.'
+      : 'Sound off.'
+  );
+});
+
+document.getElementById('btn-play').addEventListener('click', () => {
+  document.getElementById('chart').playRange();
+});
+
 document.getElementById('btn-coview').addEventListener('click', (e) => {
   const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
   e.currentTarget.setAttribute('aria-pressed', String(on));

@@ -635,6 +635,28 @@ export function detectAnnotations(bars, i0, i1, rsi, opts = {}) {
 }
 
 /**
+ * Map a price to a sonification frequency over the visible scale.
+ * Logarithmic scales map through log-space; result clamped to [lo, hi] Hz.
+ * @param {number} price
+ * @param {{min: number, max: number, useLog?: boolean}} scale
+ * @param {number} [freqLo=180]
+ * @param {number} [freqHi=880]
+ * @returns {number} frequency in Hz
+ */
+export function priceToFreq(price, scale, freqLo = 180, freqHi = 880) {
+  if (!scale || !(scale.max > scale.min)) return (freqLo + freqHi) / 2;
+  let t;
+  if (scale.useLog) {
+    // scale.min/max are already log10-transformed in this mode
+    t = (Math.log10(Math.max(price, 1e-12)) - scale.min) / (scale.max - scale.min || 1);
+  } else {
+    t = (price - scale.min) / (scale.max - scale.min);
+  }
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return freqLo + t * (freqHi - freqLo);
+}
+
+/**
  * Volume profile over a visible bar range: volume distributed into price
  * rows, with POC and the value area (greedy expansion around the POC).
  * @param {Bar[]} bars
