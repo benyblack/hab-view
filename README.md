@@ -125,6 +125,7 @@ chart.setData([
 | `stats`       | off        | Live statistics chip for the visible range          |
 | `profile`     | off        | Volume profile overlay (POC + 70% value area)       |
 | `annotations` | off        | Smart annotations (volume spikes, gaps, pivots, RSI divergences) |
+| `volshading`  | off        | Volatility-regime background shading (see below)    |
 
 \* `indicators=""` disables everything, including volume. Token syntax:
 `name[:param[/param…]][@color]` — e.g. `sma:20@#ff0000`, `macd:12/26/9`.
@@ -218,6 +219,29 @@ chart.indicators = 'spread';   // now usable like any built-in
 
 The demo has a live input for it (type an expression, optionally tick *pane*,
 press **+ Expr** — invalid expressions show the compiler's error inline).
+
+### Volatility-regime shading
+
+`<hab-chart volshading>` tints the price pane background by realized
+volatility — the rolling stddev of log returns (20 bars by default),
+classified against its own full-history percentiles: **calm** (≤ 30th
+percentile, subtle blue), **normal** (untinted), **hot** (≥ 70th percentile,
+subtle red). Market state at a glance: quiet ranges and violent expansions
+read instantly, and the legend shows the hovered bar's regime and
+percentile (`VOL 30/70 · hot · 94%ile`).
+
+```html
+<hab-chart volshading></hab-chart>                 <!-- defaults 30/70, 20 bars -->
+<hab-chart volshading="20/85"></hab-chart>         <!-- custom cutoffs -->
+<hab-chart volshading="20/85/50"></hab-chart>      <!-- + 50-bar vol window -->
+```
+
+Cutoffs are clamped so the low percentile always stays at least 2 points
+below the high one; the toggle and custom cutoffs round-trip through
+shareable URLs (`vsh=1` / `vsh=20/85`). A degenerate history (flat series)
+classifies everything as normal. The pieces are exported from
+`wickchart/core` (`calcRealizedVol`, `volRegimeBands`, `percentileOfSorted`)
+if you want to build on them.
 
 ### Sonification — the chart by ear
 

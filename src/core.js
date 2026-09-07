@@ -1421,6 +1421,116 @@ export function computeStats(bars, i0, i1, dtMs) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Volatility-regime shading
+ * ------------------------------------------------------------------ */
+
+/**
+ * Rolling realized volatility: population stddev of log returns over the
+ * last `period` bars (per-bar value, aligned like SMA — null until the
+ * window fills).
+ * @param {number[]} closes
+ * @param {number} [period=20]
+ * @returns {Array<number|null>}
+ */
+export function calcRealizedVol(closes, period = 20) {
+  const n = closes.length;
+  const out = new Array(n).fill(null);
+  if (period < 2 || n < 2) return out;
+  const rets = new Array(n).fill(0);
+  let sum = 0;
+  let sumSq = 0;
+  let cnt = 0;
+  for (let i = 1; i < n; i++) {
+    const r = closes[i - 1] > 0 && closes[i] > 0 ? Math.log(closes[i] / closes[i - 1]) : NaN;
+    rets[i] = r;
+    if (Number.isFinite(r)) {
+      sum += r;
+      sumSq += r * r;
+      cnt++;
+    }
+    const j = i - period; // return that falls out of the window
+    if (j >= 1 && Number.isFinite(rets[j])) {
+      sum -= rets[j];
+      sumSq -= rets[j] * rets[j];
+      cnt--;
+    }
+    if (i >= period && cnt === period) {
+      const mean = sum / period;
+      out[i] = Math.sqrt(Math.max(0, sumSq / period - mean * mean));
+    }
+  }
+  return out;
+}
+
+/**
+ * Classify a realized-vol series into regimes by empirical percentile over
+ * the whole series: 0 = calm (≤ qLow), 1 = normal, 2 = hot (≥ qHigh),
+ * -1 = unknown (null input). A degenerate spread (qHigh ≤ qLow, e.g. a
+ * flat series) classifies everything as normal.
+ * @param {Array<number|null>} vol
+ * @param {number} [qLow=30]
+ * @param {number} [qHigh=70]
+ * @returns {{regimes:number[], sorted:number[], q1:number, q2:number}}
+ */
+export function volRegimeBands(vol, qLow = 30, qHigh = 70) {
+  const n = vol.length;
+  const regimes = new Array(n).fill(-1);
+  const sorted = [];
+  for (let i = 0; i < n; i++) if (isNum(vol[i])) sorted.push(vol[i]);
+  sorted.sort((a, b) => a - b);
+  const q = (p) => {
+    if (!sorted.length) return NaN;
+    const pos = clamp((p / 100) * (sorted.length - 1), 0, sorted.length - 1);
+    const lo = Math.floor(pos);
+    const hi = Math.ceil(pos);
+    return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+  };
+  const q1 = q(Math.min(qLow, qHigh));
+  const q2 = q(Math.max(qLow, qHigh));
+  const degenerate = !(q2 > q1);
+  for (let i = 0; i < n; i++) {
+    if (!isNum(vol[i])) continue;
+    regimes[i] = degenerate ? 1 : vol[i] <= q1 ? 0 : vol[i] >= q2 ? 2 : 1;
+  }
+  return { regimes, sorted, q1, q2 };
+}
+
+/**
+ * Percentile (0–100) of `v` within an ascending `sorted` array.
+ * @param {number[]} sorted
+ * @param {number} v
+ * @returns {number}
+ */
+export function percentileOfSorted(sorted, v) {
+  if (!sorted.length || !isNum(v)) return NaN;
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid] < v) lo = mid + 1;
+    else hi = mid;
+  }
+  if (sorted.length === 1) return sorted[0] === v ? 50 : sorted[0] < v ? 100 : 0;
+  return clamp((lo / (sorted.length - 1)) * 100, 0, 100);
+}
+
+/**
+ * Parse a `volshading` attribute value: `""` / `"true"` → defaults (30/70,
+ * period 20); `"30/70"` custom cutoffs; `"30/70/14"` cutoffs + period.
+ * Inputs are clamped so qLow always stays at least 2 points below qHigh.
+ * @param {string|null|undefined} val
+ * @returns {{p1:number, p2:number, period:number}}
+ */
+export function parseVolShading(val) {
+  const parts = String(val == null ? '' : val).split('/').map((s) => parseFloat(s));
+  let p1 = isNum(parts[0]) ? clamp(parts[0], 0, 98) : 30;
+  const p2 = isNum(parts[1]) ? clamp(parts[1], 2, 100) : 70;
+  p1 = clamp(p1, 0, p2 - 2);
+  const period = isNum(parts[2]) ? Math.round(clamp(parts[2], 2, 500)) : 20;
+  return { p1, p2, period };
+}
+
+/* ------------------------------------------------------------------ *
  * State serialization (shareable URLs)
  * ------------------------------------------------------------------ */
 
@@ -1439,6 +1549,8 @@ export function encodeStateQuery(state) {
   if (state.stats) p.set('stats', '1');
   if (state.profile) p.set('profile', '1');
   if (state.annotations) p.set('ann', '1');
+  if (state.volshading === true) p.set('vsh', '1');
+  else if (typeof state.volshading === 'string' && state.volshading) p.set('vsh', state.volshading);
   if (state.indicators) p.set('ind', splitIndicatorTokens(state.indicators).join(','));
   if (state.view) {
     if (isNum(state.view.from)) p.set('from', String(Math.floor(state.view.from / 1000)));
@@ -1463,6 +1575,9 @@ export function decodeStateQuery(str) {
   if (p.get('stats') === '1') state.stats = true;
   if (p.get('profile') === '1') state.profile = true;
   if (p.get('ann') === '1') state.annotations = true;
+  const vsh = p.get('vsh');
+  if (vsh === '1') state.volshading = true;
+  else if (vsh) state.volshading = vsh;
   const ind = p.get('ind');
   if (ind) state.indicators = splitIndicatorTokens(ind).join(' ');
   const from = p.get('from');

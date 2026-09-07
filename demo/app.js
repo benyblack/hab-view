@@ -77,6 +77,7 @@ const state = {
   stats: false,
   profile: false,
   annotations: false,
+  volshading: false,
   indicators: new Set(['volume']),
   scripts: new Set(),
 };
@@ -323,6 +324,7 @@ function readHash() {
   if (typeof s.stats === 'boolean') state.stats = s.stats;
   if (typeof s.profile === 'boolean') state.profile = s.profile;
   if (typeof s.annotations === 'boolean') state.annotations = s.annotations;
+  if (s.volshading) state.volshading = true; // boolean or custom "p1/p2" string
   if (s.indicators) {
     state.indicators = new Set();
     state.scripts = new Set();
@@ -529,6 +531,15 @@ document.getElementById('btn-stats').addEventListener('click', (e) => {
   state.stats = !state.stats;
   chart.setAttribute('stats', String(state.stats));
   e.currentTarget.setAttribute('aria-pressed', String(state.stats));
+  writeHash();
+});
+
+document.getElementById('btn-volshading').setAttribute('aria-pressed', String(state.volshading));
+if (state.volshading) chart.setAttribute('volshading', 'true');
+document.getElementById('btn-volshading').addEventListener('click', (e) => {
+  state.volshading = !state.volshading;
+  chart.setAttribute('volshading', String(state.volshading));
+  e.currentTarget.setAttribute('aria-pressed', String(state.volshading));
   writeHash();
 });
 
