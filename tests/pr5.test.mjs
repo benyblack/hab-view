@@ -1,6 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeStateQuery, decodeStateQuery } from '../src/core.js';
+import { encodeStateQuery, decodeStateQuery, safeColor } from '../src/core.js';
+
+test('safeColor accepts valid CSS colors only', () => {
+  assert.equal(safeColor('#abc'), '#abc');
+  assert.equal(safeColor('#aabbcc'), '#aabbcc');
+  assert.equal(safeColor('#aabbccdd'), '#aabbccdd');
+  assert.equal(safeColor('rgb(1, 2, 3)'), 'rgb(1, 2, 3)');
+  assert.equal(safeColor('rgba(1,2,3,0.5)'), 'rgba(1,2,3,0.5)');
+  assert.equal(safeColor('goldenrod'), 'goldenrod');
+  assert.equal(safeColor('  #fff  '), '#fff');
+});
+
+test('safeColor rejects injection payloads', () => {
+  assert.equal(safeColor('#"><img src=x onerror=alert(1)>'), null);
+  assert.equal(safeColor('red; background:url(x)'), null);
+  assert.equal(safeColor('"'), null);
+  assert.equal(safeColor('expression(alert(1))'), null);
+  assert.equal(safeColor('url(https://evil)'), null);
+  assert.equal(safeColor(''), null);
+  assert.equal(safeColor(null), null);
+  assert.equal(safeColor(42), null);
+});
+
 
 test('encode/decode round-trips a full state', () => {
   const state = {

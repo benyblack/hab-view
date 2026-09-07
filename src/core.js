@@ -82,6 +82,19 @@ export function hexToRgba(color, alpha) {
   return color;
 }
 
+/**
+ * Strict CSS color validator — accepts #hex, rgb()/rgba(), and CSS named
+ * colors only. Anything else (breakout attempts, URLs, quotes) → null.
+ * Use before interpolating untrusted colors into HTML or canvas styles.
+ */
+const SAFE_COLOR_RE =
+  /^(#[0-9a-fA-F]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0?\.\d+|1|0)\s*)?\)|[a-zA-Z]{3,20})$/;
+export function safeColor(s) {
+  if (typeof s !== 'string') return null;
+  const t = s.trim();
+  return SAFE_COLOR_RE.test(t) ? t : null;
+}
+
 export const FONT_STACK =
   "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 export const axisFont = (w = 500) => `${w} 11px ${FONT_STACK}`;

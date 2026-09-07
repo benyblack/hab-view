@@ -21,7 +21,7 @@ import {
   TIME_STEPS, HOUR, DAY, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
-  positionPnl, checkAlertCross, computeStats,
+  positionPnl, checkAlertCross, computeStats, safeColor,
 } from './core.js';
 
 (() => {
@@ -791,12 +791,19 @@ import {
       return this._cache.map[k];
     }
 
-    /** Resolve a line color: #hex / palette key ('rsi', 'up', …) / cycle. */
+    /** Resolve a line color: #hex / rgb() / CSS name / palette key ('rsi', 'up', …) / cycle.
+     *  Untrusted values (URL/attribute-sourced) are validated — never interpolated raw. */
     _lineColor(entry, line, pal, cycleIdx) {
-      const raw = (line && line.color) || (entry && entry.color) || (entry && entry.def && entry.def.color) || null;
-      if (!raw) return pal.overlay[cycleIdx % pal.overlay.length];
-      if (raw[0] === '#') return raw;
-      return pal[raw] || pal.overlay[cycleIdx % pal.overlay.length];
+      const raw =
+        (line && line.color) ||
+        (entry && entry.color) ||
+        (entry && entry.def && entry.def.color) ||
+        null;
+      const fallback = pal.overlay[cycleIdx % pal.overlay.length];
+      if (!raw) return fallback;
+      const c = safeColor(raw);
+      if (!c) return fallback; // injection attempt or garbage → safe default
+      return pal[c] || c;
     }
 
     /* ------------------------------------------------------------ *
