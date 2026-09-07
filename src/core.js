@@ -67,6 +67,7 @@
  * @property {'dark'|'light'} [theme]
  * @property {boolean} [log]
  * @property {boolean} [stats]
+ * @property {boolean} [profile] volume profile overlay (POC + value area)
  * @property {string} [label]
  * @property {string} [indicators]
  * @property {{from: number, to: number}} [view] visible time window (ms)
@@ -531,6 +532,93 @@ export function buildColumns(bars, i0, i1, xOf, plotRight) {
   return cols;
 }
 
+/**
+ * Volume profile over a visible bar range: volume distributed into price
+ * rows, with POC and the value area (greedy expansion around the POC).
+ * @param {Bar[]} bars
+ * @param {number} i0
+ * @param {number} i1
+ * @param {{rows?: number, valueAreaPct?: number}} [opts]
+ * @returns {null|{
+ *   rows: Array<{v: number, up: number, dn: number}>, maxV: number, total: number,
+ *   rowH: number, priceMin: number, priceMax: number,
+ *   pocIndex: number, valIndex: number, vahIndex: number,
+ *   poc: number, val: number, vah: number
+ * }}
+ */
+export function computeVolumeProfile(bars, i0, i1, opts) {
+  const rowCount = (opts && opts.rows) || 100;
+  const vaPct = (opts && opts.valueAreaPct) || 0.7;
+  if (!bars.length || i0 < 0 || i1 < i0 || i1 >= bars.length) return null;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = i0; i <= i1; i++) {
+    const b = bars[i];
+    if (b.low < lo) lo = b.low;
+    if (b.high > hi) hi = b.high;
+  }
+  if (!isFinite(lo) || !isFinite(hi) || !(hi > lo)) return null;
+  const rowH = (hi - lo) / rowCount;
+  const up = new Array(rowCount).fill(0);
+  const dn = new Array(rowCount).fill(0);
+  for (let i = i0; i <= i1; i++) {
+    const b = bars[i];
+    const v = isNum(b.volume) ? b.volume : 0;
+    if (v <= 0) continue;
+    let r0 = Math.floor((b.low - lo) / rowH);
+    let r1 = Math.floor((b.high - lo) / rowH);
+    r0 = clamp(r0, 0, rowCount - 1);
+    r1 = clamp(r1, 0, rowCount - 1);
+    const per = v / (r1 - r0 + 1);
+    const target = b.close >= b.open ? up : dn;
+    for (let r = r0; r <= r1; r++) target[r] += per;
+  }
+  const tot = new Array(rowCount);
+  let maxV = 0;
+  let total = 0;
+  let pocIndex = 0;
+  for (let r = 0; r < rowCount; r++) {
+    tot[r] = up[r] + dn[r];
+    total += tot[r];
+    if (tot[r] > maxV) {
+      maxV = tot[r];
+      pocIndex = r;
+    }
+  }
+  if (!maxV) return null;
+  // value area: greedily expand around the POC until vaPct of volume is covered
+  let loI = pocIndex;
+  let hiI = pocIndex;
+  let acc = tot[pocIndex];
+  const goal = total * vaPct;
+  while (acc < goal && (loI > 0 || hiI < rowCount - 1)) {
+    const below = loI > 0 ? tot[loI - 1] : -1;
+    const above = hiI < rowCount - 1 ? tot[hiI + 1] : -1;
+    if (above >= below) {
+      hiI++;
+      acc += tot[hiI];
+    } else {
+      loI--;
+      acc += tot[loI];
+    }
+  }
+  const priceAt = (r) => lo + (r + 0.5) * rowH;
+  return {
+    rows: tot.map((v, r) => ({ v, up: up[r], dn: dn[r] })),
+    maxV,
+    total,
+    rowH,
+    priceMin: lo,
+    priceMax: hi,
+    pocIndex,
+    valIndex: loI,
+    vahIndex: hiI,
+    poc: priceAt(pocIndex),
+    val: priceAt(loI),
+    vah: priceAt(hiI),
+  };
+}
+
 /** Supported values for the `type` attribute. */
 export const SERIES_TYPES = ['candles', 'line', 'area', 'bars', 'hollow', 'heikin'];
 
@@ -803,6 +891,7 @@ export function encodeStateQuery(state) {
   if (state.theme) p.set('theme', state.theme);
   if (state.log) p.set('log', '1');
   if (state.stats) p.set('stats', '1');
+  if (state.profile) p.set('profile', '1');
   if (state.indicators) p.set('ind', state.indicators.trim().replace(/\s+/g, ','));
   if (state.view) {
     if (isNum(state.view.from)) p.set('from', String(Math.floor(state.view.from / 1000)));
@@ -825,6 +914,7 @@ export function decodeStateQuery(str) {
   if (theme) state.theme = theme;
   if (p.get('log') === '1') state.log = true;
   if (p.get('stats') === '1') state.stats = true;
+  if (p.get('profile') === '1') state.profile = true;
   const ind = p.get('ind');
   if (ind) state.indicators = ind.split(',').map((s) => s.trim()).filter(Boolean).join(' ');
   const from = p.get('from');
