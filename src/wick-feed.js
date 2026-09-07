@@ -1,10 +1,10 @@
 /* ==========================================================================
- * <hab-feed> — declarative data feeds for <hab-chart>.
+ * <wick-feed> — declarative data feeds for <wick-chart>.
  *
- *   <script type="module" src="https://unpkg.com/hab-view/feed"></script>
+ *   <script type="module" src="https://unpkg.com/wickchart/feed"></script>
  *
- *   <hab-feed for="chart" binance="BTCUSDT" tf="1h"></hab-feed>
- *   <hab-chart id="chart" indicators="sma:20 volume"></hab-chart>
+ *   <wick-feed for="chart" binance="BTCUSDT" tf="1h"></wick-feed>
+ *   <wick-chart id="chart" indicators="sma:20 volume"></wick-chart>
  *
  * A fully live chart with zero JavaScript written. Sources:
  *   binance="SYMBOL"  live via WebSocket (REST klines + backfill; falls back
@@ -17,11 +17,12 @@
  * Attributes: for (chart id; auto-pairs with the first chart otherwise),
  *   tf (1m…1w), limit (initial bars, default 500), live="false" to disable
  *   streaming. Status is reflected in the `status` attribute and via
- *   `hab-feed:status` events (loading / live / polling / fallback / loaded /
- *   waiting / idle). `hab-feed:fallback` fires when a live source degrades.
+ *   `wick-feed:status` events (loading / live / polling / fallback / loaded /
+ *   waiting / idle). `wick-feed:fallback` fires when a live source degrades.
+ *   (The 0.x event names `hab-feed:*` still fire as deprecated aliases.)
  * ========================================================================== */
 
-import './hab-chart.js';
+import './wick-chart.js';
 import {
   genSynthetic,
   makeSynthStream,
@@ -35,7 +36,7 @@ const LIVE_TICK_MS = 650;
 
 const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class {};
 
-class HabFeed extends HTMLElementBase {
+class WickFeed extends HTMLElementBase {
   static get observedAttributes() {
     return ['for', 'binance', 'demo', 'url', 'tf', 'limit', 'poll', 'live'];
   }
@@ -86,17 +87,24 @@ class HabFeed extends HTMLElementBase {
   _setStatus(status, detail) {
     if (!this.isConnected) return;
     this.setAttribute('status', status);
-    this.dispatchEvent(new CustomEvent('hab-feed:status', { detail: { status, ...detail } }));
+    this._fire('status', { status, ...detail });
   }
 
-  /** Resolve the target chart (by `for` id, else the first <hab-chart>). */
+  /** Dispatch `wick-feed:name` plus the deprecated `hab-feed:name` alias. */
+  _fire(name, detail) {
+    this.dispatchEvent(new CustomEvent('wick-feed:' + name, { detail }));
+    this.dispatchEvent(new CustomEvent('hab-feed:' + name, { detail }));
+  }
+
+  /** Resolve the target chart (by `for` id, else the first chart element —
+   *  <wick-chart> or the deprecated <hab-chart>). */
   _resolveChart() {
     const id = this.getAttribute('for');
     if (id) {
       const el = document.getElementById(id);
-      return el && el.tagName === 'HAB-CHART' ? el : null;
+      return el && (el.tagName === 'WICK-CHART' || el.tagName === 'HAB-CHART') ? el : null;
     }
-    return document.querySelector('hab-chart');
+    return document.querySelector('wick-chart') || document.querySelector('hab-chart');
   }
 
   _restart() {
@@ -105,7 +113,7 @@ class HabFeed extends HTMLElementBase {
     if (!chart || typeof chart.setData !== 'function') {
       // chart not in the DOM yet (or not upgraded) — watch for it
       this._setStatus('waiting');
-      customElements.whenDefined('hab-chart').then(() => {
+      customElements.whenDefined('wick-chart').then(() => {
         if (!this.isConnected) return;
         this._observer = this._observer || new MutationObserver(() => {
           const c = this._resolveChart();
@@ -208,9 +216,7 @@ class HabFeed extends HTMLElementBase {
   }
 
   _degrade(gen, chart, sym, tfId, limit, live, err) {
-    this.dispatchEvent(
-      new CustomEvent('hab-feed:fallback', { detail: { reason: err && err.message } })
-    );
+    this._fire('fallback', { reason: err && err.message });
     this._synthetic(gen, chart, sym, tfId, limit, live, 'fallback');
   }
 
@@ -248,8 +254,17 @@ class HabFeed extends HTMLElementBase {
   }
 }
 
-if (typeof customElements !== 'undefined' && !customElements.get('hab-feed')) {
-  customElements.define('hab-feed', HabFeed);
+if (typeof customElements !== 'undefined') {
+  if (!customElements.get('wick-feed')) {
+    customElements.define('wick-feed', WickFeed);
+  }
+  // 0.x alias: same element under its old tag name (deprecated, removed in 2.0)
+  if (!customElements.get('hab-feed')) {
+    /** @deprecated use <wick-feed> */
+    class HabFeed extends WickFeed {}
+    customElements.define('hab-feed', HabFeed);
+  }
 }
 
-export default HabFeed;
+export default WickFeed;
+export { WickFeed };

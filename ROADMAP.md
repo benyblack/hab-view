@@ -1,4 +1,4 @@
-# HabView Roadmap
+# WickChart Roadmap
 
 North star: **"TradingView-class usefulness inside a zero-dependency custom element."**
 Every feature must survive the test: *one tag, zero build step, sane defaults*.
@@ -27,7 +27,7 @@ is suggested priority.
 | Session / gap handling | Optional axis "gap" dividers when bar intervals jump (weekends, market close). | S | x-axis is already index-space, so gaps compress naturally; only axis *labels* need honesty — boundary-based ticks already give most of this. Add `sessions="0930-1600"` attr later. |
 | Second symbol overlay | `compare="ETH"` — normalized (% from window start) second line. | S | New overlay series type; legend shows both. |
 | Tick → bar aggregation | `aggregate="volume\|dollar\|tick"` — build advanced bars from a trade stream client-side. | M | Quant-grade feature no mainstream web chart ships built-in. Feed layer first, component second. |
-| Multi-pane series sync | Link crosshairs/ranges across several `<hab-chart>`s. | S | `hab:range`/`hab:crosshair` events already exist — a small `<hab-grid>` wrapper component finishes it. |
+| Multi-pane series sync | Link crosshairs/ranges across several `<wick-chart>`s. | S | `wick:range`/`wick:crosshair` events already exist — a small `<wick-grid>` wrapper component finishes it. |
 
 ## Track 2 — Series & indicators (breadth without bloat)
 
@@ -38,7 +38,7 @@ is suggested priority.
 | Bollinger, VWAP, Donchian, PSAR | Most-requested overlays. | S each | Bollinger = SMA + rolling stdev; VWAP needs session anchor. |
 | MACD, Stochastic, OBV, ATR panes | The pane system already stacks N panes (RSI proves it); generalize pane *producers*. | M | MACD = histogram + 2 lines in one pane. |
 | **Custom indicator registry** | `HabChart.registerIndicator('myInd', { type:'overlay'\|'pane', compute(bars, params), defaults })` then use `indicators="myInd:14"`. | M | The ecosystem unlock — everything after this is community-extensible. |
-| Per-indicator styling | `indicators="sma:20@#f0b429"` syntax + `--hab-*` vars. | S | |
+| Per-indicator styling | `indicators="sma:20@#f0b429"` syntax + `--wick-*` vars. | S | |
 | Indicator settings UX in demo | Chips get a popover (period/color). | S | |
 
 ## Track 3 — Trading usefulness (the "more useful than TradingView" layer)
@@ -81,7 +81,7 @@ is suggested priority.
 - Web Worker compute path for 1M+ bars; Rust/WASM only if profiling ever
   demands (see perf analysis — canvas, not JS, is the floor). *M–L*
 - Packaging: JSDoc types → `.d.ts`, npm publish + CDN links, semver/changelog,
-  `useHabChart` React hook + Vue/Svelte examples. *S–M*
+  `useWickChart` React hook + Vue/Svelte examples. *S–M*
 - i18n for built-in labels; `preset="minimal|pro"` attribute. *S*
 
 ### Explicit non-goals

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HabView — a live chart with zero JavaScript</title>
+  <title>WickChart — a live chart with zero JavaScript</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%236366f1'/%3E%3Crect x='6' y='9' width='3.4' height='7' rx='1' fill='white'/%3E%3Crect x='14.5' y='7' width='3.4' height='5' rx='1' fill='white' opacity='.6'/%3E%3C/svg%3E" />
   <style>
     :root {
@@ -37,16 +37,16 @@
       border-radius: 5px; padding: 1px 6px; font-size: 12px;
     }
     .stage { flex: 1; min-height: 0; padding: 14px; }
-    hab-chart {
+    wick-chart {
       display: block; width: 100%; height: 100%;
       border-radius: 12px; overflow: hidden;
       border: 1px solid var(--border); background: var(--panel);
-      --hab-bg: var(--panel);
-      --hab-up: var(--up);
-      --hab-down: var(--down);
-      --hab-accent: #22d3ee;
-      --hab-text: var(--muted);
-      --hab-text-strong: var(--text);
+      --wick-bg: var(--panel);
+      --wick-up: var(--up);
+      --wick-down: var(--down);
+      --wick-accent: #22d3ee;
+      --wick-text: var(--muted);
+      --wick-text-strong: var(--text);
     }
     .badge {
       position: fixed; top: 18px; right: 18px;
@@ -59,29 +59,29 @@
       content: ''; width: 8px; height: 8px; border-radius: 50%;
       background: var(--up);
     }
-    hab-feed[status='fallback'] + .stage .badge::before,
+    wick-feed[status='fallback'] + .stage .badge::before,
     .badge.warn::before { background: #f59e0b; }
     @media (max-width: 640px) { header { padding: 16px; } .stage { padding: 8px; } }
   </style>
-  <!-- the only script on the page: loads <hab-chart> + <hab-feed> -->
-  <script type="module" src="../src/hab-feed.js"></script>
+  <!-- the only script on the page: loads <wick-chart> + <wick-feed> -->
+  <script type="module" src="../src/wick-feed.js"></script>
 </head>
 <body>
   <header>
     <h1>A live chart, <code>zero JavaScript</code> written</h1>
     <p>
-      Everything below is HTML: <code>&lt;hab-feed&gt;</code> streams Binance data (falling back
+      Everything below is HTML: <code>&lt;wick-feed&gt;</code> streams Binance data (falling back
       to a synthetic feed when Binance is unreachable), wires up history backfill, and drives
-      <code>&lt;hab-chart&gt;</code> — indicators, volume profile and crosshair included.
+      <code>&lt;wick-chart&gt;</code> — indicators, volume profile and crosshair included.
       <code>status="<span id="status-text">waiting…</span>"</code>
     </p>
   </header>
 
   <!-- declarative live chart: feed + chart, no JS -->
-  <hab-feed id="feed" for="chart" binance="BTCUSDT" tf="1h"></hab-feed>
+  <wick-feed id="feed" for="chart" binance="BTCUSDT" tf="1h"></wick-feed>
 
   <div class="stage">
-    <hab-chart id="chart" type="candles" indicators="sma:20 bb:20 volume" profile></hab-chart>
+    <wick-chart id="chart" type="candles" indicators="sma:20 bb:20 volume" profile></wick-chart>
   </div>
 
   <div class="badge"><span id="badge-text">loading</span></div>
@@ -89,7 +89,7 @@
   <!-- status reflection is still declarative-friendly: one tiny inline
        snippet mirrors the feed status into the badge (optional) -->
   <script>
-    document.getElementById('feed').addEventListener('hab-feed:status', (e) => {
+    document.getElementById('feed').addEventListener('wick-feed:status', (e) => {
       const s = e.detail.status;
       document.getElementById('badge-text').textContent =
         s === 'live' ? 'live · Binance' :

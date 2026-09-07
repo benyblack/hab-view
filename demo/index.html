@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HabView — modern charting web component</title>
-  <meta name="description" content="Demo of <hab-chart>: a zero-dependency financial charting web component." />
+  <title>WickChart — modern charting web component</title>
+  <meta name="description" content="Demo of <wick-chart>: a zero-dependency financial charting web component." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%236366f1'/%3E%3Crect x='6' y='9' width='3.4' height='7' rx='1' fill='white'/%3E%3Crect x='14.5' y='7' width='3.4' height='5' rx='1' fill='white' opacity='.6'/%3E%3C/svg%3E" />
@@ -78,7 +78,7 @@
       <div class="script-row">
         <input id="script-input" type="text" spellcheck="false" autocomplete="off"
                placeholder="Custom indicator — try (close - sma(close,20)) / sma(close,20) * 100"
-               aria-label="Custom indicator expression (HabScript)" />
+               aria-label="Custom indicator expression (WickScript)" />
         <label class="script-pane" title="Draw in its own pane instead of on the price chart">
           <input type="checkbox" id="script-pane" /> pane
         </label>
@@ -173,7 +173,7 @@
   </header>
 
   <main class="chart-area">
-    <hab-chart id="chart" theme="dark" type="candles" indicators="volume"></hab-chart>
+    <wick-chart id="chart" theme="dark" type="candles" indicators="volume"></wick-chart>
     <aside class="explain-panel" id="explain-panel" hidden aria-label="AI-ready chart summary">
       <div class="explain-head">
         <span>AI-ready summary</span>
