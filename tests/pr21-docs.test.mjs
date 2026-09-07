@@ -39,6 +39,7 @@ test('every public method is documented', () => {
     'addAlert', 'removeAlert', 'clearAlerts',
     'setOverlays', 'addOverlay', 'removeOverlay', 'clearOverlays',
     'registerIndicator', 'onloadmore',
+    'aiTools', 'aiPrompt', 'aiContext', 'applyAI', 'ask',
   ];
   for (const m of methods) {
     assert.ok(docs.includes(m), `method "${m}" missing from docs.html`);
