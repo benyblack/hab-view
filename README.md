@@ -90,6 +90,12 @@ The demo site is deployed to GitHub Pages:
 chart, the full interactive demo, the zero-JavaScript declarative page, and a
 [React demo](./demo/react.html) driven entirely by React state.
 
+**Full documentation lives at
+[benyblack.github.io/wickchart/docs.html](./docs.html)** — every attribute,
+method, event, the WickScript reference, overlays (with a live JSON
+playground), feeds, theming and framework bindings, each with runnable
+examples. This README covers the same ground in plain markdown.
+
 ## Run the demo locally
 
 ```bash

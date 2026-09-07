@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WickChart — Documentation</title>
+  <meta name="description" content="Complete documentation for <wick-chart>: attributes, methods, events, indicators, WickScript, overlays, feeds, theming, and framework bindings — with live examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%236366f1'/%3E%3Crect x='6' y='9' width='3.4' height='7' rx='1' fill='white'/%3E%3Crect x='14.5' y='7' width='3.4' height='5' rx='1' fill='white' opacity='.6'/%3E%3C/svg%3E" />
+  <script type="module" src="./src/wick-feed.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117; --bg2: #11141c; --panel: #151a23; --panel2: #1a2130;
+      --border: rgba(230,237,243,.09); --border2: rgba(230,237,243,.16);
+      --text: #e6edf3; --muted: #8b949e; --muted2: #6e7681;
+      --accent: #6366f1; --accent2: #22d3ee; --up: #16c784; --down: #ea3943;
+      --code-bg: #0b0f16;
+      --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Code', Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 400 14.5px/1.65 var(--font); -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font: 500 .86em var(--mono); background: var(--panel2);
+      border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px;
+    }
+    h1, h2, h3, h4 { line-height: 1.3; font-weight: 700; }
+    h2 { font-size: 21px; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 15.5px; margin: 26px 0 8px; }
+    p { margin: 10px 0; } ul, ol { margin: 8px 0; padding-left: 22px; }
+    li { margin: 3px 0; }
+
+    /* top bar */
+    .topbar {
+      position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 14px;
+      padding: 10px 22px; background: color-mix(in srgb, var(--bg) 86%, transparent);
+      backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15.5px; }
+    .brand b { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .brand-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
+    .topbar nav { margin-left: auto; display: flex; gap: 16px; }
+    .topbar nav a { color: var(--muted); font-size: 13px; font-weight: 600; }
+    .topbar nav a:hover { color: var(--accent2); text-decoration: none; }
+
+    .layout { display: flex; align-items: flex-start; max-width: 1280px; margin: 0 auto; }
+    /* sidebar */
+    .side {
+      position: sticky; top: 53px; width: 250px; flex: 0 0 250px; height: calc(100vh - 53px);
+      overflow-y: auto; padding: 20px 12px 30px 20px; border-right: 1px solid var(--border);
+      scrollbar-width: thin;
+    }
+    .side input {
+      width: 100%; padding: 7px 10px; font: 500 12.5px var(--font); color: var(--text);
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; outline: none;
+    }
+    .side input:focus { border-color: var(--accent); }
+    .toc { margin: 14px 0 0; padding: 0; list-style: none; }
+    .toc a {
+      display: block; padding: 5px 10px; border-left: 2px solid transparent;
+      color: var(--muted); font-size: 13px; font-weight: 500; border-radius: 0 6px 6px 0;
+    }
+    .toc a:hover { color: var(--text); background: var(--panel2); text-decoration: none; }
+    .toc a.active { color: var(--accent2); border-left-color: var(--accent2); background: var(--panel2); }
+    .toc a.hidden { display: none; }
+    .toc .new-pill {
+      font-size: 9px; font-weight: 700; color: #0d1117; background: var(--accent2);
+      border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: 1px;
+    }
+
+    /* content */
+    main { flex: 1 1 auto; min-width: 0; padding: 26px 34px 90px; max-width: 900px; }
+    section { margin: 0 0 54px; scroll-margin-top: 76px; }
+    section > h2 > .anchor { color: var(--muted2); font-size: .8em; margin-left: 8px; opacity: 0; }
+    section > h2:hover > .anchor { opacity: 1; }
+
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+    th, td { text-align: left; padding: 7px 10px; border: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--panel); font-weight: 700; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    td code { white-space: nowrap; }
+    td:first-child { white-space: normal; }
+
+    /* code blocks */
+    .codewrap { position: relative; margin: 12px 0; }
+    pre.code {
+      margin: 0; padding: 13px 15px; overflow-x: auto; border-radius: 10px;
+      background: var(--code-bg); border: 1px solid var(--border);
+      font: 400 12.5px/1.6 var(--mono); color: #c9d1d9; scrollbar-width: thin;
+    }
+    pre.code .cmt { color: #6e7681; }
+    pre.code .tag { color: #7ee787; }
+    pre.code .attr { color: #79c0ff; }
+    pre.code .str { color: #a5d6ff; }
+    .copy-btn {
+      position: absolute; top: 7px; right: 7px; padding: 3px 10px; font: 600 11px var(--font);
+      color: var(--muted); background: var(--panel2); border: 1px solid var(--border);
+      border-radius: 6px; cursor: pointer; opacity: 0; transition: opacity 120ms ease;
+    }
+    .codewrap:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { color: var(--text); border-color: var(--border2); }
+    .copy-btn.done { color: var(--up); }
+
+    /* live example cards */
+    .demo-card {
+      margin: 16px 0; border: 1px solid var(--border); border-radius: 12px;
+      background: var(--bg2); overflow: hidden;
+    }
+    .demo-head {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--panel);
+    }
+    .demo-head .t { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+    .demo-head .spacer { flex: 1; }
+    .demo-card wick-chart { display: block; height: 280px; }
+    .demo-card .foot {
+      padding: 8px 14px; font-size: 12px; color: var(--muted);
+      border-top: 1px solid var(--border); font-family: var(--mono); min-height: 20px;
+    }
+    .demo-card pre.out {
+      margin: 0; padding: 12px 14px; max-height: 260px; overflow: auto;
+      font: 400 11.5px/1.55 var(--mono); color: var(--muted); background: var(--code-bg);
+      border-top: 1px solid var(--border);
+    }
+    button, .btn {
+      appearance: none; display: inline-flex; align-items: center; gap: 6px;
+      font: 600 12.5px var(--font); color: var(--text);
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 6px 12px; min-height: 30px; cursor: pointer;
+    }
+    button:hover { border-color: var(--border2); }
+    button.primary { background: linear-gradient(90deg, var(--accent), #4f46e5); border-color: transparent; }
+    button.on { color: var(--accent2); border-color: var(--accent2); }
+    .seg { display: inline-flex; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+    .seg button { border: none; background: transparent; border-radius: 6px; padding: 4px 10px; min-height: 26px; }
+    .seg button.active { background: var(--bg); color: var(--accent2); }
+    input[type="text"], textarea {
+      font: 500 12.5px var(--mono); color: var(--text); background: var(--code-bg);
+      border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; outline: none;
+    }
+    input[type="text"]:focus, textarea:focus { border-color: var(--accent); }
+    textarea { width: 100%; resize: vertical; }
+    .pill {
+      display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .05em;
+      border-radius: 999px; padding: 2px 9px; border: 1px solid var(--border); color: var(--muted);
+    }
+    .pill.new { color: #0d1117; background: var(--accent2); border-color: transparent; }
+    .pill.live::before { content: '●'; color: var(--up); margin-right: 5px; }
+    .err { color: var(--down); font-size: 12px; font-family: var(--mono); }
+    .ok { color: var(--up); font-size: 12px; font-family: var(--mono); }
+    .note {
+      border-left: 3px solid var(--accent); background: var(--panel);
+      padding: 9px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 13.5px; color: var(--muted);
+    }
+    .note b { color: var(--text); }
+    kbd {
+      font: 600 11px var(--mono); background: var(--panel2); border: 1px solid var(--border2);
+      border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px;
+    }
+    @media (max-width: 980px) {
+      .layout { flex-direction: column; }
+      .side { position: static; width: 100%; flex: none; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      main { padding: 22px 18px 70px; max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Wick<b>Chart</b></span>
+    <span class="brand-tag">docs</span>
+    <nav>
+      <a href="./">Home</a>
+      <a href="./demo/">Demo</a>
+      <a href="./demo/react.html">React demo</a>
+      <a href="https://github.com/benyblack/wickchart">GitHub</a>
+      <a href="https://www.npmjs.com/package/wickchart">npm</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="side">
+      <input id="toc-filter" type="text" placeholder="Filter the guide…" aria-label="Filter documentation sections" />
+      <ul class="toc" id="toc">
+        <li><a href="#start">Getting started</a></li>
+        <li><a href="#data">Data &amp; streaming</a></li>
+        <li><a href="#types">Series types</a></li>
+        <li><a href="#attributes">Attributes</a></li>
+        <li><a href="#indicators">Indicators</a></li>
+        <li><a href="#wickscript">WickScript expressions</a></li>
+        <li><a href="#volshading">Volatility shading</a></li>
+        <li><a href="#overlays">Server-side overlays<span class="new-pill">NEW</span></a></li>
+        <li><a href="#trading">Positions &amp; alerts</a></li>
+        <li><a href="#analysis">Stats, profile &amp; annotations</a></li>
+        <li><a href="#ai">AI-ready data window</a></li>
+        <li><a href="#feeds">Feeds (&lt;wick-feed&gt;)</a></li>
+        <li><a href="#events">Events</a></li>
+        <li><a href="#state">State &amp; shareable URLs</a></li>
+        <li><a href="#theming">Theming</a></li>
+        <li><a href="#interactions">Interactions &amp; a11y</a></li>
+        <li><a href="#react">React, Vue, Svelte</a></li>
+        <li><a href="#perf">Performance &amp; export</a></li>
+        <li><a href="#migrate">Migrating from 0.x</a></li>
+      </ul>
+    </aside>
+
+    <main id="doc">
+
+      <section id="start">
+        <h2>Getting started <a class="anchor" href="#start">#</a></h2>
+        <p><b>wickchart</b> is a zero-dependency charting Web Component: one <code>&lt;wick-chart&gt;</code> element renders candles, indicators, live streams and overlays — anywhere a <code>&lt;div&gt;</code> works, no build step required.</p>
+
+        <h3>npm</h3>
+        <div class="codewrap"><pre class="code"><span class="tag">npm</span> install wickchart</pre></div>
+        <div class="codewrap"><pre class="code"><span class="tag">import</span> 'wickchart';   <span class="cmt">// registers &lt;wick-chart&gt; (+ types included)</span></pre></div>
+
+        <h3>CDN — no install</h3>
+        <div class="codewrap"><pre class="code"><span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="str">"module"</span> <span class="attr">src</span>=<span class="str">"https://unpkg.com/wickchart"</span><span class="tag">&gt;&lt;/script&gt;</span></pre></div>
+
+        <h3>Your first chart</h3>
+        <p>With the declarative feed element this is the whole integration — the example below is live:</p>
+        <div class="codewrap"><pre class="code"><span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="str">"module"</span> <span class="attr">src</span>=<span class="str">"…/wickchart/feed"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="tag">&lt;wick-feed</span> <span class="attr">for</span>=<span class="str">"c1"</span> <span class="attr">demo</span>=<span class="str">"BTC"</span> <span class="attr">tf</span>=<span class="str">"1h"</span><span class="tag">&gt;&lt;/wick-feed&gt;</span>
+<span class="tag">&lt;wick-chart</span> <span class="attr">id</span>=<span class="str">"c1"</span> <span class="attr">label</span>=<span class="str">"BTC · 1h"</span> <span class="attr">indicators</span>=<span class="str">"sma:20 volume"</span><span class="tag">&gt;&lt;/wick-chart&gt;</span></pre></div>
+        <div class="demo-card">
+          <div class="demo-head"><span class="t">Live</span><span class="pill live">demo feed</span></div>
+          <wick-feed for="ex-start" demo="BTC" tf="1h" limit="300"></wick-feed>
+          <wick-chart id="ex-start" label="BTC · 1h · demo feed" indicators="sma:20 volume"></wick-chart>
+        </div>
+        <div class="note">Everything renders into a shadow-DOM canvas at device-pixel resolution with rAF batching — ~100 KB unminified, zero dependencies.</div>
+      </section>
+
+      <section id="data">
+        <h2>Data &amp; streaming <a class="anchor" href="#data">#</a></h2>
+        <p>Bars are plain objects. <code>time</code> accepts <b>milliseconds or seconds</b> (auto-detected); line-style data can use <code>{ time, value }</code>.</p>
+        <div class="codewrap"><pre class="code"><span class="tag">const</span> bars = [
+  { <span class="attr">time</span>: <span class="str">1700000000</span>, <span class="attr">open</span>: <span class="str">42</span>, <span class="attr">high</span>: <span class="str">43.5</span>, <span class="attr">low</span>: <span class="str">41.2</span>, <span class="attr">close</span>: <span class="str">43</span>, <span class="attr">volume</span>: <span class="str">1204</span> },
+  <span class="cmt">// time in ms works too: 1_700_000_000_000</span>
+];
+
+chart.<span class="attr">setData</span>(bars);   <span class="cmt">// full history (replaces)</span>
+chart.<span class="attr">update</span>(bar);      <span class="cmt">// stream: updates last bar or appends the next</span>
+chart.<span class="attr">clearData</span>();     <span class="cmt">// empty the chart</span>
+chart.<span class="attr">data</span>;             <span class="cmt">// getter — the live bar array</span></pre></div>
+
+        <h3>Infinite history (backfill)</h3>
+        <p>Assign <code>onloadmore</code> and the chart fetches older bars when the user scrolls past the left edge — the view stays anchored:</p>
+        <div class="codewrap"><pre class="code">chart.<span class="attr">onloadmore</span> = <span class="tag">async</span> (fromTime) =&gt; {
+  <span class="tag">const</span> older = <span class="tag">await</span> fetch(`/api/bars?before=${fromTime}`).then(r =&gt; r.json());
+  <span class="tag">return</span> older;  <span class="cmt">// return [] to signal "no more"</span>
+};</pre></div>
+
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live</span>
+            <span class="spacer"></span>
+            <button id="data-set">setData(300 fresh bars)</button>
+            <button id="data-update">update(bar)</button>
+            <button id="data-clear">clearData()</button>
+          </div>
+          <wick-chart id="ex-data" label="programmatic data"></wick-chart>
+          <div class="foot" id="data-foot">no data yet — press a button</div>
+        </div>
+      </section>
+
+      <section id="types">
+        <h2>Series types <a class="anchor" href="#types">#</a></h2>
+        <p>Six render modes via the <code>type</code> attribute (or <code>chart.setAttribute('type', …)</code>):</p>
+        <table>
+          <tr><th>Value</th><th>Rendering</th></tr>
+          <tr><td><code>candles</code></td><td>Solid candlesticks (default)</td></tr>
+          <tr><td><code>line</code></td><td>Close-price line</td></tr>
+          <tr><td><code>area</code></td><td>Line + gradient fill</td></tr>
+          <tr><td><code>bars</code></td><td>Classic OHLC bars</td></tr>
+          <tr><td><code>hollow</code></td><td>Hollow up-candles / solid down-candles</td></tr>
+          <tr><td><code>heikin</code></td><td>Heikin-Ashi transform</td></tr>
+        </table>
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live</span><span class="spacer"></span>
+            <span class="seg" id="type-seg"></span>
+          </div>
+          <wick-feed for="ex-types" demo="ETH" tf="1h" limit="260"></wick-feed>
+          <wick-chart id="ex-types" label="ETH · 1h" indicators="sma:20"></wick-chart>
+        </div>
+      </section>
+
+      <section id="attributes">
+        <h2>Attributes <a class="anchor" href="#attributes">#</a></h2>
+        <p>Everything is an attribute first — the component is usable from pure HTML. Remove an attribute (or set <code>"false"</code>) to turn a toggle off.</p>
+        <table>
+          <tr><th>Attribute</th><th>Default</th><th>Description</th></tr>
+          <tr><td><code>theme</code></td><td><code>dark</code></td><td><code>dark</code> or <code>light</code></td></tr>
+          <tr><td><code>type</code></td><td><code>candles</code></td><td>Series type — see <a href="#types">Series types</a></td></tr>
+          <tr><td><code>indicators</code></td><td><code>volume</code>*</td><td>Space/comma list: <code>sma:20 ema:50 bb:20 rsi:14 macd:12/26/9 volume</code>, registered names, or <a href="#wickscript">WickScript</a> expressions. <code>""</code> disables all.</td></tr>
+          <tr><td><code>label</code></td><td>–</td><td>Legend text (e.g. <code>"BTC · 1h"</code>)</td></tr>
+          <tr><td><code>log</code></td><td>off</td><td>Logarithmic price scale</td></tr>
+          <tr><td><code>auto</code></td><td>on</td><td>Follow the right edge while streaming</td></tr>
+          <tr><td><code>precision</code></td><td>auto</td><td>Forced decimal places (0–12)</td></tr>
+          <tr><td><code>stats</code></td><td>off</td><td>Visible-range statistics chip</td></tr>
+          <tr><td><code>profile</code></td><td>off</td><td>Volume profile (POC + value area)</td></tr>
+          <tr><td><code>annotations</code></td><td>off</td><td>Smart annotations (spikes, gaps, pivots, divergences)</td></tr>
+          <tr><td><code>volshading</code></td><td>off</td><td>Volatility-regime background — <a href="#volshading">details</a></td></tr>
+          <tr><td><code>overlays</code></td><td>–</td><td>JSON array of zones &amp; levels — <a href="#overlays">details</a></td></tr>
+          <tr><td><code>co-view</code></td><td>–</td><td>BroadcastChannel name: sync crosshair/markings across tabs</td></tr>
+          <tr><td><code>sonify</code></td><td>off</td><td>Arrow keys play the chart as pitch (a11y)</td></tr>
+        </table>
+        <p>* <code>indicators=""</code> disables everything, including volume.</p>
+      </section>
+
+      <section id="indicators">
+        <h2>Indicators <a class="anchor" href="#indicators">#</a></h2>
+        <h3>Built-ins</h3>
+        <p>Token syntax: <code>name[:param[/param…]][@color]</code></p>
+        <table>
+          <tr><th>Name</th><th>Params</th><th>Draws</th></tr>
+          <tr><td><code>sma</code> / <code>ema</code></td><td><code>:20</code> period</td><td>Overlay line</td></tr>
+          <tr><td><code>bb</code></td><td><code>:20</code> period (±2σ fixed)</td><td>Bollinger band (3 lines)</td></tr>
+          <tr><td><code>vwap</code></td><td>–</td><td>Session-anchored VWAP (registered example)</td></tr>
+          <tr><td><code>rsi</code></td><td><code>:14</code></td><td>Own pane, 30/70 guides</td></tr>
+          <tr><td><code>macd</code></td><td><code>:12/26/9</code></td><td>Own pane: histogram + 2 lines</td></tr>
+          <tr><td><code>volume</code></td><td>–</td><td>Volume histogram pane</td></tr>
+        </table>
+        <div class="codewrap"><pre class="code"><span class="tag">&lt;wick-chart</span> <span class="attr">indicators</span>=<span class="str">"sma:20@#f0b429 ema:50 bb:20 rsi:14 volume"</span><span class="tag">&gt;&lt;/wick-chart&gt;</span></pre></div>
+
+        <h3>Custom indicators (registry)</h3>
+        <p>Register once, use by name in the attribute. <code>compute</code> is a pure function of the bars; return an array of named series (<code>pane: true</code> moves it below price):</p>
+        <div class="codewrap"><pre class="code"><span class="tag">import</span> WickChart <span class="tag">from</span> 'wickchart';
+
+WickChart.<span class="attr">registerIndicator</span>('hlmid', {
+  <span class="attr">pane</span>: <span class="tag">false</span>,                    <span class="cmt">// overlay on price (true = own pane)</span>
+  <span class="attr">compute</span>(bars, params) {
+    <span class="tag">const</span> n = params[0] || 2;
+    <span class="tag">const</span> values = bars.map((b, i) =&gt; {
+      <span class="tag">const</span> win = bars.slice(Math.max(0, i - n + 1), i + 1);
+      <span class="tag">return</span> win.reduce((s, x) =&gt; s + (x.high + x.low) / 2, 0) / win.length;
+    });
+    <span class="tag">return</span> [{ <span class="attr">name</span>: <span class="str">'HL-mid'</span>, values }];   <span class="cmt">// or { lines: [{name, values}] }</span>
+  },
+});
+
+<span class="tag">&lt;wick-chart</span> <span class="attr">indicators</span>=<span class="str">"hlmid:3 volume"</span><span class="tag">&gt;&lt;/wick-chart&gt;</span></pre></div>
+
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live</span><span class="spacer"></span>
+            <span class="seg" id="ind-seg"></span>
+          </div>
+          <wick-feed for="ex-ind" demo="SOL" tf="1h" limit="260"></wick-feed>
+          <wick-chart id="ex-ind" label="SOL · 1h" indicators="sma:20 ema:50 volume"></wick-chart>
+        </div>
+      </section>
+
+      <section id="wickscript">
+        <h2>WickScript expressions <a class="anchor" href="#wickscript">#</a></h2>
+        <p>Custom indicators as inline expressions — parsed by a hand-written tokenizer + recursive-descent parser, <b>never <code>eval</code></b>, and URL-safe.</p>
+        <div class="codewrap"><pre class="code"><span class="tag">&lt;wick-chart</span> <span class="attr">indicators</span>=<span class="str">"expr:{(close - sma(close,20)) / sma(close,20) * 100}@#f0b429
+               pexpr:{rsi(close,14) - 50}"</span><span class="tag">&gt;&lt;/wick-chart&gt;</span></pre></div>
+        <ul>
+          <li><code>expr:{…}</code> draws on the price chart; <code>pexpr:{…}</code> gets its own pane. Optional <code>@color</code> suffix.</li>
+          <li><b>Series variables:</b> <code>open high low close volume hl2 hlc3 ohlc4</code></li>
+          <li><b>Functions:</b> <code>sma ema wma stddev rsi hh ll prev change abs sqrt log min max crossup crossdown</code> — e.g. <code>hh(high,20)</code>, <code>crossup(close, sma(close,50))</code></li>
+          <li><b>Operators:</b> <code>+ - * / %</code>, parentheses, unary minus</li>
+          <li><b>Caps:</b> 512 chars, 128 tokens, nesting depth 24; window periods must be whole-number literals</li>
+        </ul>
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live</span><span class="spacer"></span>
+            <input type="text" id="ws-input" style="width: min(420px, 60vw)" spellcheck="false"
+                   placeholder="e.g. (close - sma(close,20)) / sma(close,20) * 100" />
+            <label style="font-size:12px;color:var(--muted)"><input type="checkbox" id="ws-pane" /> pane</label>
+            <button class="primary" id="ws-add">Add</button>
+            <button id="ws-clear">Clear</button>
+          </div>
+          <wick-feed for="ex-ws" demo="BTC" tf="1h" limit="300"></wick-feed>
+          <wick-chart id="ex-ws" label="BTC · 1h" indicators="sma:20"></wick-chart>
+          <div class="foot"><span class="err" id="ws-error"></span><span class="ok" id="ws-ok"></span></div>
+        </div>
+      </section>
+
+      <section id="volshading">
+        <h2>Volatility shading <a class="anchor" href="#volshading">#</a></h2>
+        <p>Background tint by realized-volatility percentile — calm vs hot markets at a glance, with the hovered regime in the legend.</p>
+        <div class="codewrap"><pre class="code"><span class="tag">&lt;wick-chart</span> <span class="attr">volshading</span><span class="tag">&gt;&lt;/wick-chart&gt;</span>                  <span class="cmt">&lt;!-- 30/70 percentiles, 20-bar window --&gt;</span>
+<span class="tag">&lt;wick-chart</span> <span class="attr">volshading</span>=<span class="str">"20/85"</span><span class="tag">&gt;&lt;/wick-chart&gt;</span>        <span class="cmt">&lt;!-- custom cutoffs --&gt;</span>
+<span class="tag">&lt;wick-chart</span> <span class="attr">volshading</span>=<span class="str">"20/85/50"</span><span class="tag">&gt;&lt;/wick-chart&gt;</span>     <span class="cmt">&lt;!-- + 50-bar vol window --&gt;</span></pre></div>
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live</span><span class="spacer"></span>
+            <span class="seg" id="vsh-seg"></span>
+          </div>
+          <wick-feed for="ex-vsh" demo="BTC" tf="1h" limit="400"></wick-feed>
+          <wick-chart id="ex-vsh" label="BTC · 1h" indicators="sma:20" volshading></wick-chart>
+        </div>
+      </section>
+
+      <section id="overlays">
+        <h2>Server-side overlays <a class="anchor" href="#overlays">#</a> <span class="pill new">NEW</span></h2>
+        <p>Draw analysis from your own API straight onto the chart: <b>zones</b> (time × price rectangles) and <b>levels</b> (horizontal price lines), rendered behind the candles. Zones without a <code>to</code> extend into <b>future space past the last bar</b>, like TradingView drawings.</p>
+        <div class="codewrap"><pre class="code"><span class="tag">const</span> res = <span class="tag">await</span> fetch('https://api.example.com/analysis?symbol=BTC');
+chart.<span class="attr">setOverlays</span>(<span class="tag">await</span> res.json());</pre></div>
+
+        <h3>Zone</h3>
+        <table>
+          <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+          <tr><td><code>type</code></td><td><code>'zone'</code></td><td>required</td></tr>
+          <tr><td><code>from</code> / <code>to</code></td><td>timestamp · <code>null</code></td><td>ms or seconds, snapped to bars. <code>from</code> null → left edge; <b><code>to</code> null → right edge, into the future</b></td></tr>
+          <tr><td><code>priceFrom</code> / <code>priceTo</code></td><td>number</td><td>required (any order — auto-sorted)</td></tr>
+          <tr><td><code>color</code></td><td>string</td><td>hex / rgb() / CSS name, or palette key <code>up|down|accent</code></td></tr>
+          <tr><td><code>alpha</code></td><td>number</td><td>fill opacity, clamped 0.02–0.8 (default 0.22)</td></tr>
+          <tr><td><code>border</code></td><td>boolean</td><td>1px border in the same color (default true)</td></tr>
+          <tr><td><code>label</code> / <code>id</code></td><td>string</td><td>label drawn inside the zone / stable id for upserts</td></tr>
+        </table>
+
+        <h3>Level</h3>
+        <table>
+          <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+          <tr><td><code>type</code></td><td><code>'level'</code></td><td>required</td></tr>
+          <tr><td><code>price</code></td><td>number</td><td>required — horizontal line</td></tr>
+          <tr><td><code>from</code> / <code>to</code></td><td>timestamp · <code>null</code></td><td>null → chart edge (default: full width)</td></tr>
+          <tr><td><code>width</code> / <code>dash</code></td><td>number / boolean</td><td>line width 1–4 (default 1) / dashed (default solid)</td></tr>
+          <tr><td><code>color</code> / <code>label</code> / <code>id</code></td><td>string</td><td>label drawn at the right edge above the line</td></tr>
+        </table>
+
+        <h3>API &amp; attribute</h3>
+        <div class="codewrap"><pre class="code">chart.<span class="attr">setOverlays</span>(list);      <span class="cmt">// replace all (returns applied ids)</span>
+chart.<span class="attr">addOverlay</span>(overlay);     <span class="cmt">// add or replace by id (upsert)</span>
+chart.<span class="attr">removeOverlay</span>(id);
+chart.<span class="attr">clearOverlays</span>();
+chart.<span class="attr">overlays</span>;               <span class="cmt">// getter — normalized copies</span></pre></div>
+        <div class="codewrap"><pre class="code"><span class="cmt">&lt;!-- fully declarative — server-rendered HTML works too --&gt;</span>
+<span class="tag">&lt;wick-chart</span> <span class="attr">overlays</span>=<span class="str">'[{"type":"level","price":28700,"color":"#3f51b5","label":"S1"}]'</span><span class="tag">&gt;&lt;/wick-chart&gt;</span></pre></div>
+        <div class="note"><b>Safety:</b> overlays are API data — colors pass a strict validator, invalid entries are dropped (never thrown), timestamps outside history clamp to the first/last bar. In React, pass <code>overlays</code> as a prop (fresh array → re-apply).</div>
+
+        <div class="demo-card">
+          <div class="demo-head"><span class="t">Live playground</span><span class="spacer"></span><span id="ov-status" style="font-size:12px;color:var(--muted)"></span></div>
+          <textarea id="ov-json" rows="9" spellcheck="false" aria-label="Overlays JSON"></textarea>
+          <div style="display:flex; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); background: var(--panel);">
+            <button class="primary" id="ov-apply">Apply JSON</button>
+            <button id="ov-clear">clearOverlays()</button>
+            <span style="align-self:center;font-size:12px;color:var(--muted)">edit the JSON and re-apply — errors show below the chart</span>
+          </div>
+          <wick-feed for="ex-ov" demo="BTC" tf="1h" limit="400"></wick-feed>
+          <wick-chart id="ex-ov" label="BTC · 1h · supply/demand overlay"></wick-chart>
+          <div class="foot"><span class="err" id="ov-error"></span></div>
+        </div>
+      </section>
+
+      <section id="trading">
+        <h2>Positions &amp; alerts <a class="anchor" href="#trading">#</a></h2>
+        <h3>Positions / orders</h3>
+        <p>Stop/target zones with live P&amp;L readout against the streaming price:</p>
+        <div class="codewrap"><pre class="code">chart.<span class="attr">addPosition</span>({ <span class="attr">id</span>: 'p1', <span class="attr">side</span>: 'long', <span class="attr">entry</span>: 43100, <span class="attr">stop</span>: 42240, <span class="attr">target</span>: 44830, <span class="attr">qty</span>: 0.5 });
+chart.<span class="attr">removePosition</span>('p1');  chart.<span class="attr">clearPositions</span>();</pre></div>
+        <h3>Alerts</h3>
+        <p>Edge-triggered on streaming closes — fire once per crossing, then <code>wick:alert</code>:</p>
+        <div class="codewrap"><pre class="code">chart.<span class="attr">addAlert</span>({ <span class="attr">id</span>: 'a1', <span class="attr">price</span>: 43900, <span class="attr">direction</span>: 'above' });  <span class="cmt">// 'above' | 'below' | 'cross'</span>
+chart.<span class="attr">removeAlert</span>('a1');  chart.<span class="attr">clearAlerts</span>();
+chart.<span class="attr">addEventListener</span>('wick:alert', (e) =&gt; console.log(e.detail.id, e.detail.price));</pre></div>
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live</span><span class="spacer"></span>
+            <button id="pos-add">+ Long (−2% / +4%)</button>
+            <button id="alr-add">+ Alert (+1%)</button>
+            <button id="trade-clear">Clear</button>
+          </div>
+          <wick-feed for="ex-trade" demo="ETH" tf="15m" limit="300"></wick-feed>
+          <wick-chart id="ex-trade" label="ETH · 15m" indicators="volume"></wick-chart>
+          <div class="foot" id="trade-foot">positions/alerts fire wick:alert here</div>
+        </div>
+      </section>
+
+      <section id="analysis">
+        <h2>Stats, profile &amp; annotations <a class="anchor" href="#analysis">#</a></h2>
+        <table>
+          <tr><th>Toggle</th><th>What you get</th></tr>
+          <tr><td><code>stats</code></td><td>Visible-range analytics: return %, annualized vol, max drawdown, up/down bars, avg volume</td></tr>
+          <tr><td><code>profile</code></td><td>Volume profile with POC + value area (VAH/VAL) over the visible range</td></tr>
+          <tr><td><code>annotations</code></td><td>Auto-badged volume spikes, gaps, pivot highs/lows, RSI divergences — hover for a one-line insight</td></tr>
+          <tr><td>shift-drag</td><td>Measure tool: Δprice, ±%, Δtime, bar count (fires <code>wick:measure</code>)</td></tr>
+        </table>
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live</span><span class="spacer"></span>
+            <span class="seg" id="an-seg"></span>
+          </div>
+          <wick-feed for="ex-an" demo="BTC" tf="1h" limit="400"></wick-feed>
+          <wick-chart id="ex-an" label="BTC · 1h" indicators="sma:20 rsi:14" annotations stats></wick-chart>
+        </div>
+      </section>
+
+      <section id="ai">
+        <h2>AI-ready data window <a class="anchor" href="#ai">#</a></h2>
+        <p><code>getDataWindow()</code> turns the visible range into a compact, paste-anywhere summary — trend (least-squares drift + fit), vol percentile, SMA/RSI snapshot, patterns. All computed locally.</p>
+        <div class="codewrap"><pre class="code"><span class="tag">const</span> s = chart.<span class="attr">getDataWindow</span>();
+s.text;       <span class="cmt">// markdown — paste into any AI chat</span>
+s.trend;      <span class="cmt">// { label: 'strong uptrend', slopePctPerBar: 0.77, r2: 0.94 }</span>
+s.volPctile;  <span class="cmt">// 84 → hot regime, relative to the window</span>
+s.patterns;   <span class="cmt">// [{ time, note }] — most recent first</span></pre></div>
+        <div class="demo-card">
+          <div class="demo-head"><span class="t">Live</span><span class="spacer"></span><button class="primary" id="ai-run">getDataWindow()</button></div>
+          <wick-feed for="ex-ai" demo="BTC" tf="4h" limit="300"></wick-feed>
+          <wick-chart id="ex-ai" label="BTC · 4h" indicators="sma:20 rsi:14"></wick-chart>
+          <pre class="out" id="ai-out" style="display:none"></pre>
+        </div>
+      </section>
+      <section id="feeds">
+        <h2>Feeds — <code>&lt;wick-feed&gt;</code> <a class="anchor" href="#feeds">#</a></h2>
+        <p>A declarative data source that pairs with any chart — a fully live chart with zero JavaScript written.</p>
+        <div class="codewrap"><pre class="code"><span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="str">"module"</span> <span class="attr">src</span>=<span class="str">"https://unpkg.com/wickchart/feed"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="tag">&lt;wick-feed</span> <span class="attr">for</span>=<span class="str">"c"</span> <span class="attr">binance</span>=<span class="str">"BTCUSDT"</span> <span class="attr">tf</span>=<span class="str">"1h"</span><span class="tag">&gt;&lt;/wick-feed&gt;</span>
+<span class="tag">&lt;wick-chart</span> <span class="attr">id</span>=<span class="str">"c"</span><span class="tag">&gt;&lt;/wick-chart&gt;</span></pre></div>
+        <table>
+          <tr><th>Attribute</th><th>Meaning</th></tr>
+          <tr><td><code>binance="SYMBOL"</code></td><td>Live Binance (REST klines + WebSocket stream; falls back to REST polling, then a synthetic stream when the network blocks it)</td></tr>
+          <tr><td><code>demo="KEY"</code></td><td>Deterministic offline synthetic feed (<code>BTC</code>/<code>ETH</code>/<code>SOL</code> base prices; any other key seeds a fresh series)</td></tr>
+          <tr><td><code>url="ENDPOINT"</code></td><td>Generic REST JSON array of bars; optional <code>poll="SECONDS"</code></td></tr>
+          <tr><td><code>tf</code> / <code>limit</code></td><td>Timeframe (<code>1m…1w</code>) / initial bar count (default 500)</td></tr>
+          <tr><td><code>for</code></td><td>Chart id to pair with (auto-pairs with the first chart otherwise)</td></tr>
+          <tr><td><code>live="false"</code></td><td>Disable streaming after the initial load</td></tr>
+        </table>
+        <p>Status is reflected in the <code>status</code> attribute and via <code>wick-feed:status</code> events (<code>loading / live / polling / fallback / loaded</code>). Feeds also wire <code>onloadmore</code> backfill automatically for Binance sources.</p>
+      </section>
+
+      <section id="events">
+        <h2>Events <a class="anchor" href="#events">#</a></h2>
+        <p>Custom events carry their payload in <code>event.detail</code>. (0.x <code>hab:*</code> names still fire as deprecated aliases.)</p>
+        <table>
+          <tr><th>Event</th><th>detail</th><th>Fires when</th></tr>
+          <tr><td><code>wick:range</code></td><td><code>{ from, to }</code> (ms)</td><td>visible range changes (pan, zoom, stream)</td></tr>
+          <tr><td><code>wick:select</code></td><td><code>{ time, price, bar }</code></td><td>a bar is clicked</td></tr>
+          <tr><td><code>wick:crosshair</code></td><td><code>{ time, price }</code></td><td>crosshair moves</td></tr>
+          <tr><td><code>wick:alert</code></td><td><code>{ id, price, bar }</code></td><td>a price alert crosses (edge-triggered)</td></tr>
+          <tr><td><code>wick:annotations</code></td><td>annotation list</td><td>smart annotations recompute</td></tr>
+          <tr><td><code>wick:measure</code></td><td>measure result</td><td>shift-drag measurement completes</td></tr>
+        </table>
+        <div class="demo-card">
+          <div class="demo-head"><span class="t">Live event log</span><span class="spacer"></span><span style="font-size:12px;color:var(--muted)">pan / zoom / click this chart</span></div>
+          <wick-feed for="ex-ev" demo="SOL" tf="1h" limit="260"></wick-feed>
+          <wick-chart id="ex-ev" label="SOL · 1h"></wick-chart>
+          <div class="foot" id="ev-log" style="min-height:40px"></div>
+        </div>
+      </section>
+
+      <section id="state">
+        <h2>State &amp; shareable URLs <a class="anchor" href="#state">#</a></h2>
+        <div class="codewrap"><pre class="code"><span class="tag">const</span> state = chart.<span class="attr">getState</span>();   <span class="cmt">// { type, theme, log, stats, profile, annotations,</span>
+                                  <span class="cmt">//   volshading, indicators, view }</span>
+chart.<span class="attr">setState</span>(state);              <span class="cmt">// restore (partial ok)</span>
+
+<span class="tag">import</span> { encodeStateQuery, decodeStateQuery } <span class="tag">from</span> 'wickchart/core';
+location.hash = encodeStateQuery(chart.getState());   <span class="cmt">// → URL-safe query string</span></pre></div>
+        <p>Query keys: <code>type theme log stats profile ann vsh ind from to</code>. Pattern for shareable links — <code>#type=candles&ind=sma:20,rsi:14&from=…&to=…&vsh=1</code>.</p>
+      </section>
+
+      <section id="theming">
+        <h2>Theming <a class="anchor" href="#theming">#</a></h2>
+        <p><code>theme="dark|light"</code> for the presets, then override any slot with CSS custom properties on the element (0.x <code>--hab-*</code> names still work as fallbacks):</p>
+        <table>
+          <tr><th>Variable</th><th>Controls</th></tr>
+          <tr><td><code>--wick-bg</code></td><td>Chart background</td></tr>
+          <tr><td><code>--wick-text</code> / <code>--wick-text-strong</code></td><td>Axis / legend text</td></tr>
+          <tr><td><code>--wick-grid</code> / <code>--wick-border</code></td><td>Grid lines / borders</td></tr>
+          <tr><td><code>--wick-up</code> / <code>--wick-down</code></td><td>Up / down candles</td></tr>
+          <tr><td><code>--wick-accent</code></td><td>Crosshair, highlights, overlay fallback</td></tr>
+          <tr><td><code>--wick-overlay</code> / <code>--wick-overlay-N</code></td><td>Indicator line palette (cycle or per-index)</td></tr>
+        </table>
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live</span><span class="spacer"></span>
+            <label style="font-size:12px;color:var(--muted)">accent <input type="color" id="th-accent" value="#22d3ee" /></label>
+            <label style="font-size:12px;color:var(--muted)">up <input type="color" id="th-up" value="#16c784" /></label>
+            <label style="font-size:12px;color:var(--muted)">down <input type="color" id="th-down" value="#ea3943" /></label>
+            <span class="seg" id="th-seg"></span>
+          </div>
+          <wick-feed for="ex-th" demo="BTC" tf="1h" limit="260"></wick-feed>
+          <wick-chart id="ex-th" label="themed" indicators="ema:21 volume"></wick-chart>
+        </div>
+      </section>
+
+      <section id="interactions">
+        <h2>Interactions &amp; accessibility <a class="anchor" href="#interactions">#</a></h2>
+        <table>
+          <tr><th>Input</th><th>Action</th></tr>
+          <tr><td>scroll / pinch</td><td>Zoom around the cursor</td></tr>
+          <tr><td>drag</td><td>Pan (auto-follow releases when you pan away from the right edge)</td></tr>
+          <tr><td>shift-drag</td><td>Measure tool (Δprice, ±%, Δtime, bars)</td></tr>
+          <tr><td>double-click</td><td>Reset view / re-fit</td></tr>
+          <tr><td>click bar</td><td><code>wick:select</code></td></tr>
+          <tr><td><kbd>←</kbd> <kbd>→</kbd> + <code>sonify</code></td><td>Walk bars as audible pitch — screen-reader-friendly trend reading</td></tr>
+          <tr><td><kbd>+</kbd> <kbd>−</kbd></td><td>Zoom in / out</td></tr>
+        </table>
+        <p>The canvas carries an <code>aria-label</code> with the latest price, change % and bar count; crosshair + legend keep a text readout for pointer users.</p>
+      </section>
+
+      <section id="react">
+        <h2>React, Vue, Svelte <a class="anchor" href="#react">#</a></h2>
+        <p>The element is framework-agnostic. For React there is an official binding — <code>react</code> is an optional peer dependency:</p>
+        <div class="codewrap"><pre class="code"><span class="tag">npm</span> install wickchart react
+<span class="tag">import</span> { WickChart } <span class="tag">from</span> 'wickchart/react';
+
+&lt;<span class="tag">WickChart</span> <span class="attr">type</span>=<span class="str">"candles"</span> <span class="attr">indicators</span>=<span class="str">"sma:20"</span> <span class="attr">volshading</span>
+           <span class="attr">data</span>={bars} <span class="attr">overlays</span>={zones}
+           <span class="attr">onRange</span>={fn} <span class="attr">onAlert</span>={fn} /&gt;</pre></div>
+        <p>Props map 1:1: primitives → attributes, <code>data</code>/<code>overlays</code> → <code>setData()</code>/<code>setOverlays()</code> (pass a <b>fresh array</b> to update), <code>onXxx</code> → <code>wick:xxx</code> with unmount cleanup. The <a href="./demo/react.html">live React demo</a> runs without a build step.</p>
+        <div class="codewrap"><pre class="code"><span class="cmt">&lt;!-- Vue 3 --&gt;</span>
+&lt;wick-chart ref=<span class="str">"chart"</span> type=<span class="str">"candles"</span> indicators=<span class="str">"sma:20"</span>&gt;&lt;/wick-chart&gt;
+<span class="cmt">// onMounted: chart.value.data = bars; chart.value.addEventListener('wick:range', fn)</span>
+
+<span class="cmt">&lt;!-- Svelte --&gt;</span>
+&lt;wick-chart bind:this={el} indicators=<span class="str">"sma:20"</span> on:wick:alert={fn}&gt;&lt;/wick-chart&gt;
+<span class="cmt">// $: if (el &amp;&amp; bars.length) el.data = bars;</span></pre></div>
+      </section>
+
+      <section id="perf">
+        <h2>Performance &amp; export <a class="anchor" href="#perf">#</a></h2>
+        <ul>
+          <li>~<b>0.2 ms per frame</b> at default zoom (Canvas 2D, rAF-batched invalidation, DPR-aware)</li>
+          <li>Indicator results cached per data version; O(1) streaming updates via <code>update()</code></li>
+          <li>History backfill shifts the view anchor — no full refit</li>
+          <li><code>chart.exportPNG()</code> returns a PNG data-URL of the current render (crosshair excluded)</li>
+          <li><code>chart.fit()</code> / <code>getVisibleRange()</code> / <code>setVisibleRange({from,to})</code> for programmatic control</li>
+        </ul>
+      </section>
+
+      <section id="migrate">
+        <h2>Migrating from 0.x (HabView) <a class="anchor" href="#migrate">#</a></h2>
+        <p>1.0 renamed the public surface; every 0.x name still works as a deprecated alias (removal planned for 2.0):</p>
+        <table>
+          <tr><th>0.x</th><th>1.x</th></tr>
+          <tr><td><code>&lt;hab-chart&gt;</code> / <code>&lt;hab-feed&gt;</code></td><td><code>&lt;wick-chart&gt;</code> / <code>&lt;wick-feed&gt;</code></td></tr>
+          <tr><td><code>hab:* events</code></td><td><code>wick:* events</code></td></tr>
+          <tr><td><code>--hab-*</code> CSS vars</td><td><code>--wick-*</code> (falls back automatically)</td></tr>
+          <tr><td><code>HabChart</code> / <code>HabFeed</code> classes</td><td><code>WickChart</code> / <code>WickFeed</code></td></tr>
+          <tr><td><code>hab-co-view:</code> channel</td><td><code>wick-co-view:</code></td></tr>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <script type="module">
+    import { compileScript } from './src/core.js';
+
+    const $ = (id) => document.getElementById(id);
+
+    /* ---------- code copy buttons ---------- */
+    for (const pre of document.querySelectorAll('pre.code')) {
+      const wrap = document.createElement('div');
+      wrap.className = 'codewrap';
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.type = 'button';
+      btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy code');
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(pre.textContent);
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = pre.textContent;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        btn.textContent = 'Copied';
+        btn.classList.add('done');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1400);
+      });
+      wrap.appendChild(btn);
+    }
+
+    /* ---------- sidebar: scrollspy + filter ---------- */
+    const links = [...document.querySelectorAll('#toc a')];
+    const sections = links
+      .map((a) => ({ a, sec: document.querySelector(a.getAttribute('href')) }))
+      .filter((x) => x.sec);
+    const onScroll = () => {
+      const y = window.scrollY + 120;
+      let cur = sections[0];
+      for (const s of sections) if (s.sec.offsetTop <= y) cur = s;
+      links.forEach((a) => a.classList.toggle('active', a === cur.a));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    $('toc-filter').addEventListener('input', (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      for (const { a, sec } of sections) {
+        const hit = !q || sec.textContent.toLowerCase().includes(q) || a.textContent.toLowerCase().includes(q);
+        a.classList.toggle('hidden', !hit);
+      }
+    });
+
+    /* ---------- tiny helpers for the live examples ---------- */
+    const TF = 3600e3;
+    function nextBar(last, time) {
+      const open = last ? last.close : 100 + Math.random() * 200;
+      const drift = (Math.random() - 0.5) * open * 0.01;
+      const close = Math.max(1, open + drift);
+      return {
+        time, open, close,
+        high: Math.max(open, close) * (1 + Math.random() * 0.004),
+        low: Math.min(open, close) * (1 - Math.random() * 0.004),
+        volume: 50 + Math.random() * 150,
+      };
+    }
+    function genBars(n = 300) {
+      const bars = [];
+      let t = Date.now() - n * TF;
+      for (let i = 0; i < n; i++) { bars.push(nextBar(bars[i - 1], t)); t += TF; }
+      return bars;
+    }
+    const seg = (el, options, initial, onPick) => {
+      for (const [val, label] of options) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.className = val === initial ? 'active' : '';
+        b.addEventListener('click', () => {
+          el.querySelectorAll('button').forEach((x) => x.classList.remove('active'));
+          b.classList.add('active');
+          onPick(val);
+        });
+        el.appendChild(b);
+      }
+    };
+
+    /* ---------- data & streaming ---------- */
+    {
+      const c = $('ex-data'), foot = $('data-foot');
+      $('data-set').addEventListener('click', () => {
+        const bars = genBars(300);
+        c.setData(bars);
+        foot.textContent = `setData → ${bars.length} bars, last close ${bars.at(-1).close.toFixed(2)}`;
+      });
+      $('data-update').addEventListener('click', () => {
+        const d = c.data;
+        if (!d.length) { foot.textContent = 'no data — press setData first'; return; }
+        const bar = nextBar(null, d[d.length - 1].time + TF);
+        bar.open = d[d.length - 1].close;
+        c.update(bar);
+        foot.textContent = `update → bar @ ${new Date(bar.time).toISOString().slice(5, 16).replace('T', ' ')} close ${bar.close.toFixed(2)} (${c.data.length} bars)`;
+      });
+      $('data-clear').addEventListener('click', () => { c.clearData(); foot.textContent = 'clearData → empty'; });
+    }
+
+    /* ---------- series types ---------- */
+    seg($('type-seg'), [
+      ['candles', 'candles'], ['line', 'line'], ['area', 'area'],
+      ['bars', 'bars'], ['hollow', 'hollow'], ['heikin', 'heikin'],
+    ], 'candles', (v) => $('ex-types').setAttribute('type', v));
+
+    /* ---------- indicators ---------- */
+    {
+      const presets = ['volume', 'sma:20 ema:50 volume', 'sma:20 bb:20 rsi:14 macd:12/26/9 volume', ''];
+      seg($('ind-seg'), presets.map((p, i) => [i, p === '' ? 'none' : p]), 1,
+        (i) => $('ex-ind').setAttribute('indicators', presets[i]));
+    }
+
+    /* ---------- WickScript ---------- */
+    {
+      const c = $('ex-ws');
+      let base = 'sma:20';
+      const apply = (list) => { c.setAttribute('indicators', list.join(' ')); };
+      $('ws-add').addEventListener('click', () => {
+        const src = $('ws-input').value.trim();
+        $('ws-error').textContent = '';
+        $('ws-ok').textContent = '';
+        if (!src) { $('ws-error').textContent = 'type an expression first — e.g. close - sma(close,20)'; return; }
+        try {
+          compileScript(src); // throws on invalid syntax
+          const token = ($('ws-pane').checked ? 'pexpr:' : 'expr:') + '{' + src + '}';
+          apply([base, token]);
+          $('ws-ok').textContent = 'applied as ' + ($('ws-pane').checked ? 'pexpr' : 'expr');
+        } catch (err) {
+          $('ws-error').textContent = err.message;
+        }
+      });
+      $('ws-clear').addEventListener('click', () => {
+        apply([base]);
+        $('ws-input').value = '';
+        $('ws-error').textContent = '';
+        $('ws-ok').textContent = 'reset';
+      });
+    }
+
+    /* ---------- volshading ---------- */
+    seg($('vsh-seg'), [['on', 'on'], ['off', 'off'], ['20/85', '20/85'], ['20/85/50', '20/85/50']], 'on',
+      (v) => {
+        const c = $('ex-vsh');
+        if (v === 'off') c.removeAttribute('volshading');
+        else c.setAttribute('volshading', v === 'on' ? '' : v);
+      });
+
+    /* ---------- overlays playground ---------- */
+    {
+      const c = $('ex-ov');
+      const ta = $('ov-json');
+      ta.value = JSON.stringify([
+        { type: 'zone', from: null, priceFrom: 0, priceTo: 0, color: '#26a69a', alpha: 0.2, label: 'supply' },
+        { type: 'zone', from: null, priceFrom: 0, priceTo: 0, color: '#ef5350', alpha: 0.2, label: 'demand' },
+        { type: 'level', price: 0, color: '#3f51b5', label: 'S1' },
+      ], null, 2);
+      const applyRelative = () => {
+        // anchor the demo zones to the live data so they're always in view
+        const d = c.data;
+        if (!d || !d.length) return false;
+        const recent = d.slice(-140);
+        let hi = -Infinity, lo = Infinity;
+        for (const b of recent) { if (b.high > hi) hi = b.high; if (b.low < lo) lo = b.low; }
+        const list = JSON.parse(ta.value);
+        for (const o of list) {
+          if (o.type === 'zone') {
+            if (o.label === 'supply' || (!o.label && o.color === '#26a69a')) {
+              o.priceFrom = hi * 1.004; o.priceTo = hi * 1.028;
+            } else {
+              o.priceFrom = lo * 0.972; o.priceTo = lo * 0.996;
+            }
+          } else if (o.type === 'level' && !o.price) {
+            o.price = (hi + lo) / 2;
+          }
+        }
+        return list;
+      };
+      const apply = () => {
+        $('ov-error').textContent = '';
+        try {
+          const raw = JSON.parse(ta.value);
+          if (!Array.isArray(raw)) throw new Error('overlays must be a JSON array');
+          const ids = c.setOverlays(raw);
+          $('ov-status').textContent = `${ids.length} applied — chart.overlays: ${c.overlays.length}`;
+        } catch (err) {
+          $('ov-error').textContent = err.message + ' (invalid entries are dropped by setOverlays; broken JSON must be fixed here)';
+        }
+      };
+      // once the feed has data, fill relative prices and apply
+      const kick = () => {
+        if (c.data && c.data.length) {
+          try {
+            const list = applyRelative();
+            ta.value = JSON.stringify(list, null, 2);
+          } catch { /* keep user JSON */ }
+          apply();
+        } else {
+          setTimeout(kick, 400);
+        }
+      };
+      setTimeout(kick, 500);
+      $('ov-apply').addEventListener('click', apply);
+      $('ov-clear').addEventListener('click', () => {
+        c.clearOverlays();
+        $('ov-status').textContent = 'cleared';
+        $('ov-error').textContent = '';
+      });
+    }
+
+    /* ---------- trading ---------- */
+    {
+      const c = $('ex-trade'), foot = $('trade-foot');
+      let n = 0;
+      $('pos-add').addEventListener('click', () => {
+        const d = c.data;
+        if (!d || !d.length) return;
+        const entry = d[d.length - 1].close;
+        c.addPosition({ id: 'doc-p' + ++n, side: 'long', entry, stop: entry * 0.98, target: entry * 1.04, qty: 0.5 });
+        foot.textContent = `addPosition → long @ ${entry.toFixed(2)} (stop −2%, target +4%)`;
+      });
+      $('alr-add').addEventListener('click', () => {
+        const d = c.data;
+        if (!d || !d.length) return;
+        c.addAlert({ id: 'doc-a' + ++n, price: d[d.length - 1].close * 1.01, direction: 'above' });
+        foot.textContent = 'addAlert → +1% above last close, fires wick:alert on crossing';
+      });
+      $('trade-clear').addEventListener('click', () => {
+        c.clearPositions();
+        c.clearAlerts();
+        foot.textContent = 'cleared';
+      });
+      c.addEventListener('wick:alert', (e) => {
+        foot.textContent = `wick:alert → ${e.detail.id} crossed ${e.detail.price.toFixed(2)}`;
+      });
+    }
+
+    /* ---------- analysis toggles ---------- */
+    {
+      const c = $('ex-an');
+      seg($('an-seg'), [['ann', 'annotations'], ['stats', 'stats'], ['prof', 'profile'], ['vol', 'volshading']], 'ann', (v) => {
+        // single-toggle demo: reset then set the chosen one
+        for (const a of ['annotations', 'stats', 'profile', 'volshading']) c.removeAttribute(a);
+        if (v === 'vol') c.setAttribute('volshading', '');
+        else if (v !== 'off') c.setAttribute(v === 'prof' ? 'profile' : v, '');
+      });
+      c.setAttribute('annotations', '');
+    }
+
+    /* ---------- AI window ---------- */
+    $('ai-run').addEventListener('click', () => {
+      const out = $('ai-out');
+      out.style.display = 'block';
+      out.textContent = $('ex-ai').getDataWindow().text;
+    });
+
+    /* ---------- events log ---------- */
+    {
+      const c = $('ex-ev'), log = $('ev-log');
+      const lines = [];
+      const push = (name, text) => {
+        lines.unshift(`<b style="color:var(--accent2)">${name}</b> <span style="color:var(--muted)">${text}</span>`);
+        log.innerHTML = lines.slice(0, 4).join('<br>');
+      };
+      c.addEventListener('wick:range', (e) => push('wick:range',
+        `${new Date(e.detail.from).toISOString().slice(5, 16).replace('T', ' ')} → ${new Date(e.detail.to).toISOString().slice(5, 16).replace('T', ' ')}`));
+      c.addEventListener('wick:select', (e) => push('wick:select', `bar @ ${e.detail.time}`));
+      c.addEventListener('wick:crosshair', (e) => push('wick:crosshair', `${e.detail.price?.toFixed?.(2) ?? ''} @ ${e.detail.time}`));
+    }
+
+    /* ---------- theming ---------- */
+    {
+      const c = $('ex-th');
+      const bind = (id, prop) => $(id).addEventListener('input', (e) => { c.style.setProperty(prop, e.target.value); });
+      bind('th-accent', '--wick-accent');
+      bind('th-up', '--wick-up');
+      bind('th-down', '--wick-down');
+      seg($('th-seg'), [['dark', 'dark'], ['light', 'light']], 'dark', (v) => c.setAttribute('theme', v));
+    }
+  </script>
+</body>
+</html>
