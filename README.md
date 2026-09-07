@@ -124,6 +124,7 @@ chart.setData([
 | `precision`   | auto       | Forced decimal places for prices (auto-detected from magnitude)    |
 | `stats`       | off        | Live statistics chip for the visible range          |
 | `profile`     | off        | Volume profile overlay (POC + 70% value area)       |
+| `annotations` | off        | Smart annotations (volume spikes, gaps, pivots, RSI divergences) |
 
 \* `indicators=""` disables everything, including volume. Token syntax:
 `name[:param[/param…]][@color]` — e.g. `sma:20@#ff0000`, `macd:12/26/9`.
@@ -166,6 +167,16 @@ chart.indicators = 'vwap:20';
 `import HabChart from 'hab-view'` gives you the class for
 `HabChart.registerIndicator(...)` (the element is registered as a side effect
 of importing the package).
+
+### Smart annotations
+
+`<hab-chart annotations>` marks notable events on the visible range — volume
+spikes (>3× average), price gaps, 41-bar pivot highs/lows, and RSI
+divergences — with lettered badges (V/G/H/L/D). Hover a badged bar and the
+legend shows a one-line insight ("Volume 4.2× average", "Bearish RSI
+divergence"). The current set is emitted on every recompute via the
+`hab:annotations` event, so hosts can build their own UI from it. Badges are
+hidden at extreme zoom-out, where bars collapse into columns.
 
 ### Example: VWAP via the registry
 
