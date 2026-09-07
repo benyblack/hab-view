@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HabView — a live chart with zero JavaScript</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%236366f1'/%3E%3Crect x='6' y='9' width='3.4' height='7' rx='1' fill='white'/%3E%3Crect x='14.5' y='7' width='3.4' height='5' rx='1' fill='white' opacity='.6'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #11141c;
+      --border: rgba(148, 163, 184, 0.14);
+      --text: #cbd5e1;
+      --muted: #7c8598;
+      --accent: #6366f1;
+      --up: #16c784;
+      --down: #ea3943;
+      --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex; flex-direction: column;
+      background: var(--bg); color: var(--text);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      padding: 22px 28px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.01em; }
+    h1 code { color: #22d3ee; font-size: 17px; }
+    p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+    p code {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 5px; padding: 1px 6px; font-size: 12px;
+    }
+    .stage { flex: 1; min-height: 0; padding: 14px; }
+    hab-chart {
+      display: block; width: 100%; height: 100%;
+      border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--border); background: var(--panel);
+      --hab-bg: var(--panel);
+      --hab-up: var(--up);
+      --hab-down: var(--down);
+      --hab-accent: #22d3ee;
+      --hab-text: var(--muted);
+      --hab-text-strong: var(--text);
+    }
+    .badge {
+      position: fixed; top: 18px; right: 18px;
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 999px; padding: 6px 12px; color: var(--muted);
+    }
+    .badge::before {
+      content: ''; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--up);
+    }
+    hab-feed[status='fallback'] + .stage .badge::before,
+    .badge.warn::before { background: #f59e0b; }
+    @media (max-width: 640px) { header { padding: 16px; } .stage { padding: 8px; } }
+  </style>
+  <!-- the only script on the page: loads <hab-chart> + <hab-feed> -->
+  <script type="module" src="../src/hab-feed.js"></script>
+</head>
+<body>
+  <header>
+    <h1>A live chart, <code>zero JavaScript</code> written</h1>
+    <p>
+      Everything below is HTML: <code>&lt;hab-feed&gt;</code> streams Binance data (falling back
+      to a synthetic feed when Binance is unreachable), wires up history backfill, and drives
+      <code>&lt;hab-chart&gt;</code> — indicators, volume profile and crosshair included.
+      <code>status="<span id="status-text">waiting…</span>"</code>
+    </p>
+  </header>
+
+  <!-- declarative live chart: feed + chart, no JS -->
+  <hab-feed id="feed" for="chart" binance="BTCUSDT" tf="1h"></hab-feed>
+
+  <div class="stage">
+    <hab-chart id="chart" type="candles" indicators="sma:20 bb:20 volume" profile></hab-chart>
+  </div>
+
+  <div class="badge"><span id="badge-text">loading</span></div>
+
+  <!-- status reflection is still declarative-friendly: one tiny inline
+       snippet mirrors the feed status into the badge (optional) -->
+  <script>
+    document.getElementById('feed').addEventListener('hab-feed:status', (e) => {
+      const s = e.detail.status;
+      document.getElementById('badge-text').textContent =
+        s === 'live' ? 'live · Binance' :
+        s === 'fallback' ? 'live · synthetic (Binance unreachable)' :
+        s === 'polling' ? 'live · polling' : s;
+      document.getElementById('status-text').textContent = s;
+      document.querySelector('.badge').classList.toggle('warn', s === 'fallback' || s === 'polling');
+    });
+  </script>
+</body>
+</html>

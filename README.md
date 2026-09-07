@@ -37,6 +37,35 @@ Works in plain HTML, React, Vue, Svelte, Angular — anywhere a `<div>` works.
 TypeScript declarations ship inside the package (generated at pack time from
 the JSDoc-annotated source — the repo itself stays 100% dependency-free JS).
 
+## Declarative live charts with `<hab-feed>`
+
+One more script tag and your chart is fully live — data, backfill, streaming —
+with **zero JavaScript written**:
+
+```html
+<script type="module" src="https://unpkg.com/hab-view/feed"></script>
+
+<hab-feed for="chart" binance="BTCUSDT" tf="1h"></hab-feed>
+<hab-chart id="chart" indicators="sma:20 volume" profile></hab-chart>
+```
+
+| Attribute   | Meaning                                                                 |
+| ----------- | ----------------------------------------------------------------------- |
+| `for`       | target `<hab-chart>` id (auto-pairs with the first chart when omitted)   |
+| `binance`   | Binance symbol (`BTCUSDT`) — REST load + WebSocket live + backfill       |
+| `demo`      | deterministic offline synthetic feed (`demo="ETH"` picks a base price)   |
+| `url`       | generic REST endpoint returning a JSON array of bars (+ `poll="10"` sec) |
+| `tf`        | timeframe: `1m 3m 5m 15m 30m 1h 2h 4h 6h 12h 1d 3d 1w`                  |
+| `limit`     | initial bars (default 500)                                               |
+| `live`      | `live="false"` loads history without streaming                           |
+
+The element reflects its state in the `status` attribute (`loading`, `live`,
+`polling`, `fallback`, `loaded`, `waiting`, `idle`) and emits
+`hab-feed:status` / `hab-feed:fallback` events. When Binance is unreachable
+(geo-blocked, offline), it degrades gracefully: WebSocket → REST polling → a
+synthetic stream bridged from the last real price, so the chart never goes
+blank. It also wires `chart.onloadmore` for infinite backfill automatically.
+
 ---
 
 ## Why another chart library?
