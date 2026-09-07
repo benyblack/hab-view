@@ -410,6 +410,23 @@ export function calcStdDev(values, period) {
   return out;
 }
 
+/** Linear-weighted moving average (most recent bar weighs `period`), aligned like SMA.
+ * @param {number[]} values
+ * @param {number} period
+ * @returns {Array<number|null>}
+ */
+export function calcWMA(values, period) {
+  const out = new Array(values.length).fill(null);
+  if (period < 1 || values.length < period) return out;
+  const denom = (period * (period + 1)) / 2;
+  for (let i = period - 1; i < values.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < period; j++) sum += values[i - j] * (period - j);
+    out[i] = sum / denom;
+  }
+  return out;
+}
+
 /**
  * Bollinger Bands.
  * @param {number[]} closes
@@ -849,7 +866,8 @@ export const BUILTIN_INDICATORS = new Map(
 
 /**
  * Parse an `indicators` attribute string against a registry.
- * Token: `name[:param[/param…]][@color]`, plus the `volume` keyword.
+ * Token: `name[:param[/param…]][@color]`, the `volume` keyword, and
+ * HabScript blobs `expr:{…}` (overlay) / `pexpr:{…}` (separate pane).
  * @param {string|null|undefined} str
  * @param {Map<string, IndicatorDef>} registry
  * @returns {{overlays: IndicatorEntry[], panes: IndicatorEntry[], volume: boolean, unknown: string[]}}
@@ -858,8 +876,32 @@ export function parseIndicators(str, registry) {
   const out = { overlays: [], panes: [], volume: false, unknown: [] };
   if (str == null || str === '') return out;
   const seen = new Set();
-  for (const raw of String(str).split(/[\s,;]+/)) {
-    if (!raw) continue;
+  for (const raw of splitIndicatorTokens(str)) {
+    const em = raw.match(/^(p?expr):\{([^{}]*)\}(@\S*)?$/i);
+    if (em) {
+      const pane = em[1].toLowerCase() === 'pexpr';
+      const src = em[2].trim();
+      let def;
+      try {
+        def = scriptIndicator(src, { pane });
+      } catch (err) {
+        out.unknown.push(em[1] + ':{' + src + '}');
+        continue;
+      }
+      const key = (pane ? 'pexpr' : 'expr') + ':{' + src.toLowerCase() + '}';
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const entry = {
+        name: pane ? 'pexpr' : 'expr',
+        def,
+        params: {},
+        color: em[3] ? em[3].slice(1) : null,
+        key,
+      };
+      if (pane) out.panes.push(entry);
+      else out.overlays.push(entry);
+      continue;
+    }
     const m = raw.match(/^([A-Za-z][A-Za-z0-9_]*)(?::([^@]*))?(@.+)?$/);
     if (!m) continue;
     const [, name, paramStr, colorStr] = m;
@@ -895,6 +937,386 @@ export function parseIndicators(str, registry) {
     else out.overlays.push(entry);
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * HabScript — safe expression mini-language for custom indicators
+ *
+ * `expr:{(close - sma(close,20)) / sma(close,20)}` compiles through a
+ * hand-written tokenizer + recursive-descent parser (no eval / Function)
+ * and evaluates element-wise over the bar series.
+ * ------------------------------------------------------------------ */
+
+const SCRIPT_MAX_LEN = 512;
+const SCRIPT_MAX_TOKENS = 128;
+const SCRIPT_MAX_DEPTH = 24;
+
+/** Series variables available inside expressions. */
+const SCRIPT_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4'];
+
+/**
+ * Functions available inside expressions. `scalar` lists argument indexes
+ * that must be plain whole-number literals (periods / shifts).
+ */
+const SCRIPT_FUNCS = {
+  sma: { min: 2, max: 2, scalar: [1] },
+  ema: { min: 2, max: 2, scalar: [1] },
+  wma: { min: 2, max: 2, scalar: [1] },
+  stddev: { min: 2, max: 2, scalar: [1] },
+  rsi: { min: 2, max: 2, scalar: [1] },
+  hh: { min: 2, max: 2, scalar: [1] },
+  ll: { min: 2, max: 2, scalar: [1] },
+  prev: { min: 1, max: 2, scalar: [1] },
+  change: { min: 1, max: 1 },
+  abs: { min: 1, max: 1 },
+  sqrt: { min: 1, max: 1 },
+  log: { min: 1, max: 1 },
+  min: { min: 2, max: 2 },
+  max: { min: 2, max: 2 },
+  crossup: { min: 2, max: 2 },
+  crossdown: { min: 2, max: 2 },
+};
+
+const scriptErr = (msg) => new Error('script: ' + msg);
+
+/**
+ * Split an indicators string into tokens, keeping `expr:{…}` / `pexpr:{…}`
+ * blobs atomic — spaces and commas inside the braces are preserved, and an
+ * optional `@color` suffix directly after `}` stays attached.
+ * Separators are whitespace, `,` and `;`.
+ * @param {string|null|undefined} str
+ * @returns {string[]}
+ */
+export function splitIndicatorTokens(str) {
+  const out = [];
+  const s = String(str == null ? '' : str);
+  let i = 0;
+  while (i < s.length) {
+    while (i < s.length && /[\s,;]/.test(s[i])) i++;
+    if (i >= s.length) break;
+    let j = i;
+    if (/^(p?expr):\{/i.test(s.slice(i))) {
+      const end = s.indexOf('}', i);
+      if (end === -1) {
+        out.push(s.slice(i)); // unterminated → caller rejects the token
+        break;
+      }
+      j = end + 1;
+      if (s[j] === '@') {
+        j++;
+        while (j < s.length && !/[\s,;]/.test(s[j])) j++;
+      }
+    } else {
+      while (j < s.length && !/[\s,;]/.test(s[j])) j++;
+    }
+    out.push(s.slice(i, j));
+    i = j;
+  }
+  return out.filter(Boolean);
+}
+
+/** Tokenize an expression (numbers, identifiers, operators, `( ) ,`). */
+function tokenizeScript(src) {
+  if (typeof src !== 'string' || !src.trim()) throw scriptErr('empty expression');
+  if (src.length > SCRIPT_MAX_LEN) throw scriptErr(`expression longer than ${SCRIPT_MAX_LEN} chars`);
+  const toks = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === ' ' || c === '\t' || c === '\n' || c === '\r') {
+      i++;
+      continue;
+    }
+    const isDigit = c >= '0' && c <= '9';
+    if (isDigit || (c === '.' && src[i + 1] >= '0' && src[i + 1] <= '9')) {
+      const m = src.slice(i).match(/^\d*\.?\d+/);
+      toks.push({ t: 'num', v: parseFloat(m[0]) });
+      i += m[0].length;
+      continue;
+    }
+    const isAlpha = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '_';
+    if (isAlpha) {
+      const m = src.slice(i).match(/^[A-Za-z_][A-Za-z0-9_]*/);
+      toks.push({ t: 'id', v: m[0] });
+      i += m[0].length;
+      continue;
+    }
+    if (c === '+' || c === '-' || c === '*' || c === '/' || c === '%') {
+      toks.push({ t: 'op', v: c });
+      i++;
+      continue;
+    }
+    if (c === '(' || c === ')' || c === ',') {
+      toks.push({ t: c });
+      i++;
+      continue;
+    }
+    throw scriptErr(`unexpected character "${c}"`);
+  }
+  if (!toks.length) throw scriptErr('empty expression');
+  if (toks.length > SCRIPT_MAX_TOKENS) throw scriptErr(`more than ${SCRIPT_MAX_TOKENS} tokens`);
+  return toks;
+}
+
+/** Recursive-descent parse into a small AST; validates identifiers, calls and arities. */
+function parseScript(src) {
+  const toks = tokenizeScript(src);
+  let p = 0;
+  const peek = () => toks[p];
+
+  function parseAdd(depth) {
+    let l = parseMul(depth);
+    while (peek() && peek().t === 'op' && (peek().v === '+' || peek().v === '-')) {
+      const op = toks[p++].v;
+      l = { type: 'bin', op, l, r: parseMul(depth) };
+    }
+    return l;
+  }
+  function parseMul(depth) {
+    let l = parseUnary(depth);
+    while (peek() && peek().t === 'op' && (peek().v === '*' || peek().v === '/' || peek().v === '%')) {
+      const op = toks[p++].v;
+      l = { type: 'bin', op, l, r: parseUnary(depth) };
+    }
+    return l;
+  }
+  function parseUnary(depth) {
+    if (depth > SCRIPT_MAX_DEPTH) throw scriptErr('expression too deeply nested');
+    const t = peek();
+    if (t && t.t === 'op' && (t.v === '-' || t.v === '+')) {
+      p++;
+      const e = parseUnary(depth + 1);
+      return t.v === '-' ? { type: 'neg', e } : e;
+    }
+    return parseAtom(depth + 1);
+  }
+  function parseAtom(depth) {
+    if (depth > SCRIPT_MAX_DEPTH) throw scriptErr('expression too deeply nested');
+    const t = toks[p++];
+    if (!t) throw scriptErr('unexpected end of expression');
+    if (t.t === 'num') return { type: 'num', v: t.v };
+    if (t.t === 'id') {
+      const name = t.v.toLowerCase();
+      if (peek() && peek().t === '(') {
+        p++;
+        const args = [];
+        if (peek() && peek().t !== ')') {
+          args.push(parseAdd(depth));
+          while (peek() && peek().t === ',') {
+            p++;
+            args.push(parseAdd(depth));
+          }
+        }
+        const close = toks[p++];
+        if (!close || close.t !== ')') throw scriptErr(`missing ")" after ${name}(`);
+        return { type: 'call', name, args };
+      }
+      if (!SCRIPT_VARS.includes(name)) throw scriptErr(`unknown identifier "${t.v}"`);
+      return { type: 'var', name };
+    }
+    if (t.t === '(') {
+      const e = parseAdd(depth);
+      const close = toks[p++];
+      if (!close || close.t !== ')') throw scriptErr('missing ")"');
+      return e;
+    }
+    throw scriptErr(`unexpected token "${t.t === 'op' ? t.v : t.t}"`);
+  }
+
+  const ast = parseAdd(0);
+  if (p < toks.length) throw scriptErr('unexpected trailing input');
+  validateScriptNode(ast);
+  return ast;
+}
+
+function validateScriptNode(n) {
+  if (!n || n.type === 'num' || n.type === 'var') return;
+  if (n.type === 'neg') return validateScriptNode(n.e);
+  if (n.type === 'bin') {
+    validateScriptNode(n.l);
+    validateScriptNode(n.r);
+    return;
+  }
+  if (n.type === 'call') {
+    const spec = SCRIPT_FUNCS[n.name];
+    if (!spec) throw scriptErr(`unknown function "${n.name}"`);
+    if (n.args.length < spec.min || n.args.length > spec.max) {
+      const want = spec.min === spec.max ? String(spec.min) : `${spec.min}–${spec.max}`;
+      throw scriptErr(`${n.name}() takes ${want} argument${spec.max === 1 ? '' : 's'} (got ${n.args.length})`);
+    }
+    n.args.forEach((a, i) => {
+      if (spec.scalar && spec.scalar.includes(i)) {
+        if (a.type !== 'num' || !Number.isInteger(a.v) || a.v < 1) {
+          throw scriptErr(`${n.name}() argument ${i + 1} must be a whole number ≥ 1`);
+        }
+      }
+      validateScriptNode(a);
+    });
+  }
+}
+
+/**
+ * Compile a HabScript expression. Throws a descriptive error on any syntax
+ * or semantic problem — never evaluates strings at runtime.
+ * @param {string} src
+ * @returns {{src: string, ast: object}}
+ */
+export function compileScript(src) {
+  const s = String(src == null ? '' : src).trim();
+  return { src: s, ast: parseScript(s) };
+}
+
+/** null → NaN so sparse calc helpers compose safely inside expressions. */
+const scriptNum = (x) => (x == null || Number.isFinite(x) ? x : NaN);
+
+function binOp(op, a, b) {
+  if (a == null || b == null) return NaN;
+  switch (op) {
+    case '+': return a + b;
+    case '-': return a - b;
+    case '*': return a * b;
+    case '/': return a / b;
+    case '%': return a % b;
+  }
+  return NaN;
+}
+
+function evalScriptNode(node, vars, n) {
+  switch (node.type) {
+    case 'num':
+      return node.v;
+    case 'var':
+      return vars[node.name];
+    case 'neg': {
+      const e = evalScriptNode(node.e, vars, n);
+      if (!Array.isArray(e)) return -e;
+      return e.map((x) => (x == null ? NaN : -x));
+    }
+    case 'bin': {
+      const l = evalScriptNode(node.l, vars, n);
+      const r = evalScriptNode(node.r, vars, n);
+      if (!Array.isArray(l) && !Array.isArray(r)) return binOp(node.op, l, r);
+      const a = Array.isArray(l) ? l : new Array(n).fill(l);
+      const b = Array.isArray(r) ? r : new Array(n).fill(r);
+      const out = new Array(n);
+      for (let i = 0; i < n; i++) out[i] = binOp(node.op, a[i], b[i]);
+      return out;
+    }
+    case 'call':
+      return evalScriptCall(node, vars, n);
+  }
+  return NaN;
+}
+
+function evalScriptCall(node, vars, n) {
+  const { name, args } = node;
+  const s0 = evalScriptNode(args[0], vars, n);
+  const a = Array.isArray(s0) ? s0 : new Array(n).fill(s0);
+  // window functions must not read leading nulls as 0 — NaN them so results stay honest
+  const clean = a.map((x) => (x == null ? NaN : x));
+  const p = args.length > 1 && args[1].type === 'num' ? args[1].v : 1;
+
+  switch (name) {
+    case 'sma': return calcSMA(clean, p);
+    case 'ema': return calcEMA(clean, p);
+    case 'wma': return calcWMA(clean, p);
+    case 'stddev': return calcStdDev(clean, p);
+    case 'rsi': return calcRSI(clean, p);
+    case 'hh':
+    case 'll': {
+      const out = new Array(n).fill(null);
+      for (let i = p - 1; i < n; i++) {
+        let v = clean[i];
+        for (let j = i - p + 1; j <= i; j++) {
+          v = name === 'hh' ? Math.max(v, clean[j]) : Math.min(v, clean[j]);
+        }
+        out[i] = v;
+      }
+      return out;
+    }
+    case 'prev': {
+      const out = new Array(n).fill(null);
+      for (let i = p; i < n; i++) out[i] = a[i - p];
+      return out;
+    }
+    case 'change': {
+      const out = new Array(n).fill(null);
+      for (let i = 1; i < n; i++) out[i] = scriptNum(a[i]) - scriptNum(a[i - 1]);
+      return out;
+    }
+    case 'abs': return clean.map((x) => Math.abs(x));
+    case 'sqrt': return clean.map((x) => (x < 0 ? NaN : Math.sqrt(x)));
+    case 'log': return clean.map((x) => (x <= 0 ? NaN : Math.log(x)));
+    case 'min':
+    case 'max': {
+      const b0 = evalScriptNode(args[1], vars, n);
+      const b = Array.isArray(b0) ? b0 : new Array(n).fill(b0);
+      return a.map((x, i) => (name === 'min' ? Math.min(scriptNum(x), scriptNum(b[i])) : Math.max(scriptNum(x), scriptNum(b[i]))));
+    }
+    case 'crossup':
+    case 'crossdown': {
+      const b0 = evalScriptNode(args[1], vars, n);
+      const b = Array.isArray(b0) ? b0 : new Array(n).fill(b0);
+      const out = new Array(n).fill(0);
+      for (let i = 1; i < n; i++) {
+        const x0 = scriptNum(a[i - 1]);
+        const x1 = scriptNum(a[i]);
+        const y0 = scriptNum(b[i - 1]);
+        const y1 = scriptNum(b[i]);
+        if (Number.isNaN(x0) || Number.isNaN(x1) || Number.isNaN(y0) || Number.isNaN(y1)) continue;
+        out[i] = name === 'crossup' ? (x0 <= y0 && x1 > y1 ? 1 : 0) : (x0 >= y0 && x1 < y1 ? 1 : 0);
+      }
+      return out;
+    }
+  }
+  return new Array(n).fill(NaN);
+}
+
+/**
+ * Evaluate a compiled script (or a raw expression string) over bars.
+ * @param {{src:string, ast:object}|string} compiled
+ * @param {Bar[]} bars
+ * @returns {number[]} length `bars.length`; non-finite values become NaN
+ */
+export function evalScript(compiled, bars) {
+  const c = typeof compiled === 'string' ? compileScript(compiled) : compiled;
+  const n = bars.length;
+  const out = new Array(n).fill(NaN);
+  if (!n) return out;
+  const vars = {
+    open: bars.map((b) => b.open),
+    high: bars.map((b) => b.high),
+    low: bars.map((b) => b.low),
+    close: bars.map((b) => b.close),
+    volume: bars.map((b) => b.volume),
+    hl2: bars.map((b) => (b.high + b.low) / 2),
+    hlc3: bars.map((b) => (b.high + b.low + b.close) / 3),
+    ohlc4: bars.map((b) => (b.open + b.high + b.low + b.close) / 4),
+  };
+  const res = evalScriptNode(c.ast, vars, n);
+  const arr = Array.isArray(res) ? res : new Array(n).fill(res);
+  for (let i = 0; i < n; i++) {
+    const v = arr[i];
+    out[i] = v != null && Number.isFinite(v) ? v : NaN;
+  }
+  return out;
+}
+
+/**
+ * Build an indicator definition from a HabScript expression — used inline by
+ * `indicators="expr:{…}"` / `pexpr:{…}"`, or register it under a name:
+ * `HabChart.registerIndicator('myspread', scriptIndicator('close - ema(close,21)'))`.
+ * @param {string} src
+ * @param {{pane?: boolean}} [opts]
+ * @returns {IndicatorDef}
+ */
+export function scriptIndicator(src, opts = {}) {
+  const compiled = compileScript(src);
+  const label = compiled.src.length > 24 ? compiled.src.slice(0, 23) + '…' : compiled.src;
+  return {
+    kind: opts.pane ? 'pane' : 'overlay',
+    compute: (bars) => ({ lines: [{ name: label, values: evalScript(compiled, bars) }] }),
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1017,7 +1439,7 @@ export function encodeStateQuery(state) {
   if (state.stats) p.set('stats', '1');
   if (state.profile) p.set('profile', '1');
   if (state.annotations) p.set('ann', '1');
-  if (state.indicators) p.set('ind', state.indicators.trim().replace(/\s+/g, ','));
+  if (state.indicators) p.set('ind', splitIndicatorTokens(state.indicators).join(','));
   if (state.view) {
     if (isNum(state.view.from)) p.set('from', String(Math.floor(state.view.from / 1000)));
     if (isNum(state.view.to)) p.set('to', String(Math.floor(state.view.to / 1000)));
@@ -1042,7 +1464,7 @@ export function decodeStateQuery(str) {
   if (p.get('profile') === '1') state.profile = true;
   if (p.get('ann') === '1') state.annotations = true;
   const ind = p.get('ind');
-  if (ind) state.indicators = ind.split(',').map((s) => s.trim()).filter(Boolean).join(' ');
+  if (ind) state.indicators = splitIndicatorTokens(ind).join(' ');
   const from = p.get('from');
   const to = p.get('to');
   if (from != null || to != null) {

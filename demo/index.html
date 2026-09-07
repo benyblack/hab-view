@@ -75,6 +75,17 @@
         </button>
       </div>
       <div class="chips" id="chips" role="group" aria-label="Indicators"></div>
+      <div class="script-row">
+        <input id="script-input" type="text" spellcheck="false" autocomplete="off"
+               placeholder="Custom indicator — try (close - sma(close,20)) / sma(close,20) * 100"
+               aria-label="Custom indicator expression (HabScript)" />
+        <label class="script-pane" title="Draw in its own pane instead of on the price chart">
+          <input type="checkbox" id="script-pane" /> pane
+        </label>
+        <button type="button" id="script-add" class="script-add" title="Add the expression as an indicator">+ Expr</button>
+        <span id="script-error" class="script-error" role="status" aria-live="polite"></span>
+      </div>
+      <div class="chips" id="script-chips" role="group" aria-label="Custom indicators"></div>
       <div class="seg" id="seg-trade" role="group" aria-label="Trading">
         <button type="button" id="btn-long" title="Add a demo long position (stop −2%, target +4%)">
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>+ Long</span>

@@ -1825,21 +1825,21 @@ class HabChart extends HTMLElementBase {
           ctx.fillText(fmtV(g), W - 6, pyOf(g));
         }
 
-        // pane label + live values
+        // pane label + live values (script panes show their expression label)
         const hi = this._hover ? clamp(this._hover.index, 0, d.length - 1) : d.length - 1;
         const vals = res.lines
           .map((ln) => (isNum(ln.values[hi]) ? fmtV(ln.values[hi]) : '—'))
           .join('  ');
+        const paneLabel =
+          (entry.name === 'expr' || entry.name === 'pexpr') && res.lines[0] && res.lines[0].name
+            ? res.lines[0].name
+            : `${entry.name.toUpperCase()} ${Object.values(entry.params).join(' ')}`;
         ctx.font = axisFont(600);
         ctx.fillStyle = pal.text;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         ctx.globalAlpha = 0.9;
-        ctx.fillText(
-          `${entry.name.toUpperCase()} ${Object.values(entry.params).join(' ')}${vals ? '   ' + vals : ''}`,
-          8,
-          pr.y0 + 5
-        );
+        ctx.fillText(`${paneLabel}${vals ? '   ' + vals : ''}`, 8, pr.y0 + 5);
         ctx.globalAlpha = 1;
       }
 
@@ -2143,10 +2143,12 @@ class HabChart extends HTMLElementBase {
         const vals = res.lines
           .map((ln) => (isNum(ln.values[idx]) ? f.format(ln.values[idx]) : '—'))
           .join('  ');
-        html +=
-          `<div class="row"><span class="ind">` +
-          `<i style="background:${dotColor}"></i>${entry.name.toUpperCase()} ${Object.values(entry.params).join(' ')}` +
-          `</span><span class="v">${vals}</span></div>`;
+        // script indicators carry their expression in the line name; built-ins show name+params
+        const label =
+          (entry.name === 'expr' || entry.name === 'pexpr') && res.lines[0].name
+            ? esc(res.lines[0].name)
+            : `${entry.name.toUpperCase()} ${Object.values(entry.params).join(' ')}`;
+        html += `<div class="row"><span class="ind"><i style="background:${dotColor}"></i>${label}</span><span class="v">${vals}</span></div>`;
       });
 
       if (this._annotations && this._annoList) {
