@@ -489,6 +489,48 @@ export function detectGaps(bars, i0, i1, dtMs, threshold = 3) {
   return gaps;
 }
 
+/**
+ * Aggregate a visible bar range into ~1px-wide columns for deep zoom-outs.
+ * `xOf(i)` must be non-decreasing in i (index-space x mapping guarantees it).
+ * Each column keeps first open / max high / min low / last close / volume sum.
+ * @param {Bar[]} bars
+ * @param {number} i0
+ * @param {number} i1
+ * @param {(i: number) => number} xOf
+ * @param {number} plotRight plot width in px (column count)
+ * @returns {Array<{x: number, i0: number, i1: number, open: number, high: number, low: number, close: number, volume: number}>}
+ */
+export function buildColumns(bars, i0, i1, xOf, plotRight) {
+  const byIndex = [];
+  for (let i = i0; i <= i1; i++) {
+    const b = bars[i];
+    const x = Math.floor(xOf(i));
+    const k = x < 0 ? 0 : x >= plotRight ? plotRight - 1 : x;
+    let c = byIndex[k];
+    if (!c) {
+      byIndex[k] = {
+        x: k,
+        i0: i,
+        i1: i,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+        volume: b.volume || 0,
+      };
+    } else {
+      c.i1 = i;
+      if (b.high > c.high) c.high = b.high;
+      if (b.low < c.low) c.low = b.low;
+      c.close = b.close;
+      c.volume += b.volume || 0;
+    }
+  }
+  const cols = [];
+  for (let k = 0; k < byIndex.length; k++) if (byIndex[k]) cols.push(byIndex[k]);
+  return cols;
+}
+
 /** Supported values for the `type` attribute. */
 export const SERIES_TYPES = ['candles', 'line', 'area', 'bars', 'hollow', 'heikin'];
 
