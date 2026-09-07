@@ -168,6 +168,21 @@ chart.indicators = 'vwap:20';
 `HabChart.registerIndicator(...)` (the element is registered as a side effect
 of importing the package).
 
+### Cross-tab co-view
+
+Tag charts with the same channel and they share pointers — across browser
+tabs, or between multiple charts on one page:
+
+```html
+<hab-chart co-view="btc-room"></hab-chart>
+```
+
+Hovering in one tab draws a ghost crosshair (accent, dotted, with the time
+pill) in every peer. Positions are synced by bar **time**, so peers with
+different history depths still line up. Ghosts fade ~2.5 s after the peer
+stops moving. Same-origin only (BroadcastChannel); the connection follows the
+`co-view` attribute and closes with the element.
+
 ### Smart annotations
 
 `<hab-chart annotations>` marks notable events on the visible range — volume
