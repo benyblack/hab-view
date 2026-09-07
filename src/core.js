@@ -576,3 +576,49 @@ export function computeStats(bars, i0, i1, dtMs) {
     avgVolume: volBars ? volSum / volBars : 0,
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * State serialization (shareable URLs)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Encode a chart state (from getState()) as a compact query string.
+ * View times are encoded in whole seconds.
+ */
+export function encodeStateQuery(state) {
+  if (!state || typeof state !== 'object') return '';
+  const p = new URLSearchParams();
+  if (state.type) p.set('type', state.type);
+  if (state.theme) p.set('theme', state.theme);
+  if (state.log) p.set('log', '1');
+  if (state.stats) p.set('stats', '1');
+  if (state.indicators) p.set('ind', state.indicators.trim().replace(/\s+/g, ','));
+  if (state.view) {
+    if (isNum(state.view.from)) p.set('from', String(Math.floor(state.view.from / 1000)));
+    if (isNum(state.view.to)) p.set('to', String(Math.floor(state.view.to / 1000)));
+  }
+  return p.toString();
+}
+
+/** Decode a query string (from encodeStateQuery) back into a partial state. */
+export function decodeStateQuery(str) {
+  const p = new URLSearchParams(typeof str === 'string' ? str : '');
+  const state = {};
+  const type = p.get('type');
+  if (type) state.type = type;
+  const theme = p.get('theme');
+  if (theme) state.theme = theme;
+  if (p.get('log') === '1') state.log = true;
+  if (p.get('stats') === '1') state.stats = true;
+  const ind = p.get('ind');
+  if (ind) state.indicators = ind.split(',').map((s) => s.trim()).filter(Boolean).join(' ');
+  const from = p.get('from');
+  const to = p.get('to');
+  if (from != null || to != null) {
+    state.view = {
+      from: from != null && isNum(+from) ? +from * 1000 : undefined,
+      to: to != null && isNum(+to) ? +to * 1000 : undefined,
+    };
+  }
+  return state;
+}

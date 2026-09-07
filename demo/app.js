@@ -1,5 +1,6 @@
 /* HabView demo — data feeds & UI wiring around <hab-chart>. */
 import '../src/hab-chart.js';
+import { encodeStateQuery, decodeStateQuery } from '../src/core.js';
 
 /* ------------------------------------------------------------------ *
  * Config
@@ -392,19 +393,78 @@ function applyIndicators() {
   chart.setAttribute('indicators', [...state.indicators].join(' '));
 }
 
+/* ---------------- URL sharing ---------------- */
+
+let hashTimer = 0;
+
+function writeHash() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => {
+    const chartState = chart.getState();
+    const q = new URLSearchParams(
+      encodeStateQuery({ ...chartState, indicators: [...state.indicators].join(' ') })
+    );
+    q.set('sym', state.symbol);
+    q.set('tf', state.tf);
+    history.replaceState(null, '', '#' + q.toString());
+  }, 250);
+}
+
+function readHash() {
+  if (!location.hash || location.hash.length < 2) return null;
+  const p = new URLSearchParams(location.hash.slice(1));
+  const sym = p.get('sym');
+  if (sym && SYMBOLS.some((s) => s.id === sym)) state.symbol = sym;
+  const tf = p.get('tf');
+  if (tf && TFS.some((t) => t.id === tf)) state.tf = tf;
+  const s = decodeStateQuery(location.hash.slice(1));
+  if (s.type && ['candles', 'line', 'area'].includes(s.type)) state.type = s.type;
+  if (s.theme === 'light' || s.theme === 'dark') state.theme = s.theme;
+  if (typeof s.stats === 'boolean') state.stats = s.stats;
+  if (s.indicators) {
+    state.indicators = new Set(
+      s.indicators.split(/\s+/).filter((id) => INDICATORS.some((i) => i.id === id))
+    );
+  }
+  return s;
+}
+
+chart.addEventListener('hab:range', writeHash);
+
 /* ---------------- build controls ---------------- */
+
+const hashState = readHash();
+
+function applyTheme() {
+  document.documentElement.dataset.theme = state.theme;
+  chart.setAttribute('theme', state.theme);
+  document.getElementById('ico-moon').style.display = state.theme === 'dark' ? '' : 'none';
+  document.getElementById('ico-sun').style.display = state.theme === 'light' ? '' : 'none';
+}
+
+if (hashState) {
+  chart.setState(hashState); // may stash a pending view until data loads
+}
+applyTheme();
 
 buildSeg(document.getElementById('seg-symbol'), SYMBOLS, () => state.symbol, (id) => {
   state.symbol = id;
   loadSymbol();
+  writeHash();
 });
 
 buildSeg(document.getElementById('seg-tf'), TFS, () => state.tf, (id) => {
   state.tf = id;
   loadSymbol();
+  writeHash();
 });
 
 const segType = document.getElementById('seg-type');
+for (const b of segType.children) {
+  const on = b.dataset.type === state.type;
+  b.classList.toggle('active', on);
+  b.setAttribute('aria-pressed', String(on));
+}
 segType.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-type]');
   if (!btn) return;
@@ -415,6 +475,7 @@ segType.addEventListener('click', (e) => {
     b.classList.toggle('active', on);
     b.setAttribute('aria-pressed', String(on));
   }
+  writeHash();
 });
 
 const chips = document.getElementById('chips');
@@ -430,6 +491,7 @@ for (const ind of INDICATORS) {
     btn.classList.toggle('on', state.indicators.has(ind.id));
     btn.setAttribute('aria-pressed', String(state.indicators.has(ind.id)));
     applyIndicators();
+    writeHash();
   });
   chips.appendChild(btn);
 }
@@ -445,18 +507,19 @@ document.getElementById('btn-live').addEventListener('click', (e) => {
   }
 });
 
+document.getElementById('btn-stats').setAttribute('aria-pressed', String(state.stats));
+if (state.stats) chart.setAttribute('stats', 'true');
 document.getElementById('btn-stats').addEventListener('click', (e) => {
   state.stats = !state.stats;
   chart.setAttribute('stats', String(state.stats));
   e.currentTarget.setAttribute('aria-pressed', String(state.stats));
+  writeHash();
 });
 
 document.getElementById('btn-theme').addEventListener('click', () => {
   state.theme = state.theme === 'dark' ? 'light' : 'dark';
-  document.documentElement.dataset.theme = state.theme;
-  chart.setAttribute('theme', state.theme);
-  document.getElementById('ico-moon').style.display = state.theme === 'dark' ? '' : 'none';
-  document.getElementById('ico-sun').style.display = state.theme === 'light' ? '' : 'none';
+  applyTheme();
+  writeHash();
 });
 
 chart.addEventListener('hab:select', (e) => {
