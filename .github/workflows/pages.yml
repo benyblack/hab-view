@@ -32,10 +32,10 @@ jobs:
       - run: npm ci
       - run: npm run ci
 
-      - name: Assemble site (landing + demo + modules, nothing else)
+      - name: Assemble site (landing + docs + demo + modules, nothing else)
         run: |
           mkdir site
-          cp -r src demo index.html site/
+          cp -r src demo index.html docs.html site/
           find site -name '*.html' -printf '%p\n'
 
       - uses: actions/upload-pages-artifact@v3
