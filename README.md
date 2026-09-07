@@ -129,6 +129,8 @@ class for registration.
 | `getVisibleRange()`             | → `{ from, to }` (ms timestamps)                  |
 | `setVisibleRange({from, to})`   | Jump to a time window                             |
 | `exportPNG()`                   | → PNG data URL of the current canvas              |
+| `getState()`                    | → serializable snapshot (type, indicators, view, positions, alerts) |
+| `setState(state)`               | Apply a snapshot; a pending view applies after the next `setData()` |
 
 ### Infinite history (`loadMore`)
 
@@ -175,6 +177,22 @@ Hold **Shift and drag** across the chart to measure a move: an overlay shows
 Δprice, Δ%, bar count and elapsed time, and a `hab:measure` event fires on
 release (`detail.from` / `detail.to` carry index, time and price). Click or
 press `Esc` to clear.
+
+### Shareable URLs
+
+`getState()` / `setState()` serialize everything about the chart, and
+`encodeStateQuery` / `decodeStateQuery` (exported from `src/core.js`) turn a
+state into a compact query string — the demo maps it to the page hash, so any
+chart configuration is one link away:
+
+```js
+import { encodeStateQuery, decodeStateQuery } from 'hab-view/src/core.js';
+
+const link = `${location.origin}#${encodeStateQuery(chart.getState())}`;
+history.replaceState(null, '', link);
+// later, on load:
+chart.setState(decodeStateQuery(location.hash.slice(1)));
+```
 
 Reflected properties (`chart.type = 'line'`) work for `theme`, `type`, `label`,
 `indicators`.

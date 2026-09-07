@@ -477,6 +477,84 @@ import {
     }
 
     /* ------------------------------------------------------------ *
+     * State serialization
+     * ------------------------------------------------------------ */
+
+    /**
+     * Serializable snapshot of the chart's configuration and view.
+     * Feed it to setState() (or encodeStateQuery for shareable URLs).
+     */
+    getState() {
+      const range = this.getVisibleRange();
+      const ind = [];
+      if (this._ind.volume) ind.push('volume');
+      for (const o of this._ind.overlays) ind.push(o.key);
+      for (const p of this._ind.panes) ind.push(p.key);
+      return {
+        type: this._type,
+        theme: this._theme,
+        log: this._log,
+        stats: this._stats,
+        indicators: ind.join(' '),
+        view: range ? { from: range.from, to: range.to } : null,
+        positions: this._positions.map((p) => ({
+          id: p.id, side: p.side, entry: p.entry, stop: p.stop, target: p.target, qty: p.qty,
+        })),
+        alerts: this._alerts
+          .filter((a) => !a.fired)
+          .map((a) => ({ id: a.id, price: a.price, direction: a.direction, once: a.once })),
+      };
+    }
+
+    /**
+     * Apply a state snapshot (from getState()). If a view range is included
+     * and data is not loaded yet, it is applied after the next setData().
+     */
+    setState(state) {
+      if (!state || typeof state !== 'object') return;
+      if (state.type) this.setAttribute('type', state.type);
+      if (state.theme) this.setAttribute('theme', state.theme);
+      if (typeof state.log === 'boolean') this.toggleAttribute('log', state.log);
+      if (typeof state.stats === 'boolean') this.setAttribute('stats', String(state.stats));
+      if (typeof state.label === 'string') this.setAttribute('label', state.label);
+      if (typeof state.indicators === 'string') {
+        this.setAttribute('indicators', state.indicators);
+      }
+      if (Array.isArray(state.positions)) {
+        this._positions = state.positions
+          .filter((p) => p && isNum(p.entry))
+          .map((p) => ({
+            id: p.id != null ? String(p.id) : 'pos-' + ++this._seq,
+            side: p.side === 'short' ? 'short' : 'long',
+            entry: p.entry,
+            stop: isNum(p.stop) ? p.stop : null,
+            target: isNum(p.target) ? p.target : null,
+            qty: isNum(p.qty) ? p.qty : null,
+          }));
+        this._posVersion = (this._posVersion || 0) + 1;
+      }
+      if (Array.isArray(state.alerts)) {
+        this._alerts = state.alerts
+          .filter((a) => a && isNum(a.price))
+          .map((a) => ({
+            id: a.id != null ? String(a.id) : 'alert-' + ++this._seq,
+            price: a.price,
+            direction: a.direction || 'cross',
+            once: a.once !== false,
+            fired: false,
+          }));
+      }
+      if (state.view && state.view.from != null && state.view.to != null) {
+        if (this._ly && this._data.length > 1) {
+          this.setVisibleRange(state.view);
+        } else {
+          this._pendingRange = state.view;
+        }
+      }
+      this._invalidate();
+    }
+
+    /* ------------------------------------------------------------ *
      * Positions & alerts
      * ------------------------------------------------------------ */
 
@@ -998,6 +1076,11 @@ import {
       }
       if (this._auto) this._view.rightIndex = d.length - 1 + this._rightMargin();
       this._clampView();
+      if (this._pendingRange) {
+        const pr = this._pendingRange;
+        this._pendingRange = null;
+        this.setVisibleRange(pr);
+      }
 
       const v = this._view;
       const sp = v.spacing;
