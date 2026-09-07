@@ -153,6 +153,13 @@
         </svg>
         <span id="live-label">Live</span>
       </button>
+      <button type="button" class="icon-btn" id="btn-explain" title="AI-ready summary of the visible window — copy it into any AI chat">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.5 8.5 0 01-8.5 8.5c-1.4 0-2.8-.3-4-.9L3 21l1.9-5.5A8.5 8.5 0 1121 11.5z"/>
+          <path d="M8.5 10.5h7M8.5 13.5h4"/>
+        </svg>
+        <span>Explain</span>
+      </button>
       <button type="button" class="icon-btn" id="btn-theme" title="Toggle light / dark theme">
         <svg id="ico-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"/>
@@ -167,6 +174,17 @@
 
   <main class="chart-area">
     <hab-chart id="chart" theme="dark" type="candles" indicators="volume"></hab-chart>
+    <aside class="explain-panel" id="explain-panel" hidden aria-label="AI-ready chart summary">
+      <div class="explain-head">
+        <span>AI-ready summary</span>
+        <span class="explain-actions">
+          <button type="button" id="explain-copy">Copy</button>
+          <button type="button" id="explain-close" aria-label="Close panel">✕</button>
+        </span>
+      </div>
+      <pre id="explain-text"></pre>
+      <p class="explain-hint">Paste into any AI chat and ask: “explain this chart and the main risks &amp; setup”.</p>
+    </aside>
   </main>
 
   <footer class="statusbar">

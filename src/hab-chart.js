@@ -25,6 +25,7 @@ import {
   SERIES_TYPES, calcHeikinAshi, buildColumns, computeVolumeProfile,
   calcRSI, detectAnnotations, priceToFreq,
   calcRealizedVol, volRegimeBands, percentileOfSorted, parseVolShading,
+  windowSummary,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -557,6 +558,41 @@ class HabChart extends HTMLElementBase {
     /** Current canvas as a PNG data URL. */
     exportPNG() {
       return this._canvas.toDataURL('image/png');
+    }
+
+    /**
+     * AI-ready summary of the visible window: structured fields plus a
+     * ready-to-paste markdown rendering (`text`). Computed locally —
+     * nothing leaves the page until the user copies it somewhere.
+     * @returns {object|null}
+     */
+    getDataWindow() {
+      const d = this._data;
+      if (!d.length || !this._ly) return null;
+      const { plotRight } = this._ly;
+      const { rightIndex, spacing } = this._view;
+      const i0 = Math.max(0, Math.round(rightIndex - plotRight / spacing));
+      const i1 = clamp(Math.round(rightIndex), 0, d.length - 1);
+      const s = windowSummary(d, i0, i1, { dtMs: this._dt, label: this._label });
+      if (!s) return null;
+      // snapshot active indicator values at the right edge (scripts show their expression)
+      const f = numberFmt(this._prec(d[i1].close));
+      const snap = [];
+      for (const entry of this._ind.overlays.concat(this._ind.panes)) {
+        if (entry.name === 'volume') continue;
+        const res = this._indicatorSeries(entry);
+        for (const ln of res.lines) {
+          const v = ln.values[i1];
+          if (!isNum(v)) continue;
+          const isScript = entry.name === 'expr' || entry.name === 'pexpr';
+          const name = isScript
+            ? ln.name || entry.name
+            : entry.name + (Object.keys(entry.params).length ? ':' + Object.values(entry.params).join('/') : '');
+          snap.push(`${name} = ${f.format(v)}`);
+        }
+      }
+      if (snap.length) s.text += `\n- Indicators: ${snap.join('; ')}.`;
+      return s;
     }
 
     /* ------------------------------------------------------------ *

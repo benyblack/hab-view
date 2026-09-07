@@ -243,6 +243,38 @@ classifies everything as normal. The pieces are exported from
 `wickchart/core` (`calcRealizedVol`, `volRegimeBands`, `percentileOfSorted`)
 if you want to build on them.
 
+### AI-ready data window — `getDataWindow()`
+
+One call turns whatever is on screen into a compact, LLM-pasteable summary.
+Everything is computed locally from the visible bars — trend (least-squares
+drift + fit), realized-vol percentile, SMA/RSI snapshot, up/down bar mix,
+volume profile notes, and the same pattern detection that powers smart
+annotations (gaps, spikes, pivots, divergences). Nothing leaves the page
+until you copy it somewhere.
+
+```js
+const s = chart.getDataWindow();
+s.text;      // markdown — ready to paste into any AI chat
+s.trend;     // { label: 'strong uptrend', slopePctPerBar: 0.77, r2: 0.94 }
+s.volPctile; // 84 → hot regime relative to the window itself
+s.patterns;  // [{ time, note }] — most recent first
+```
+
+`text` renders like:
+
+```
+CHART SUMMARY — BTC · 1h · 214 bars · 2026-08-21 → 2026-09-07
+- Close 97.03 (−1.20% over window). High 104.20 on 2026-08-28, low 91.40 on 2026-09-01. Max drawdown 8.1%.
+- Trend: downtrend (drift −0.061%/bar, fit r² 0.58). Price below SMA20 (99.10). RSI(14) 41.3.
+- Volatility: annualized 48%; latest realized vol at the 84th percentile of the window (hot regime).
+- Bars: 96 up / 117 down. Volume avg 1.2K/bar, peak 8.9K on 2026-09-01.
+- Notable: Gapped down −1.42% (2026-09-01); Volume 4.1× average (2026-09-03).
+```
+
+The demo's **Explain** button shows this in a panel with a one-click copy.
+The pure function behind it (`windowSummary(bars, i0, i1, opts)`) is exported
+from `wickchart/core` for server-side use.
+
 ### Sonification — the chart by ear
 
 `<hab-chart sonify>` maps price to pitch (180–880 Hz across the visible
@@ -318,6 +350,7 @@ chart.indicators = 'vwap';
 | `getVisibleRange()`             | → `{ from, to }` (ms timestamps)                  |
 | `setVisibleRange({from, to})`   | Jump to a time window                             |
 | `exportPNG()`                   | → PNG data URL of the current canvas              |
+| `getDataWindow()`               | → AI-ready summary of the visible window (see below) |
 | `getState()`                    | → serializable snapshot (type, indicators, view, positions, alerts) |
 | `setState(state)`               | Apply a snapshot; a pending view applies after the next `setData()` |
 
