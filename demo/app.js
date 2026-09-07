@@ -408,6 +408,19 @@ document.getElementById('btn-live').addEventListener('click', (e) => {
   }
 });
 
+document.getElementById('btn-coview').addEventListener('click', (e) => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', String(on));
+  const chartEl = document.getElementById('chart');
+  if (on) chartEl.setAttribute('co-view', 'habview-demo');
+  else chartEl.removeAttribute('co-view');
+  toast(
+    on
+      ? 'Co-view on — open this page in a second tab and hover the chart.'
+      : 'Co-view off.'
+  );
+});
+
 document.getElementById('btn-annotations').setAttribute('aria-pressed', String(state.annotations));
 if (state.annotations) chart.setAttribute('annotations', 'true');
 document.getElementById('btn-annotations').addEventListener('click', (e) => {

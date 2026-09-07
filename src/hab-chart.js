@@ -32,7 +32,7 @@ import {
 
   class HabChart extends HTMLElement {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'co-view'];
     }
 
     constructor() {
@@ -180,6 +180,14 @@ import {
       this._annotations = false;
       this._annoKey = '';
       this._annoList = null;
+
+      // cross-tab co-view state
+      this._coviewName = null;
+      this._coviewCh = null;
+      this._coviewPeer = '';
+      this._coviewLast = 0;
+      this._ghost = null;
+      this._ghostTimer = 0;
       this._measure = null; // { iA, pA, iB, pB, done }
       this._measuring = false;
       this._ind = { overlays: [], panes: [], volume: true };
@@ -237,11 +245,19 @@ import {
       if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(() => this._invalidate()).catch(() => {});
       }
+      if (this._coviewName) this._setupCoView();
       this._invalidate();
     }
 
     disconnectedCallback() {
       this._connected = false;
+      if (this._coviewCh) {
+        try {
+          this._coviewCh.close();
+        } catch (_) {}
+        this._coviewCh = null;
+      }
+      clearTimeout(this._ghostTimer);
       if (this._ro) this._ro.disconnect();
       const cv = this._canvas;
       cv.removeEventListener('pointerdown', this._onPointerDown);
@@ -289,6 +305,10 @@ import {
         case 'annotations':
           this._annotations = val != null && val !== 'false';
           this._annoKey = '';
+          break;
+        case 'co-view':
+          this._coviewName = val || null;
+          this._setupCoView();
           break;
       }
       this._invalidate();
@@ -1930,6 +1950,50 @@ import {
         );
       }
 
+      /* co-view ghost crosshair (peer pointer from another tab/chart) */
+      if (this._ghost) {
+        const g = this._ghost;
+        const gx = this._xFor(g.index);
+        const gxVisible = gx >= 0 && gx <= plotRight;
+        ctx.save();
+        ctx.strokeStyle = pal.accent;
+        ctx.globalAlpha = 0.7;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        if (gxVisible) {
+          const cx = Math.round(gx) + 0.5;
+          ctx.moveTo(cx, 0);
+          ctx.lineTo(cx, plotBottom);
+        }
+        if (g.yFrac != null) {
+          const gy = Math.round(main.y0 + g.yFrac * main.h) + 0.5;
+          ctx.moveTo(0, gy);
+          ctx.lineTo(plotRight, gy);
+          if (gxVisible) {
+            ctx.fillStyle = pal.accent;
+            ctx.beginPath();
+            ctx.arc(gx, main.y0 + g.yFrac * main.h, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.stroke();
+        ctx.restore();
+        if (gxVisible && this._data[g.index]) {
+          const tLabel = fmtFull(this._data[g.index].time);
+          ctx.font = pillFont();
+          const tw = ctx.measureText(tLabel).width + 12;
+          this._pill(
+            clamp(gx - tw / 2, 2, plotRight - tw - 2),
+            plotBottom + 2,
+            tLabel,
+            pal.accent,
+            pal.pillText,
+            'left',
+            tw
+          );
+        }
+      }
+
       /* measure tool overlay */
       if (this._measure && this._measure.pA != null && this._measure.pB != null) {
         const m = this._measure;
@@ -2351,6 +2415,82 @@ import {
         };
       }
       this.dispatchEvent(new CustomEvent('hab:crosshair', { detail }));
+
+      // co-view: share the pointer with peer charts (leave events bypass throttle)
+      if (this._coviewCh) {
+        if (!detail) {
+          this._coviewSend({ type: 'cross', time: null, yFrac: null });
+        } else {
+          const now = performance.now();
+          if (now - this._coviewLast > 40) {
+            this._coviewLast = now;
+            const ly = this._ly;
+            this._coviewSend({
+              type: 'cross',
+              time: detail.bar.time,
+              yFrac: ly && isNum(detail.y) ? clamp(detail.y / ly.main.h, 0, 1) : null,
+            });
+          }
+        }
+      }
+    }
+
+    /* ------------------------------------------------------------ *
+     * Cross-tab co-view (BroadcastChannel)
+     * ------------------------------------------------------------ */
+
+    /** Join/leave the co-view channel named by the `co-view` attribute. */
+    _setupCoView() {
+      if (this._coviewCh) {
+        try {
+          this._coviewCh.close();
+        } catch (_) {}
+        this._coviewCh = null;
+      }
+      clearTimeout(this._ghostTimer);
+      if (this._ghost) {
+        this._ghost = null;
+        this._invalidate();
+      }
+      const name = this._coviewName;
+      if (!name || !this._connected || typeof BroadcastChannel === 'undefined') return;
+      if (!this._coviewPeer) this._coviewPeer = 'p' + Math.random().toString(36).slice(2, 8);
+      try {
+        const ch = new BroadcastChannel('hab-co-view:' + name);
+        ch.onmessage = (ev) => this._onCoMessage(ev.data);
+        this._coviewCh = ch;
+      } catch (_) {}
+    }
+
+    _coviewSend(msg) {
+      if (!this._coviewCh) return;
+      try {
+        this._coviewCh.postMessage({ v: 1, peer: this._coviewPeer, ...msg });
+      } catch (_) {}
+    }
+
+    _onCoMessage(m) {
+      if (!m || m.v !== 1 || m.peer === this._coviewPeer || m.type !== 'cross') return;
+      if (m.time == null) {
+        if (this._ghost) {
+          this._ghost = null;
+          clearTimeout(this._ghostTimer);
+          this._invalidate();
+        }
+        return;
+      }
+      if (!isNum(m.time) || !this._data.length) return;
+      this._ghost = {
+        index: HabChart._indexForTime(this._data, m.time),
+        yFrac: isNum(m.yFrac) ? clamp(m.yFrac, 0, 1) : null,
+        at: Date.now(),
+      };
+      clearTimeout(this._ghostTimer);
+      this._ghostTimer = setTimeout(() => {
+        this._ghost = null;
+        this._invalidate();
+      }, 2500);
+      this._invalidate();
     }
 
     _emitRange() {
