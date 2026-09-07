@@ -24,12 +24,9 @@ import {
   positionPnl, checkAlertCross, computeStats, safeColor,
 } from './core.js';
 
-(() => {
-  'use strict';
-
-  /* ------------------------------------------------------------------ *
-   * <hab-chart>
-   * ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ *
+ * <hab-chart>
+ * ------------------------------------------------------------------ */
 
   class HabChart extends HTMLElement {
     static get observedAttributes() {
@@ -175,8 +172,7 @@ import {
       this._pan = null;
       this._pinch = null;
 
-      // history backfill state
-      this.onloadmore = null; // (fromTime) => Promise<bars> — set by the host app
+      // history backfill state (onloadmore declared as a class field above)
       this._loadingMore = false;
       this._noMore = false;
 
@@ -304,6 +300,7 @@ import {
      *   });
      *   chart.indicators = 'vwap:20';
      */
+    /** @param {import('./core.js').IndicatorDef} def */
     static registerIndicator(name, def) {
       if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) {
         throw new Error('registerIndicator: invalid name');
@@ -330,6 +327,10 @@ import {
       return this._data;
     }
 
+    /**
+     * Replace the dataset.
+     * @param {Array<import('./core.js').Bar>} bars
+     */
     setData(bars) {
       if (!Array.isArray(bars) || !bars.length) {
         this.clearData();
@@ -352,6 +353,11 @@ import {
       this._invalidate();
     }
 
+    /**
+     * Stream a bar: replaces the last bar when `time` matches, appends when
+     * newer, inserts/backfills when older.
+     * @param {import('./core.js').Bar} bar
+     */
     update(bar) {
       const b = HabChart._normBar(bar);
       if (!b) return;
@@ -392,7 +398,10 @@ import {
      * The host app assigns `chart.onloadmore = async (fromTime) => bars`.
      * Bars strictly older than the current first bar are prepended and the
      * view stays anchored. Return [] / null to signal "no more data".
+     * @type {null|((fromTime: number) => Promise<Array<import('./core.js').Bar>>|Array<import('./core.js').Bar>)}
      */
+    onloadmore = null;
+
     _maybeLoadMore(iLeft) {
       if (this._loadingMore || this._noMore) return;
       if (typeof this.onloadmore !== 'function' || !this._data.length || !this._ly) return;
@@ -442,6 +451,7 @@ import {
     }
 
     /** Visible time window. @returns {{from:number,to:number}|null} */
+    /** @returns {{from: number, to: number}|null} visible time window (ms) */
     getVisibleRange() {
       const d = this._data;
       if (!d.length || !this._ly) return null;
@@ -453,6 +463,7 @@ import {
     }
 
     /** Set visible time window ({from, to} in ms). */
+    /** @param {{from: number, to: number}} range times in ms */
     setVisibleRange(range) {
       const d = this._data;
       if (!d.length || !range || !this._ly) return;
@@ -484,6 +495,7 @@ import {
      * Serializable snapshot of the chart's configuration and view.
      * Feed it to setState() (or encodeStateQuery for shareable URLs).
      */
+    /** @returns {import('./core.js').ChartState} */
     getState() {
       const range = this.getVisibleRange();
       const ind = [];
@@ -509,6 +521,7 @@ import {
     /**
      * Apply a state snapshot (from getState()). If a view range is included
      * and data is not loaded yet, it is applied after the next setData().
+     * @param {import('./core.js').ChartState} state
      */
     setState(state) {
       if (!state || typeof state !== 'object') return;
@@ -562,7 +575,7 @@ import {
      * Visualize a position / order.
      * @param {{id?: string, side?: 'long'|'short', entry: number,
      *          stop?: number, target?: number, qty?: number}} pos
-     * @returns {string} the position id
+     * @returns {string|null} the position id
      */
     addPosition(pos) {
       if (!pos || !isNum(pos.entry)) return null;
@@ -599,7 +612,7 @@ import {
      * during streaming updates.
      * @param {{id?: string, price: number, direction?: 'above'|'below'|'cross',
      *          once?: boolean}} alert
-     * @returns {string} the alert id
+     * @returns {string|null} the alert id
      */
     addAlert(alert) {
       if (!alert || !isNum(alert.price)) return null;
@@ -2057,4 +2070,5 @@ import {
   if (!customElements.get('hab-chart')) {
     customElements.define('hab-chart', HabChart);
   }
-})();
+
+  export default HabChart;

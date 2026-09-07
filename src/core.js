@@ -5,6 +5,86 @@
  * ========================================================================== */
 
 /* ------------------------------------------------------------------ *
+ * Public types (JSDoc — the source of truth for the generated .d.ts)
+ * ------------------------------------------------------------------ */
+
+/**
+ * A single OHLCV bar. `time` is milliseconds (second-based input is
+ * auto-detected and converted).
+ * @typedef {object} Bar
+ * @property {number} time
+ * @property {number} open
+ * @property {number} high
+ * @property {number} low
+ * @property {number} close
+ * @property {number} [volume]
+ */
+
+/**
+ * One plotted line of an indicator result.
+ * @typedef {object} IndicatorLine
+ * @property {string} [name]
+ * @property {Array<number|null>} values
+ * @property {string} [color] #hex / rgb() / CSS name / palette key
+ */
+
+/**
+ * An indicator definition for {@link registerIndicator}.
+ * @typedef {object} IndicatorDef
+ * @property {'overlay'|'pane'} [kind] overlay on the price pane, or a stacked sub-pane
+ * @property {Record<string, number>} [params] defaults; set via `name:p1/p2` tokens
+ * @property {(bars: Bar[], params: Record<string, number>) => (Array<number|null>|{lines?: IndicatorLine[], histogram?: Array<number|null>})} compute
+ * @property {number[]} [guides] pane only: dashed horizontal levels
+ * @property {[number, number]} [range] pane only: fixed scale (else autoscale)
+ * @property {'price'|'fixed1'} [fmt] legend/axis number format
+ * @property {string} [color]
+ */
+
+/**
+ * A position/order visualization.
+ * @typedef {object} Position
+ * @property {string} id
+ * @property {'long'|'short'} side
+ * @property {number} entry
+ * @property {number|null} stop
+ * @property {number|null} target
+ * @property {number|null} qty
+ */
+
+/**
+ * A price alert (edge-triggered on streamed crossings).
+ * @typedef {object} Alert
+ * @property {string} id
+ * @property {number} price
+ * @property {'above'|'below'|'cross'} direction
+ * @property {boolean} once
+ */
+
+/**
+ * Serializable chart snapshot (see `getState()` / `setState()`).
+ * @typedef {object} ChartState
+ * @property {'candles'|'line'|'area'} [type]
+ * @property {'dark'|'light'} [theme]
+ * @property {boolean} [log]
+ * @property {boolean} [stats]
+ * @property {string} [label]
+ * @property {string} [indicators]
+ * @property {{from: number, to: number}} [view] visible time window (ms)
+ * @property {Array<Position & {id?: string, stop?: number, target?: number, qty?: number}>} [positions] partial positions to add
+ * @property {Array<Alert & {id?: string, once?: boolean}>} [alerts] partial alerts to add
+ */
+
+/**
+ * A parsed indicator entry (internal token → def binding).
+ * @typedef {object} IndicatorEntry
+ * @property {string} name
+ * @property {IndicatorDef} def
+ * @property {Record<string, number>} params
+ * @property {string|null} color
+ * @property {string} key
+ */
+
+/* ------------------------------------------------------------------ *
  * Small utilities
  * ------------------------------------------------------------------ */
 
@@ -216,6 +296,11 @@ export const THEMES = {
  * Indicators (pure functions over arrays)
  * ------------------------------------------------------------------ */
 
+/**
+ * @param {number[]} values
+ * @param {number} period
+ * @returns {Array<number|null>}
+ */
 export function calcSMA(values, period) {
   const out = new Array(values.length).fill(null);
   if (period < 1) return out;
@@ -228,6 +313,11 @@ export function calcSMA(values, period) {
   return out;
 }
 
+/**
+ * @param {number[]} values
+ * @param {number} period
+ * @returns {Array<number|null>}
+ */
 export function calcEMA(values, period) {
   const out = new Array(values.length).fill(null);
   if (period < 1 || values.length < period) return out;
@@ -243,7 +333,11 @@ export function calcEMA(values, period) {
   return out;
 }
 
-/** EMA over a series that may contain leading nulls (e.g. MACD line). */
+/** EMA over a series that may contain leading nulls (e.g. MACD line).
+ * @param {Array<number|null>} values
+ * @param {number} period
+ * @returns {Array<number|null>}
+ */
 export function calcEMASparse(values, period) {
   const out = new Array(values.length).fill(null);
   let start = 0;
@@ -261,6 +355,11 @@ export function calcEMASparse(values, period) {
   return out;
 }
 
+/**
+ * @param {number[]} closes
+ * @param {number} period
+ * @returns {Array<number|null>}
+ */
 export function calcRSI(closes, period) {
   const out = new Array(closes.length).fill(null);
   if (closes.length <= period) return out;
@@ -311,7 +410,10 @@ export function calcStdDev(values, period) {
 
 /**
  * Bollinger Bands.
- * @returns {{mid:number[]|null[], upper:number[]|null[], lower:number[]|null[]}}
+ * @param {number[]} closes
+ * @param {number} period
+ * @param {number} [mult]
+ * @returns {{mid:Array<number|null>, upper:Array<number|null>, lower:Array<number|null>}}
  */
 export function calcBollinger(closes, period, mult = 2) {
   const mid = calcSMA(closes, period);
@@ -323,7 +425,11 @@ export function calcBollinger(closes, period, mult = 2) {
 
 /**
  * MACD.
- * @returns {{macd, signal, hist}} sparse arrays (nulls before warmup)
+ * @param {number[]} closes
+ * @param {number} [fast]
+ * @param {number} [slow]
+ * @param {number} [signal]
+ * @returns {{macd:Array<number|null>, signal:Array<number|null>, hist:Array<number|null>}}
  */
 export function calcMACD(closes, fast = 12, slow = 26, signal = 9) {
   const emaF = calcEMA(closes, fast);
@@ -343,7 +449,9 @@ export function calcMACD(closes, fast = 12, slow = 26, signal = 9) {
 /**
  * Merge older (backfilled) bars in front of `existing`.
  * Dedupes by time (existing bars win); only strictly older bars are prepended.
- * @returns {{bars: Array, added: number}} merged array and count prepended.
+ * @param {Bar[]} existing
+ * @param {Bar[]} older
+ * @returns {{bars: Bar[], added: number}} merged array and count prepended.
  */
 export function mergeOlderData(existing, older) {
   if (!Array.isArray(older) || !older.length) return { bars: existing, added: 0 };
@@ -365,6 +473,12 @@ export function mergeOlderData(existing, older) {
 /**
  * Indices of visible bars whose time jump from the previous bar exceeds
  * `threshold × dt` (sessions breaks, weekends, missing data).
+ * @param {Bar[]} bars
+ * @param {number} i0
+ * @param {number} i1
+ * @param {number} dtMs
+ * @param {number} [threshold]
+ * @returns {number[]}
  */
 export function detectGaps(bars, i0, i1, dtMs, threshold = 3) {
   const gaps = [];
@@ -452,7 +566,9 @@ export const BUILTIN_INDICATORS = new Map(
 /**
  * Parse an `indicators` attribute string against a registry.
  * Token: `name[:param[/param…]][@color]`, plus the `volume` keyword.
- * @returns {{overlays: Array, panes: Array, volume: boolean, unknown: string[]}}
+ * @param {string|null|undefined} str
+ * @param {Map<string, IndicatorDef>} registry
+ * @returns {{overlays: IndicatorEntry[], panes: IndicatorEntry[], volume: boolean, unknown: string[]}}
  */
 export function parseIndicators(str, registry) {
   const out = { overlays: [], panes: [], volume: false, unknown: [] };
@@ -504,6 +620,8 @@ export function parseIndicators(str, registry) {
 /**
  * Unrealized P&L of a position at `price`.
  * @param {{side?: 'long'|'short', entry: number, qty?: number}} pos
+ * @param {number} price
+ * @returns {number}
  */
 export function positionPnl(pos, price) {
   if (!pos || !isNum(pos.entry) || !isNum(price)) return 0;
@@ -515,6 +633,9 @@ export function positionPnl(pos, price) {
 /**
  * Edge-triggered alert crossing test between two consecutive prices.
  * @param {{price: number, direction?: 'above'|'below'|'cross'}} alert
+ * @param {number} prevPrice
+ * @param {number} price
+ * @returns {boolean}
  */
 export function checkAlertCross(alert, prevPrice, price) {
   if (!alert || !isNum(alert.price) || !isNum(prevPrice) || !isNum(price)) return false;
@@ -531,8 +652,11 @@ export function checkAlertCross(alert, prevPrice, price) {
 
 /**
  * Statistics over a visible slice of bars.
- * @returns null when fewer than 2 bars, else
- *  { n, changePct, min, max, maxDDPct, annVolPct, up, dn, avgVolume }
+ * @param {Bar[]} bars
+ * @param {number} i0
+ * @param {number} i1
+ * @param {number} dtMs
+ * @returns {null|{n:number, changePct:number, min:number, max:number, maxDDPct:number, annVolPct:number, up:number, dn:number, avgVolume:number}}
  */
 export function computeStats(bars, i0, i1, dtMs) {
   const n = i1 - i0 + 1;
@@ -597,6 +721,8 @@ export function computeStats(bars, i0, i1, dtMs) {
 /**
  * Encode a chart state (from getState()) as a compact query string.
  * View times are encoded in whole seconds.
+ * @param {ChartState|null} state
+ * @returns {string}
  */
 export function encodeStateQuery(state) {
   if (!state || typeof state !== 'object') return '';
@@ -613,7 +739,11 @@ export function encodeStateQuery(state) {
   return p.toString();
 }
 
-/** Decode a query string (from encodeStateQuery) back into a partial state. */
+/**
+ * Decode a query string (from encodeStateQuery) back into a partial state.
+ * @param {string} str
+ * @returns {ChartState}
+ */
 export function decodeStateQuery(str) {
   const p = new URLSearchParams(typeof str === 'string' ? str : '');
   const state = {};

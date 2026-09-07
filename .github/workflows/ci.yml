@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # zero dependencies — no install step needed
-      - name: Unit tests + syntax checks
+      - name: Install dev dependencies (typescript)
+        run: npm ci
+      - name: Types generation + freshness check + unit tests
         run: npm run ci
