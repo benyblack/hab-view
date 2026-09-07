@@ -1,6 +1,6 @@
 {
   "name": "hab-view",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "<hab-chart> — a modern, dependency-free financial charting web component. Candles, line & area charts, crosshair, zoom/pan, indicators, live streaming, theming.",
   "type": "module",
   "main": "src/hab-chart.js",
