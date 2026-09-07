@@ -69,6 +69,7 @@ const state = {
   live: true,
   theme: 'dark',
   stats: false,
+  profile: false,
   indicators: new Set(['volume']),
 };
 
@@ -451,6 +452,7 @@ function readHash() {
   if (s.type && ['candles', 'line', 'area', 'bars', 'hollow', 'heikin'].includes(s.type)) state.type = s.type;
   if (s.theme === 'light' || s.theme === 'dark') state.theme = s.theme;
   if (typeof s.stats === 'boolean') state.stats = s.stats;
+  if (typeof s.profile === 'boolean') state.profile = s.profile;
   if (s.indicators) {
     state.indicators = new Set(
       s.indicators.split(/\s+/).filter((id) => INDICATORS.some((i) => i.id === id))
@@ -535,6 +537,15 @@ document.getElementById('btn-live').addEventListener('click', (e) => {
     stopFeed();
     setStatus('off', 'paused');
   }
+});
+
+document.getElementById('btn-profile').setAttribute('aria-pressed', String(state.profile));
+if (state.profile) chart.setAttribute('profile', 'true');
+document.getElementById('btn-profile').addEventListener('click', (e) => {
+  state.profile = !state.profile;
+  chart.setAttribute('profile', String(state.profile));
+  e.currentTarget.setAttribute('aria-pressed', String(state.profile));
+  writeHash();
 });
 
 document.getElementById('btn-stats').setAttribute('aria-pressed', String(state.stats));

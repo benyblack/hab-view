@@ -93,6 +93,8 @@ chart.setData([
 | `log`         | off        | Logarithmic price scale                                             |
 | `auto`        | on         | Keep the right edge pinned to the latest bar while streaming        |
 | `precision`   | auto       | Forced decimal places for prices (auto-detected from magnitude)    |
+| `stats`       | off        | Live statistics chip for the visible range          |
+| `profile`     | off        | Volume profile overlay (POC + 70% value area)       |
 
 \* `indicators=""` disables everything, including volume. Token syntax:
 `name[:param[/param…]][@color]` — e.g. `sma:20@#ff0000`, `macd:12/26/9`.

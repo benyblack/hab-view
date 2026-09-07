@@ -22,7 +22,7 @@ import {
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
   positionPnl, checkAlertCross, computeStats, safeColor,
-  SERIES_TYPES, calcHeikinAshi, buildColumns,
+  SERIES_TYPES, calcHeikinAshi, buildColumns, computeVolumeProfile,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -31,7 +31,7 @@ import {
 
   class HabChart extends HTMLElement {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile'];
     }
 
     constructor() {
@@ -165,6 +165,9 @@ import {
       this._label = '';
       this._stats = false;
       this._statsKey = '';
+      this._profile = false;
+      this._profileKey = '';
+      this._profileRes = null;
       this._measure = null; // { iA, pA, iB, pB, done }
       this._measuring = false;
       this._ind = { overlays: [], panes: [], volume: true };
@@ -266,6 +269,10 @@ import {
         case 'stats':
           this._stats = val != null && val !== 'false';
           this._statsKey = '';
+          break;
+        case 'profile':
+          this._profile = val != null && val !== 'false';
+          this._profileKey = '';
           break;
       }
       this._invalidate();
@@ -516,6 +523,7 @@ import {
         theme: this._theme,
         log: this._log,
         stats: this._stats,
+        profile: this._profile,
         indicators: ind.join(' '),
         view: range ? { from: range.from, to: range.to } : null,
         positions: this._positions.map((p) => ({
@@ -538,6 +546,7 @@ import {
       if (state.theme) this.setAttribute('theme', state.theme);
       if (typeof state.log === 'boolean') this.toggleAttribute('log', state.log);
       if (typeof state.stats === 'boolean') this.setAttribute('stats', String(state.stats));
+      if (typeof state.profile === 'boolean') this.setAttribute('profile', String(state.profile));
       if (typeof state.label === 'string') this.setAttribute('label', state.label);
       if (typeof state.indicators === 'string') {
         this.setAttribute('indicators', state.indicators);
@@ -1228,6 +1237,63 @@ import {
           const yS = clamp(yOf(pos.stop), main.y0, main.y1);
           ctx.fillStyle = hexToRgba(pal.down, 0.07);
           ctx.fillRect(0, Math.min(yE, yS), plotRight, Math.abs(yS - yE));
+        }
+      }
+
+      /* volume profile (behind the series) */
+      if (this._profile) {
+        const pkey = `${i0}:${i1}:${this._version}`;
+        if (this._profileKey !== pkey) {
+          this._profileRes = computeVolumeProfile(d, i0, i1);
+          this._profileKey = pkey;
+        }
+        const pr = this._profileRes;
+        if (pr) {
+          const fp = numberFmt(this._prec(scale.rawHi || 1));
+          const maxW = plotRight * 0.18;
+          for (let r = 0; r < pr.rows.length; r++) {
+            const row = pr.rows[r];
+            if (!row.v) continue;
+            const yTop = yOf(pr.priceMin + (r + 1) * pr.rowH);
+            const yBot = yOf(pr.priceMin + r * pr.rowH);
+            const w = (row.v / pr.maxV) * maxW;
+            const inVA = r >= pr.valIndex && r <= pr.vahIndex;
+            ctx.globalAlpha = inVA ? 0.38 : 0.2;
+            ctx.fillStyle = row.up >= row.dn ? pal.up : pal.down;
+            ctx.fillRect(plotRight - w, yBot, w, Math.max(1, yTop - yBot - 0.5));
+          }
+          ctx.globalAlpha = 1;
+          // POC
+          ctx.strokeStyle = pal.accent;
+          ctx.setLineDash([6, 4]);
+          const yPoc = Math.round(yOf(pr.poc)) + 0.5;
+          ctx.beginPath();
+          ctx.moveTo(0, yPoc);
+          ctx.lineTo(plotRight, yPoc);
+          ctx.stroke();
+          // value area edges
+          ctx.strokeStyle = pal.guide;
+          ctx.beginPath();
+          for (const [lv, y] of [
+            [pr.vah, Math.round(yOf(pr.vah)) + 0.5],
+            [pr.val, Math.round(yOf(pr.val)) + 0.5],
+          ]) {
+            void lv;
+            ctx.moveTo(0, y);
+            ctx.lineTo(plotRight, y);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // right-axis labels
+          ctx.font = axisFont(600);
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = pal.accent;
+          ctx.fillText(`POC ${fp.format(pr.poc)}`, W - 6, yPoc);
+          ctx.fillStyle = pal.text;
+          ctx.font = axisFont(500);
+          ctx.fillText(`VAH ${fp.format(pr.vah)}`, W - 6, yOf(pr.vah));
+          ctx.fillText(`VAL ${fp.format(pr.val)}`, W - 6, yOf(pr.val));
         }
       }
 
