@@ -152,6 +152,8 @@ Rules of thumb:
 
 - **Pass a fresh array** to `data` when the bars change — the binding compares
   by reference, and reassignment is what triggers a redraw (don't mutate).
+  The same rule applies to `overlays` (see
+  [Server-side overlays](#server-side-overlays-zones--levels)).
 - **String/number/boolean props become attributes** (`type`, `indicators`,
   `volshading`, …); `className`/`style`/`id` reach React as usual.
 - **`onXxx` subscribes to `wick:xxx`** with cleanup on unmount; an
@@ -227,6 +229,7 @@ chart.setData([
 | `profile`     | off        | Volume profile overlay (POC + 70% value area)       |
 | `annotations` | off        | Smart annotations (volume spikes, gaps, pivots, RSI divergences) |
 | `volshading`  | off        | Volatility-regime background shading (see below)    |
+| `overlays`    | –          | JSON array of server-side zones & levels (see below) |
 
 \* `indicators=""` disables everything, including volume. Token syntax:
 `name[:param[/param…]][@color]` — e.g. `sma:20@#ff0000`, `macd:12/26/9`.
@@ -343,6 +346,47 @@ shareable URLs (`vsh=1` / `vsh=20/85`). A degenerate history (flat series)
 classifies everything as normal. The pieces are exported from
 `wickchart/core` (`calcRealizedVol`, `volRegimeBands`, `percentileOfSorted`)
 if you want to build on them.
+
+### Server-side overlays (zones & levels)
+
+Draw analysis from your own API straight onto the chart: supply/demand
+**zones** (time × price rectangles) and horizontal **levels**, rendered
+behind the candles. Zones without a `to` extend into future space past the
+last bar, like TradingView drawings.
+
+```js
+const res = await fetch('https://api.example.com/analysis?symbol=BTC');
+chart.setOverlays(await res.json());
+```
+
+```js
+[
+  // zone: from/to are timestamps (ms or s); null → chart edge
+  { type: 'zone', from: 1753920000000, priceFrom: 33000, priceTo: 35600,
+    color: '#ef5350', alpha: 0.25, label: 'demand' },
+  { type: 'zone', from: 1753920000000,                    // no `to` → extends
+    priceFrom: 37700, priceTo: 40900, color: '#26a69a' }, // to the right edge
+  // level: horizontal price line, full width by default
+  { type: 'level', price: 28700, color: '#3f51b5', label: 'S1' },
+  { type: 'level', price: 22800, color: '#3f51b5', dash: true },
+]
+```
+
+- `addOverlay(o)` upserts one (by `id`), `removeOverlay(id)`,
+  `clearOverlays()`, and `chart.overlays` reads them back.
+- Colors accept hex / `rgb()` / CSS names plus the palette keys
+  `up` | `down` | `accent`; `alpha` clamps to 0.02–0.8 (default 0.22).
+- Timestamps snap to bars (before the first bar clamps left, after the last
+  clamps right); invalid entries are dropped, never thrown — it's API data.
+- Fully declarative, too — the same JSON as an attribute:
+
+```html
+<wick-chart overlays='[{"type":"level","price":28700,"color":"#3f51b5","label":"S1"}]'></wick-chart>
+```
+
+The React binding takes `overlays` as a prop (fresh array → re-apply), and
+`normalizeOverlays` / `barIndexForTime` / `resolveOverlayColor` are exported
+from `wickchart/core`.
 
 ### AI-ready data window — `getDataWindow()`
 

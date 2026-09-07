@@ -9,6 +9,7 @@
  * Props map onto the element 1:1:
  *   - string/number/boolean props become attributes ("indicators", "type", …)
  *   - `data` assigns the bar array (pass a fresh array to trigger an update)
+ *   - `overlays` assigns server-side zones & levels via setOverlays()
  *   - `onRange` / `onAlert` / … subscribe to the matching `wick:range`,
  *     `wick:alert`, … events and unsubscribe on unmount; an `events`
  *     object ({ range: fn }) works too
@@ -51,18 +52,22 @@ export const toAttrName = (key) => key.replace(/[A-Z]/g, (c) => '-' + c.toLowerC
 const DOM_PROPS = new Set(['className', 'class', 'style', 'id', 'title', 'role', 'key', 'ref']);
 
 /**
- * Split React props into chart attrs / event handlers / DOM passthrough / the data array.
+ * Split React props into chart attrs / event handlers / DOM passthrough /
+ * the data array / the overlays array.
  * @param {object} props
- * @returns {{ attrs: object, events: Record<string, Function>, dom: object, data: any }}
+ * @returns {{ attrs: object, events: Record<string, Function>, dom: object, data: any, overlays: any }}
  */
 export function splitChartProps(props) {
   const attrs = {};
   const events = {};
   const dom = {};
   let data;
+  let overlays;
   for (const [key, val] of Object.entries(props || {})) {
     if (key === 'data') {
       data = val;
+    } else if (key === 'overlays') {
+      overlays = val;
     } else if (key === 'events') {
       for (const [name, fn] of Object.entries(val || {})) events[name] = fn;
     } else if (/^on[A-Z]/.test(key)) {
@@ -78,15 +83,16 @@ export function splitChartProps(props) {
       attrs[key] = val;
     }
   }
-  return { attrs, events, dom, data };
+  return { attrs, events, dom, data, overlays };
 }
 
 /**
  * Apply split props to a chart element. Every write is guarded so re-running
  * with identical values is a no-op (attributes compared as strings, `data`
- * compared by identity — reassigning a fresh array is what triggers a redraw).
+ * and `overlays` compared by identity — passing a fresh array is what
+ * triggers a redraw).
  * @param {HTMLElement} el
- * @param {{ attrs?: object, data?: any }} split
+ * @param {{ attrs?: object, data?: any, overlays?: any }} split
  */
 export function applyChartProps(el, split) {
   if (!el) return;
@@ -104,6 +110,12 @@ export function applyChartProps(el, split) {
   if (split.data != null && el.data !== split.data) {
     if (typeof el.setData === 'function') el.setData(split.data);
     else el.data = split.data;
+  }
+  // Overlays follow the same rule through setOverlays(); identity is tracked
+  // on the element because the getter returns copies.
+  if (split.overlays != null && el.__wickOverlaysRef !== split.overlays) {
+    el.__wickOverlaysRef = split.overlays;
+    if (typeof el.setOverlays === 'function') el.setOverlays(split.overlays);
   }
 }
 
