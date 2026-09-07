@@ -9,20 +9,20 @@ streaming-ready.
 ## Install
 
 ```bash
-npm install hab-view
+npm install wickchart
 ```
 
 ```js
 // any bundler / framework — TypeScript types included
-import 'hab-view';                       // registers <hab-chart>
-import HabChart from 'hab-view';         // for HabChart.registerIndicator(...)
-import { encodeStateQuery } from 'hab-view/core';  // pure helpers
+import 'wickchart';                       // registers <hab-chart>
+import HabChart from 'wickchart';         // for HabChart.registerIndicator(...)
+import { encodeStateQuery } from 'wickchart/core';  // pure helpers
 ```
 
 Or straight from a CDN — no install, no build:
 
 ```html
-<script type="module" src="https://unpkg.com/hab-view"></script>
+<script type="module" src="https://unpkg.com/wickchart"></script>
 
 <hab-chart label="BTC · 1h" type="candles" indicators="sma:20 volume"></hab-chart>
 
@@ -43,7 +43,7 @@ One more script tag and your chart is fully live — data, backfill, streaming �
 with **zero JavaScript written**:
 
 ```html
-<script type="module" src="https://unpkg.com/hab-view/feed"></script>
+<script type="module" src="https://unpkg.com/wickchart/feed"></script>
 
 <hab-feed for="chart" binance="BTCUSDT" tf="1h"></hab-feed>
 <hab-chart id="chart" indicators="sma:20 volume" profile></hab-chart>
@@ -164,7 +164,7 @@ HabChart.registerIndicator('vwap', {
 chart.indicators = 'vwap:20';
 ```
 
-`import HabChart from 'hab-view'` gives you the class for
+`import HabChart from 'wickchart'` gives you the class for
 `HabChart.registerIndicator(...)` (the element is registered as a side effect
 of importing the package).
 
@@ -209,7 +209,7 @@ VWAP ships in the demo but *not* as a builtin — it's the reference for writing
 your own (session-anchored, resets each trading day):
 
 ```js
-import HabChart from 'hab-view';
+import HabChart from 'wickchart';
 
 HabChart.registerIndicator('vwap', {
   kind: 'overlay',
@@ -300,7 +300,7 @@ state into a compact query string — the demo maps it to the page hash, so any
 chart configuration is one link away:
 
 ```js
-import { encodeStateQuery, decodeStateQuery } from 'hab-view/src/core.js';
+import { encodeStateQuery, decodeStateQuery } from 'wickchart/core';
 
 const link = `${location.origin}#${encodeStateQuery(chart.getState())}`;
 history.replaceState(null, '', link);

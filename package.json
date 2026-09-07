@@ -1,5 +1,5 @@
 {
-  "name": "hab-view",
+  "name": "wickchart",
   "version": "0.3.0",
   "description": "<hab-chart> — a modern, dependency-free financial charting web component. Candles, line & area charts, crosshair, zoom/pan, indicators, live streaming, theming.",
   "type": "module",
@@ -49,7 +49,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/benyblack/hab-view.git"
+    "url": "git+https://github.com/benyblack/wickchart.git"
   },
   "devDependencies": {
     "typescript": "^7.0.2"
