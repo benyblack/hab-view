@@ -2449,8 +2449,10 @@ class WickChart extends HTMLElementBase {
       const dy = e.deltaY * (e.deltaMode === 1 ? 33 : 1);
 
       if (Math.abs(dx) > Math.abs(dy) && !e.ctrlKey) {
-        // trackpad horizontal scroll → pan
-        this._view.rightIndex -= dx / this._view.spacing;
+        // trackpad horizontal scroll → pan. Wheel deltas are viewport-relative:
+        // deltaX>0 means "scroll right", i.e. reveal newer bars. On natural-scroll
+        // trackpads this makes the content follow the fingers, matching drag.
+        this._view.rightIndex += dx / this._view.spacing;
         this._auto = this._atRight();
         this._clampView();
         this._invalidate();
