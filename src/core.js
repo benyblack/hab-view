@@ -1043,6 +1043,17 @@ function tokenizeScript(src) {
       i += m[0].length;
       continue;
     }
+    const two = src.slice(i, i + 2);
+    if (two === '>=' || two === '<=' || two === '==' || two === '!=') {
+      toks.push({ t: 'op', v: two });
+      i += 2;
+      continue;
+    }
+    if (c === '>' || c === '<') {
+      toks.push({ t: 'op', v: c });
+      i++;
+      continue;
+    }
     if (c === '+' || c === '-' || c === '*' || c === '/' || c === '%') {
       toks.push({ t: 'op', v: c });
       i++;
@@ -1066,6 +1077,17 @@ function parseScript(src) {
   let p = 0;
   const peek = () => toks[p];
 
+  const CMP_OPS = ['>', '<', '>=', '<=', '==', '!='];
+
+  /** Comparisons bind loosest (a > b + 1); chains associate left, each 1/0. */
+  function parseCmp(depth) {
+    let l = parseAdd(depth);
+    while (peek() && peek().t === 'op' && CMP_OPS.includes(peek().v)) {
+      const op = toks[p++].v;
+      l = { type: 'bin', op, l, r: parseAdd(depth) };
+    }
+    return l;
+  }
   function parseAdd(depth) {
     let l = parseMul(depth);
     while (peek() && peek().t === 'op' && (peek().v === '+' || peek().v === '-')) {
@@ -1103,10 +1125,10 @@ function parseScript(src) {
         p++;
         const args = [];
         if (peek() && peek().t !== ')') {
-          args.push(parseAdd(depth));
+          args.push(parseCmp(depth));
           while (peek() && peek().t === ',') {
             p++;
-            args.push(parseAdd(depth));
+            args.push(parseCmp(depth));
           }
         }
         const close = toks[p++];
@@ -1117,7 +1139,7 @@ function parseScript(src) {
       return { type: 'var', name };
     }
     if (t.t === '(') {
-      const e = parseAdd(depth);
+      const e = parseCmp(depth);
       const close = toks[p++];
       if (!close || close.t !== ')') throw scriptErr('missing ")"');
       return e;
@@ -1125,7 +1147,7 @@ function parseScript(src) {
     throw scriptErr(`unexpected token "${t.t === 'op' ? t.v : t.t}"`);
   }
 
-  const ast = parseAdd(0);
+  const ast = parseCmp(0);
   if (p < toks.length) throw scriptErr('unexpected trailing input');
   validateScriptNode(ast);
   return ast;
@@ -1179,6 +1201,20 @@ function binOp(op, a, b) {
     case '*': return a * b;
     case '/': return a / b;
     case '%': return a % b;
+    // comparisons yield 1/0; NaN operands stay NaN so warm-up gaps survive
+    case '>':
+    case '<':
+    case '>=':
+    case '<=':
+    case '==':
+    case '!=':
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return NaN;
+      if (op === '>') return a > b ? 1 : 0;
+      if (op === '<') return a < b ? 1 : 0;
+      if (op === '>=') return a >= b ? 1 : 0;
+      if (op === '<=') return a <= b ? 1 : 0;
+      if (op === '==') return a === b ? 1 : 0;
+      return a !== b ? 1 : 0;
   }
   return NaN;
 }
@@ -1352,6 +1388,34 @@ export function checkAlertCross(alert, prevPrice, price) {
   if (dir === 'above') return prevPrice <= p && price > p;
   if (dir === 'below') return prevPrice >= p && price < p;
   return (prevPrice <= p && price > p) || (prevPrice >= p && price < p);
+}
+
+/**
+ * Boolean truth series for a WickScript predicate: any numeric expression
+ * where nonzero & finite counts as true (NaN / 0 / ±Infinity → false).
+ * Powers scripted alerts — `addAlert({ when: 'crossup(close, sma(close,50))' })`.
+ * @param {object|string} compiled compiled predicate (or raw source)
+ * @param {Bar[]} bars
+ * @returns {boolean[]}
+ */
+export function predicateTrueSeries(compiled, bars) {
+  const vals = evalScript(compiled, bars);
+  return vals.map((v) => Number.isFinite(v) && v !== 0);
+}
+
+/**
+ * Edge-triggered step for a scripted alert. `armed` starts true; a rising
+ * edge (false → true) fires once and disarms; a true → false transition
+ * re-arms, so `once: false` alerts can fire again on the next edge while
+ * `once: true` alerts are removed after their first fire.
+ * @param {boolean} armed
+ * @param {boolean} curTrue
+ * @returns {{ fire: boolean, armed: boolean }}
+ */
+export function scriptAlertStep(armed, curTrue) {
+  if (curTrue && armed) return { fire: true, armed: false };
+  if (!curTrue && !armed) return { fire: false, armed: true };
+  return { fire: false, armed };
 }
 
 /* ------------------------------------------------------------------ *
