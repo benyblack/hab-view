@@ -30,7 +30,11 @@ import {
  * <hab-chart>
  * ------------------------------------------------------------------ */
 
-  class HabChart extends HTMLElement {
+  /* SSR safety: importing this module under Node (Next.js/Nuxt server render)
+ * must not throw — the element simply registers only in browsers. */
+const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class {};
+
+class HabChart extends HTMLElementBase {
     static get observedAttributes() {
       return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'co-view', 'sonify'];
     }
@@ -2610,8 +2614,8 @@ import {
     }
   }
 
-  if (!customElements.get('hab-chart')) {
-    customElements.define('hab-chart', HabChart);
-  }
+if (typeof customElements !== 'undefined' && !customElements.get('hab-chart')) {
+  customElements.define('hab-chart', HabChart);
+}
 
-  export default HabChart;
+export default HabChart;

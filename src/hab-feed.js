@@ -33,7 +33,9 @@ import {
 
 const LIVE_TICK_MS = 650;
 
-class HabFeed extends HTMLElement {
+const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class {};
+
+class HabFeed extends HTMLElementBase {
   static get observedAttributes() {
     return ['for', 'binance', 'demo', 'url', 'tf', 'limit', 'poll', 'live'];
   }
@@ -246,7 +248,7 @@ class HabFeed extends HTMLElement {
   }
 }
 
-if (!customElements.get('hab-feed')) {
+if (typeof customElements !== 'undefined' && !customElements.get('hab-feed')) {
   customElements.define('hab-feed', HabFeed);
 }
 
