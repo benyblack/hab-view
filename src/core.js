@@ -1528,8 +1528,124 @@ export function parseVolShading(val) {
   let p1 = isNum(parts[0]) ? clamp(parts[0], 0, 98) : 30;
   const p2 = isNum(parts[1]) ? clamp(parts[1], 2, 100) : 70;
   p1 = clamp(p1, 0, p2 - 2);
-  const period = isNum(parts[2]) ? Math.round(clamp(parts[2], 2, 500)) : 20;
+  const period = isNum(parts[2]) ? clamp(parts[2], 2, 500) : 20;
   return { p1, p2, period };
+}
+
+/* ------------------------------------------------------------------ *
+ * Server-side overlays (zones & levels)
+ * ------------------------------------------------------------------ */
+
+/** Normalize a timestamp to milliseconds (bar times and query times both
+ *  auto-detect seconds — anything below 1e12 is treated as seconds). */
+const normMs = (t) => (t < 1e12 ? t * 1000 : t);
+
+/**
+ * Index of the last bar whose time is <= `t` (binary search). Clamps to
+ * [0, n-1]: a time before the first bar → 0, past the last bar → n-1.
+ * Empty bars or a non-numeric time → null.
+ * @param {object[]} bars normalized bar objects
+ * @param {number} t timestamp in ms or s
+ * @returns {number|null}
+ */
+export function barIndexForTime(bars, t) {
+  if (!Array.isArray(bars) || !bars.length || !isNum(t)) return null;
+  const scale = normMs(bars[bars.length - 1].time) / bars[bars.length - 1].time;
+  const target = normMs(t);
+  let lo = 0;
+  let hi = bars.length - 1;
+  if (target <= bars[0].time * scale) return 0;
+  if (target >= bars[hi].time * scale) return hi;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (bars[mid].time * scale <= target) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/**
+ * Validate & normalize server-side overlay definitions. Overlays are data
+ * from an API, so invalid entries are silently dropped — never thrown.
+ *
+ * zone:  { type:'zone', from?: time|null, to?: time|null, priceFrom, priceTo,
+ *          color?, alpha?, border?, label?, id? } — a time×price rectangle.
+ *          `from`/`to` omitted (or null) anchor to the left/right chart edge;
+ *          a zone with no `to` extends into future space past the last bar.
+ * level: { type:'level', price, from?, to?, color?, width?, dash?, label?, id? }
+ *          — a horizontal price line, full width by default.
+ *
+ * Colors go through safeColor(); `alpha` clamps to [0.02, 0.8] (default 0.22).
+ * @param {any} list
+ * @returns {object[]} normalized overlays (possibly empty)
+ */
+export function normalizeOverlays(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  let n = 0;
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object') continue;
+    let type = null;
+    if (raw.type === 'zone') type = 'zone';
+    else if (raw.type === 'level') type = 'level';
+    if (!type) continue;
+    const id = raw.id != null ? String(raw.id).slice(0, 64) : 'ov-' + ++n;
+    const label = raw.label != null ? String(raw.label).slice(0, 40) : '';
+    // palette keys first ('up' is 2 letters and would fail the generic name check)
+    const rawColor = raw.color != null ? String(raw.color).trim() : '';
+    const color = /^(up|down|accent)$/i.test(rawColor)
+      ? rawColor.toLowerCase()
+      : safeColor(rawColor) || null;
+    const from = isNum(raw.from) ? raw.from : null;
+    const to = isNum(raw.to) ? raw.to : null;
+    if (type === 'zone') {
+      if (!isNum(raw.priceFrom) || !isNum(raw.priceTo)) continue;
+      out.push({
+        id,
+        type,
+        from,
+        to,
+        priceFrom: Math.min(raw.priceFrom, raw.priceTo),
+        priceTo: Math.max(raw.priceFrom, raw.priceTo),
+        color,
+        alpha: isNum(raw.alpha) ? clamp(raw.alpha, 0.02, 0.8) : 0.22,
+        border: raw.border !== false,
+        label,
+      });
+    } else {
+      if (!isNum(raw.price)) continue;
+      out.push({
+        id,
+        type,
+        from,
+        to,
+        price: raw.price,
+        color,
+        width: isNum(raw.width) ? clamp(raw.width, 1, 4) : 1,
+        dash: raw.dash === true,
+        label,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve an overlay color against the active palette: 'up'/'down'/'accent'
+ * map to theme colors, anything else passes through safeColor(), and invalid
+ * or missing values fall back to the accent color.
+ * @param {any} raw
+ * @param {object} pal active theme palette
+ * @returns {string} a concrete CSS color
+ */
+export function resolveOverlayColor(raw, pal) {
+  if (typeof raw === 'string') {
+    const key = raw.trim().toLowerCase();
+    if (key === 'up' || key === 'down' || key === 'accent') return pal[key];
+    const c = safeColor(raw);
+    if (c) return c;
+  }
+  return pal.accent;
 }
 
 /* ------------------------------------------------------------------ *

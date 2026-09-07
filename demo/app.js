@@ -215,6 +215,7 @@ async function loadSymbol() {
     chart.onloadmore = (fromTime) => olderSynthetic(symbol, tf, fromTime);
     chart.setData(getHistory(symbol, tf).slice(-CHUNK));
     startFeed();
+    applyZonesIfOn();
     return;
   }
 
@@ -230,6 +231,7 @@ async function loadSymbol() {
     chart.setData(getHistory(symbol, tf).slice(-CHUNK));
     startFeed();
   }
+  applyZonesIfOn();
 }
 
 /* ------------------------------------------------------------------ *
@@ -563,6 +565,43 @@ document.getElementById('btn-volshading').addEventListener('click', (e) => {
   chart.setAttribute('volshading', String(state.volshading));
   e.currentTarget.setAttribute('aria-pressed', String(state.volshading));
   writeHash();
+});
+
+/* Server-side overlays demo — the shape an analysis API would return:
+ * stacked supply/demand zones anchored in time (extending into future space)
+ * plus horizontal support levels. */
+let zonesOn = false;
+
+function demoOverlays() {
+  const d = chart.data;
+  if (!d || d.length < 30) return [];
+  const at = (frac) => d[Math.floor(d.length * frac)];
+  const hi = at(0.7);
+  const lo = at(0.72);
+  const from = at(0.55).time;
+  const fromLate = at(0.62).time;
+  const s1 = at(0.3).low;
+  const s2 = at(0.15).low;
+  return [
+    { type: 'zone', from, priceFrom: hi.high, priceTo: hi.high * 1.018, color: '#26a69a', alpha: 0.22, label: 'supply' },
+    { type: 'zone', from: fromLate, priceFrom: hi.high * 1.018, priceTo: hi.high * 1.038, color: '#26a69a', alpha: 0.22 },
+    { type: 'zone', from, priceFrom: lo.low * 0.982, priceTo: lo.low, color: '#ef5350', alpha: 0.22, label: 'demand' },
+    { type: 'zone', from: fromLate, priceFrom: lo.low * 0.962, priceTo: lo.low * 0.982, color: '#ef5350', alpha: 0.22 },
+    { type: 'level', price: s1, color: '#3f51b5', label: 'S1' },
+    { type: 'level', price: s2, color: '#3f51b5', label: 'S2' },
+    { type: 'level', price: s2 * 0.86, color: '#3f51b5', label: 'S3' },
+  ];
+}
+
+function applyZonesIfOn() {
+  if (zonesOn) chart.setOverlays(demoOverlays());
+}
+
+document.getElementById('btn-zones').addEventListener('click', (e) => {
+  zonesOn = !zonesOn;
+  if (zonesOn) chart.setOverlays(demoOverlays());
+  else chart.clearOverlays();
+  e.currentTarget.setAttribute('aria-pressed', String(zonesOn));
 });
 
 document.getElementById('btn-theme').addEventListener('click', () => {

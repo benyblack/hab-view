@@ -28,7 +28,7 @@ import {
   SERIES_TYPES, calcHeikinAshi, buildColumns, computeVolumeProfile,
   calcRSI, detectAnnotations, priceToFreq,
   calcRealizedVol, volRegimeBands, percentileOfSorted, parseVolShading,
-  windowSummary,
+  windowSummary, normalizeOverlays, barIndexForTime, resolveOverlayColor,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -45,7 +45,7 @@ const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class
 
 class WickChart extends HTMLElementBase {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'co-view', 'sonify'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'sonify'];
     }
 
     constructor() {
@@ -225,6 +225,9 @@ class WickChart extends HTMLElementBase {
       this._alerts = [];
       this._seq = 0;
 
+      // server-side overlays (zones & levels)
+      this._overlays = [];
+
       this._onResize = () => this._invalidate();
       this._onPointerDown = (e) => this._pointerDown(e);
       this._onPointerMove = (e) => this._pointerMove(e);
@@ -330,6 +333,18 @@ class WickChart extends HTMLElementBase {
           this._volshade = val != null && val !== 'false' ? parseVolShading(val) : null;
           this._legendKey = '';
           break;
+        case 'overlays': {
+          let ovs = [];
+          if (val != null && val !== '') {
+            try {
+              ovs = normalizeOverlays(JSON.parse(val));
+            } catch (err) {
+              ovs = [];
+            }
+          }
+          this._overlays = ovs;
+          break;
+        }
         case 'co-view':
           this._coviewName = val || null;
           this._setupCoView();
@@ -757,6 +772,57 @@ class WickChart extends HTMLElementBase {
 
     clearAlerts() {
       this._alerts = [];
+      this._invalidate();
+    }
+
+    /**
+     * Server-side overlays: zones & levels anchored in time × price — e.g.
+     * supply/demand zones from an analysis API. Zones with no `to` extend
+     * into future space past the last bar, like TradingView drawings.
+     *
+     *   zone:  { type:'zone', from?:ms, to?:ms|null, priceFrom, priceTo,
+     *            color?, alpha?, border?, label?, id? }
+     *   level: { type:'level', price, from?, to?, color?, width?, dash?,
+     *            label?, id? }
+     *
+     * Invalid entries are dropped, never thrown. Colors accept hex/rgb()/CSS
+     * names plus the palette keys 'up' | 'down' | 'accent'.
+     * @param {object[]} list
+     * @returns {string[]} applied overlay ids
+     */
+    setOverlays(list) {
+      this._overlays = normalizeOverlays(list);
+      this._invalidate();
+      return this._overlays.map((o) => o.id);
+    }
+
+    /** @returns {object[]} a copy of the current overlays */
+    get overlays() {
+      return this._overlays.map((o) => ({ ...o }));
+    }
+
+    /**
+     * Add or replace (upsert, by id) a single overlay.
+     * @returns {string|null} the overlay id, or null if invalid
+     */
+    addOverlay(ov) {
+      const norm = normalizeOverlays([ov]);
+      if (!norm.length) return null;
+      const one = norm[0];
+      const i = this._overlays.findIndex((x) => x.id === one.id);
+      if (i >= 0) this._overlays[i] = one;
+      else this._overlays.push(one);
+      this._invalidate();
+      return one.id;
+    }
+
+    removeOverlay(id) {
+      this._overlays = this._overlays.filter((o) => o.id !== String(id));
+      this._invalidate();
+    }
+
+    clearOverlays() {
+      this._overlays = [];
       this._invalidate();
     }
 
@@ -1378,6 +1444,71 @@ class WickChart extends HTMLElementBase {
             }
           }
           flushRun(runVal, runA, i1);
+        }
+      }
+
+      /* server-side overlays: zones & levels (above regime shading, under series).
+       * Zones with `to == null` extend into future space past the last bar. */
+      if (this._overlays.length) {
+        const d = this._data;
+        const idxFor = (t, fallback) => (t == null ? fallback : barIndexForTime(d, t));
+        for (const ov of this._overlays) {
+          const col = resolveOverlayColor(ov.color, pal);
+          if (ov.type === 'zone') {
+            const iA = Math.max(0, idxFor(ov.from, 0));
+            const iB = ov.to == null ? null : Math.max(0, idxFor(ov.to, d.length - 1));
+            const zx0 = clamp(this._xFor(iA) - sp * 0.5, 0, plotRight);
+            const zx1 = iB == null ? plotRight : clamp(this._xFor(iB) + sp * 0.5, 0, plotRight);
+            const zyT = clamp(yOf(ov.priceTo), main.y0, main.y1);
+            const zyB = clamp(yOf(ov.priceFrom), main.y0, main.y1);
+            if (zx1 - zx0 < 1 || zyB - zyT < 1) continue;
+            ctx.save();
+            ctx.globalAlpha = ov.alpha;
+            ctx.fillStyle = col;
+            ctx.fillRect(zx0, zyT, zx1 - zx0, zyB - zyT);
+            if (ov.border) {
+              ctx.globalAlpha = Math.min(1, ov.alpha + 0.4);
+              ctx.lineWidth = 1;
+              ctx.strokeStyle = col;
+              ctx.strokeRect(
+                Math.round(zx0) + 0.5, Math.round(zyT) + 0.5,
+                Math.max(2, Math.round(zx1 - zx0) - 1), Math.max(2, Math.round(zyB - zyT) - 1)
+              );
+            }
+            if (ov.label) {
+              ctx.globalAlpha = 0.95;
+              ctx.font = pillFont();
+              ctx.fillStyle = col;
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'top';
+              ctx.fillText(ov.label, zx0 + 6, Math.max(main.y0, zyT) + 4);
+            }
+            ctx.restore();
+          } else {
+            const lx0 = clamp(this._xFor(Math.max(0, idxFor(ov.from, 0))) - sp * 0.5, 0, plotRight);
+            const lx1 =
+              ov.to == null
+                ? plotRight
+                : clamp(this._xFor(Math.max(0, idxFor(ov.to, d.length - 1))) + sp * 0.5, 0, plotRight);
+            const ly = Math.round(yOf(ov.price)) + 0.5;
+            if (lx1 - lx0 < 1 || ly < main.y0 || ly > main.y1) continue;
+            ctx.save();
+            ctx.strokeStyle = col;
+            ctx.lineWidth = ov.width;
+            if (ov.dash) ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.moveTo(lx0, ly);
+            ctx.lineTo(lx1, ly);
+            ctx.stroke();
+            if (ov.label) {
+              ctx.font = pillFont();
+              ctx.fillStyle = col;
+              ctx.textAlign = 'right';
+              ctx.textBaseline = 'bottom';
+              ctx.fillText(ov.label, Math.min(lx1, plotRight) - 6, ly - 2);
+            }
+            ctx.restore();
+          }
         }
       }
 

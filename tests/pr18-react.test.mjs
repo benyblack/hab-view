@@ -28,6 +28,7 @@ test('splitChartProps separates attrs / events / dom / data', async () => {
   const style = { height: 420 };
   const split = splitChartProps({
     data: [1, 2],
+    overlays: [{ type: 'level', price: 9 }],
     indicators: 'sma:20',
     volShading: true,
     onRange,
@@ -46,6 +47,7 @@ test('splitChartProps separates attrs / events / dom / data', async () => {
   assert.deepEqual(Object.keys(split.dom).sort(), ['aria-label', 'className', 'data-testid', 'id', 'style']);
   assert.equal(split.dom.style, style);
   assert.equal(split.data[0], 1);
+  assert.equal(split.overlays.length, 1, 'overlays prop is extracted (not sent to attrs/dom)');
 });
 
 class FakeEl {
@@ -149,10 +151,12 @@ test('WickChart component: mount, attrs, data, events, cleanup', async () => {
   try {
     // Minimal stand-in for <wick-chart> modeling the REAL element contract:
     // `data` is a getter-only accessor; bars go in through setData() — the
-    // binding must not try to assign el.data directly.
+    // binding must not try to assign el.data directly. Overlays arrive via
+    // setOverlays().
     class FakeChart extends dom.window.HTMLElement {
       setData(bars) { this._data = bars; }
       get data() { return this._data ?? null; }
+      setOverlays(list) { this._overlays = list; this.overlayCalls = (this.overlayCalls || 0) + 1; }
     }
     dom.window.customElements.define('wick-chart', FakeChart);
 
@@ -210,6 +214,21 @@ test('WickChart component: mount, attrs, data, events, cleanup', async () => {
       }));
     });
     assert.ok(!el.hasAttribute('volshading'), 'false removes the attribute');
+
+    // overlays prop → setOverlays(), guarded by array identity
+    const zones = [{ type: 'level', price: 11 }, { type: 'zone', priceFrom: 10, priceTo: 12 }];
+    await React.act(async () => {
+      root.render(h(WickChart, { data: bars2, overlays: zones, onAlert }));
+    });
+    assert.equal(el.overlayCalls, 1, 'overlays prop calls setOverlays once');
+    await React.act(async () => {
+      root.render(h(WickChart, { data: bars2, overlays: zones, onAlert }));
+    });
+    assert.equal(el.overlayCalls, 1, 'same array reference does not re-apply overlays');
+    await React.act(async () => {
+      root.render(h(WickChart, { data: bars2, overlays: [...zones, { type: 'level', price: 9 }], onAlert }));
+    });
+    assert.equal(el.overlayCalls, 2, 'a fresh array re-applies overlays');
 
     // Dropping an on* prop unsubscribes just that event
     await React.act(async () => {

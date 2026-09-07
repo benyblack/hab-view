@@ -86,18 +86,43 @@
 
   <div class="badge"><span id="badge-text">loading</span></div>
 
-  <!-- status reflection is still declarative-friendly: one tiny inline
-       snippet mirrors the feed status into the badge (optional) -->
+  <!-- status reflection + demo overlays are still declarative-friendly: one
+       tiny inline snippet mirrors the feed status into the badge and paints
+       supply/demand zones in the exact shape a server-side analysis API would
+       return (edge-to-edge here, so no timestamps are needed) -->
   <script>
-    document.getElementById('feed').addEventListener('wick-feed:status', (e) => {
-      const s = e.detail.status;
-      document.getElementById('badge-text').textContent =
-        s === 'live' ? 'live · Binance' :
-        s === 'fallback' ? 'live · synthetic (Binance unreachable)' :
-        s === 'polling' ? 'live · polling' : s;
-      document.getElementById('status-text').textContent = s;
-      document.querySelector('.badge').classList.toggle('warn', s === 'fallback' || s === 'polling');
-    });
+    (function () {
+      var chart = document.getElementById('chart');
+      var overlaysOn = false;
+      var applyOverlays = function () {
+        var d = chart.data;
+        if (!d || !d.length) return;
+        var recent = d.slice(-120);
+        var hi = -Infinity, lo = Infinity;
+        for (var i = 0; i < recent.length; i++) {
+          if (recent[i].high > hi) hi = recent[i].high;
+          if (recent[i].low < lo) lo = recent[i].low;
+        }
+        chart.setOverlays([
+          { type: 'zone', priceFrom: hi * 0.996, priceTo: hi * 1.012, color: '#26a69a', alpha: 0.18, label: 'supply' },
+          { type: 'zone', priceFrom: lo * 0.988, priceTo: lo * 1.004, color: '#ef5350', alpha: 0.18, label: 'demand' },
+          { type: 'level', price: (hi + lo) / 2, color: '#3f51b5', label: 'S1' },
+        ]);
+      };
+      document.getElementById('feed').addEventListener('wick-feed:status', (e) => {
+        var s = e.detail.status;
+        if (!overlaysOn && s !== 'loading' && chart.data && chart.data.length) {
+          overlaysOn = true;
+          applyOverlays();
+        }
+        document.getElementById('badge-text').textContent =
+          s === 'live' ? 'live · Binance' :
+          s === 'fallback' ? 'live · synthetic (Binance unreachable)' :
+          s === 'polling' ? 'live · polling' : s;
+        document.getElementById('status-text').textContent = s;
+        document.querySelector('.badge').classList.toggle('warn', s === 'fallback' || s === 'polling');
+      });
+    })();
   </script>
 </body>
 </html>
