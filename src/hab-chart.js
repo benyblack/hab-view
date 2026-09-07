@@ -22,6 +22,7 @@ import {
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
   positionPnl, checkAlertCross, computeStats, safeColor,
+  SERIES_TYPES, calcHeikinAshi,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -245,7 +246,7 @@ import {
           this._theme = val === 'light' ? 'light' : 'dark';
           break;
         case 'type':
-          this._type = ['candles', 'line', 'area'].includes(val) ? val : 'candles';
+          this._type = SERIES_TYPES.includes(val) ? val : 'candles';
           break;
         case 'log':
           this._log = val != null && val !== 'false';
@@ -786,6 +787,19 @@ import {
       return pal;
     }
 
+    /**
+     * Bars used for drawing/reading OHLC: raw data, or the Heikin-Ashi
+     * transform for `type="heikin"` (cached per data version).
+     */
+    _renderBars() {
+      if (this._type !== 'heikin') return this._data;
+      if (this._cache.v !== this._version || !this._cache.map.__heikin) {
+        if (this._cache.v !== this._version) this._cache = { v: this._version, map: {} };
+        this._cache.map.__heikin = calcHeikinAshi(this._data);
+      }
+      return this._cache.map.__heikin;
+    }
+
     /** Compute (and cache per data version) an indicator entry's series. */
     _indicatorSeries(entry) {
       if (this._cache.v !== this._version) {
@@ -891,8 +905,8 @@ import {
      * ------------------------------------------------------------ */
 
     _mainScale(i0, i1) {
-      const d = this._data;
-      const candles = this._type === 'candles';
+      const d = this._renderBars();
+      const candles = this._type === 'candles' || this._type === 'hollow' || this._type === 'bars' || this._type === 'heikin';
       let lo = Infinity;
       let hi = -Infinity;
       for (let i = i0; i <= i1; i++) {
@@ -1028,7 +1042,7 @@ import {
       const ctx = this._ctx;
       ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
       const pal = this._palette();
-      const d = this._data;
+      const d = this._renderBars();
       const W = this._W;
       const H = this._H;
 
@@ -1184,10 +1198,13 @@ import {
       }
 
       /* series */
-      if (this._type === 'candles') {
+      const tStyle = this._type;
+      if (tStyle === 'candles' || tStyle === 'hollow' || tStyle === 'bars' || tStyle === 'heikin') {
         const bodyW = Math.max(1, Math.floor(sp * 0.7));
-        // two passes (up/down): one wick path + one body-fill batch per
-        // direction instead of a stroke call per bar
+        const hollow = tStyle === 'hollow';
+        const barsStyle = tStyle === 'bars';
+        const tickLen = barsStyle ? Math.max(2, Math.floor(sp * 0.35)) : 0;
+        // two passes (up/down): one wick path + one body batch per direction
         for (let pass = 0; pass < 2; pass++) {
           ctx.strokeStyle = pass === 0 ? pal.up : pal.down;
           ctx.fillStyle = ctx.strokeStyle;
@@ -1198,16 +1215,30 @@ import {
             const x = Math.round(this._xFor(i)) + 0.5;
             ctx.moveTo(x, yOf(b.high));
             ctx.lineTo(x, yOf(b.low));
+            if (barsStyle && bodyW >= 3) {
+              // OHLC ticks: open to the left, close to the right
+              ctx.moveTo(x - tickLen, yOf(b.open));
+              ctx.lineTo(x, yOf(b.open));
+              ctx.moveTo(x, yOf(b.close));
+              ctx.lineTo(x + tickLen, yOf(b.close));
+            }
           }
           ctx.stroke();
-          if (bodyW > 2) {
+          if (bodyW > 2 && !barsStyle) {
+            const hollowPass = hollow && pass === 0; // up candles are outlined only
             for (let i = i0; i <= i1; i++) {
               const b = d[i];
               if ((b.close >= b.open) !== (pass === 0)) continue;
               const x = this._xFor(i);
               const yTop = yOf(Math.max(b.open, b.close));
               const yBot = yOf(Math.min(b.open, b.close));
-              ctx.fillRect(Math.round(x - bodyW / 2), yTop, bodyW, Math.max(1, yBot - yTop));
+              const h = Math.max(1, yBot - yTop);
+              const bx = Math.round(x - bodyW / 2);
+              if (hollowPass) {
+                ctx.strokeRect(bx + 0.5, yTop + 0.5, Math.max(1, bodyW - 1), Math.max(1, h - 1));
+              } else {
+                ctx.fillRect(bx, yTop, bodyW, h);
+              }
             }
           }
         }
@@ -1730,7 +1761,7 @@ import {
     }
 
     _updateLegend() {
-      const d = this._data;
+      const d = this._renderBars();
       if (!d.length) {
         this._legend.innerHTML = '';
         return;
