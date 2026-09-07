@@ -22,7 +22,7 @@ import {
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
   positionPnl, checkAlertCross, computeStats, safeColor,
-  SERIES_TYPES, calcHeikinAshi,
+  SERIES_TYPES, calcHeikinAshi, buildColumns,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -342,7 +342,15 @@ import {
         const nb = HabChart._normBar(b);
         if (nb) norm.push(nb);
       }
-      norm.sort((a, b) => a.time - b.time);
+      // skip the O(n log n) sort when already ascending (typical for feeds)
+      let sorted = true;
+      for (let i = 1; i < norm.length; i++) {
+        if (norm[i].time < norm[i - 1].time) {
+          sorted = false;
+          break;
+        }
+      }
+      if (!sorted) norm.sort((a, b) => a.time - b.time);
       this._data = norm;
       this._version++;
       this._computeDt();
@@ -475,7 +483,7 @@ import {
       if (i0 > i1) [i0, i1] = [i1, i0];
       if (i1 - i0 < 2) return;
       const { plotRight } = this._ly;
-      this._view.spacing = clamp(plotRight / (i1 - i0), HabChart._MIN_SP, HabChart._MAX_SP);
+      this._view.spacing = clamp(plotRight / (i1 - i0), this._minSpacing(), HabChart._MAX_SP);
       this._view.rightIndex = i1;
       this._auto = false;
       this._clampView();
@@ -672,8 +680,17 @@ import {
      * Normalization / internals
      * ------------------------------------------------------------ */
 
-    static _MIN_SP = 0.35;
     static _MAX_SP = 90;
+
+    /**
+     * Lowest allowed px/bar: either 0.35, or whatever fits the entire
+     * dataset on screen — so any history can be zoomed out fully.
+     */
+    _minSpacing() {
+      const ly = this._ly;
+      const w = ly ? ly.plotRight : 600;
+      return Math.min(0.35, w / Math.max(60, this._data.length));
+    }
 
     static _timeToMs(t) {
       return isNum(t) ? (t < 1e12 ? t * 1000 : t) : Date.now();
@@ -865,7 +882,7 @@ import {
       if (!d.length || !this._ly) return;
       const { plotRight } = this._ly;
       const target = Math.min(d.length, 150);
-      this._view.spacing = clamp(plotRight / target, HabChart._MIN_SP, HabChart._MAX_SP);
+      this._view.spacing = clamp(plotRight / target, this._minSpacing(), HabChart._MAX_SP);
       this._view.rightIndex = d.length - 1 + this._rightMargin();
     }
 
@@ -874,7 +891,7 @@ import {
       const ly = this._ly;
       if (!d.length || !ly) return;
       const v = this._view;
-      v.spacing = clamp(v.spacing, HabChart._MIN_SP, HabChart._MAX_SP);
+      v.spacing = clamp(v.spacing, this._minSpacing(), HabChart._MAX_SP);
       const visible = ly.plotRight / v.spacing;
       const maxRight = d.length - 1 + Math.max(6, visible * 0.5);
       const minRight = Math.min(2, d.length - 1);
@@ -904,30 +921,49 @@ import {
      * Scales & ticks
      * ------------------------------------------------------------ */
 
-    _mainScale(i0, i1) {
+    _mainScale(i0, i1, cols) {
       const d = this._renderBars();
       const candles = this._type === 'candles' || this._type === 'hollow' || this._type === 'bars' || this._type === 'heikin';
       let lo = Infinity;
       let hi = -Infinity;
-      for (let i = i0; i <= i1; i++) {
-        const b = d[i];
-        if (candles) {
-          if (b.low < lo) lo = b.low;
-          if (b.high > hi) hi = b.high;
-        } else {
-          if (b.close < lo) lo = b.close;
-          if (b.close > hi) hi = b.close;
+      if (cols) {
+        for (const c of cols) {
+          const h = candles ? c.high : c.close;
+          const l = candles ? c.low : c.close;
+          if (l < lo) lo = l;
+          if (h > hi) hi = h;
+        }
+      } else {
+        for (let i = i0; i <= i1; i++) {
+          const b = d[i];
+          if (candles) {
+            if (b.low < lo) lo = b.low;
+            if (b.high > hi) hi = b.high;
+          } else {
+            if (b.close < lo) lo = b.close;
+            if (b.close > hi) hi = b.close;
+          }
         }
       }
       for (const ov of this._ind.overlays) {
         const res = this._indicatorSeries(ov);
         for (const ln of res.lines) {
           const s = ln.values;
-          for (let i = i0; i <= i1; i++) {
-            const v = s[i];
-            if (isNum(v)) {
-              if (v < lo) lo = v;
-              if (v > hi) hi = v;
+          if (cols) {
+            for (const c of cols) {
+              const val = s[c.i1];
+              if (isNum(val)) {
+                if (val < lo) lo = val;
+                if (val > hi) hi = val;
+              }
+            }
+          } else {
+            for (let i = i0; i <= i1; i++) {
+              const v = s[i];
+              if (isNum(v)) {
+                if (v < lo) lo = v;
+                if (v > hi) hi = v;
+              }
             }
           }
         }
@@ -965,7 +1001,12 @@ import {
       return ticks;
     }
 
-    _timeTicks(i0, i1) {
+    /**
+     * Time-axis ticks. `sampleIdx` (optional, ascending indices) restricts
+     * the walk to those bars — used at deep zoom where bars are aggregated
+     * into pixel columns (keeps this O(screen) instead of O(visible bars)).
+     */
+    _timeTicks(i0, i1, sampleIdx) {
       const d = this._data;
       const sp = this._view.spacing;
       const dt = this._dt || HOUR;
@@ -997,7 +1038,8 @@ import {
       let prevKey = null;
       // Labels are built lazily — only for bars that actually start a new step.
       // Formatting every visible bar (toLocaleDateString) once cost ~30µs/bar.
-      for (let i = Math.max(0, i0 - 1); i <= i1; i++) {
+      const visit = (i) => {
+        if (i < 0 || i >= d.length) return;
         const t = d[i].time;
         let key;
         let label = null;
@@ -1005,7 +1047,7 @@ import {
           key = Math.floor((t + tz(t)) / stepMs);
           if (prevKey !== null && key !== prevKey) {
             if (stepLabel === 'time') {
-              const prevT = d[i - 1].time;
+              const prevT = d[i - 1] ? d[i - 1].time : t;
               const dayKey = Math.floor((t + tz(t)) / DAY);
               const prevDay = Math.floor((prevT + tz(prevT)) / DAY);
               label = dayKey !== prevDay ? fmtDay(t) : hhmm(t);
@@ -1026,6 +1068,11 @@ import {
         }
         if (label !== null) ticks.push({ x: this._xFor(i), label });
         prevKey = key;
+      };
+      if (sampleIdx) {
+        for (const i of sampleIdx) visit(i);
+      } else {
+        for (let i = Math.max(0, i0 - 1); i <= i1; i++) visit(i);
       }
       return ticks;
     }
@@ -1124,7 +1171,14 @@ import {
       const i1 = Math.min(d.length - 1, Math.ceil(v.rightIndex) + 1);
       this._maybeLoadMore(iLeft);
 
-      const scale = this._mainScale(i0, i1);
+      // deep zoom-out: aggregate bars into ~1px columns so render cost is
+      // bounded by screen width, not history length
+      const needCols = sp < 0.7 && i1 - i0 + 1 > plotRight * 1.5;
+      const cols = needCols
+        ? buildColumns(d, i0, i1, (i) => this._xFor(i), plotRight)
+        : null;
+
+      const scale = this._mainScale(i0, i1, cols);
       this._lastScale = scale;
       const { min, max, useLog } = scale;
       const main = ly.main;
@@ -1138,7 +1192,11 @@ import {
 
       /* ticks */
       const pticks = this._priceTicks(scale, main.h);
-      const tticks = this._timeTicks(i0, i1);
+      const tticks = this._timeTicks(
+        i0,
+        i1,
+        cols ? cols.map((c) => c.i1) : null
+      );
 
       /* grid */
       ctx.strokeStyle = pal.grid;
@@ -1176,21 +1234,34 @@ import {
       /* volume overlay */
       if (this._ind.volume) {
         let vmax = 0;
-        for (let i = i0; i <= i1; i++) if (d[i].volume > vmax) vmax = d[i].volume;
+        if (cols) {
+          for (const c of cols) if (c.volume > vmax) vmax = c.volume;
+        } else {
+          for (let i = i0; i <= i1; i++) if (d[i].volume > vmax) vmax = d[i].volume;
+        }
         if (vmax > 0) {
           const bodyW = Math.max(1, Math.floor(sp * 0.7));
           const areaH = main.h * 0.2;
           ctx.globalAlpha = pal.volAlpha;
-          // two passes by direction: fillStyle set twice instead of per bar
-          for (let pass = 0; pass < 2; pass++) {
-            ctx.fillStyle = pass === 0 ? pal.up : pal.down;
-            for (let i = i0; i <= i1; i++) {
-              const b = d[i];
-              if ((b.close >= b.open) !== (pass === 0)) continue;
-              const h = (b.volume / vmax) * areaH;
+          if (cols) {
+            for (const c of cols) {
+              const h = (c.volume / vmax) * areaH;
               if (h <= 0) continue;
-              const x = this._xFor(i);
-              ctx.fillRect(Math.round(x - bodyW / 2), main.y1 - 1 - h, bodyW, h);
+              ctx.fillStyle = c.close >= c.open ? pal.up : pal.down;
+              ctx.fillRect(c.x, main.y1 - 1 - h, 1, h);
+            }
+          } else {
+            // two passes by direction: fillStyle set twice instead of per bar
+            for (let pass = 0; pass < 2; pass++) {
+              ctx.fillStyle = pass === 0 ? pal.up : pal.down;
+              for (let i = i0; i <= i1; i++) {
+                const b = d[i];
+                if ((b.close >= b.open) !== (pass === 0)) continue;
+                const h = (b.volume / vmax) * areaH;
+                if (h <= 0) continue;
+                const x = this._xFor(i);
+                ctx.fillRect(Math.round(x - bodyW / 2), main.y1 - 1 - h, bodyW, h);
+              }
             }
           }
           ctx.globalAlpha = 1;
@@ -1200,6 +1271,20 @@ import {
       /* series */
       const tStyle = this._type;
       if (tStyle === 'candles' || tStyle === 'hollow' || tStyle === 'bars' || tStyle === 'heikin') {
+        if (cols) {
+          // deep zoom: one hi-lo line per pixel column, colored by column direction
+          for (let pass = 0; pass < 2; pass++) {
+            ctx.strokeStyle = pass === 0 ? pal.up : pal.down;
+            ctx.beginPath();
+            for (const c of cols) {
+              if ((c.close >= c.open) !== (pass === 0)) continue;
+              const x = c.x + 0.5;
+              ctx.moveTo(x, yOf(c.high));
+              ctx.lineTo(x, yOf(c.low));
+            }
+            ctx.stroke();
+          }
+        } else {
         const bodyW = Math.max(1, Math.floor(sp * 0.7));
         const hollow = tStyle === 'hollow';
         const barsStyle = tStyle === 'bars';
@@ -1242,9 +1327,16 @@ import {
             }
           }
         }
+        }
       } else {
-        // line / area
+        // line / area (column-sampled at deep zoom)
         const accent = pal.accent;
+        const pts = [];
+        if (cols) {
+          for (const c of cols) pts.push([c.x, yOf(c.close)]);
+        } else {
+          for (let i = i0; i <= i1; i++) pts.push([this._xFor(i), yOf(d[i].close)]);
+        }
         if (this._type === 'area') {
           const grad = ctx.createLinearGradient(0, main.y0, 0, main.y1);
           const c0 = hexToRgba(accent, 0.25);
@@ -1258,35 +1350,21 @@ import {
           }
           ctx.globalAlpha = c0 !== accent ? 1 : 0.12;
           ctx.beginPath();
-          let started = false;
-          let firstX = 0;
-          let lastX = 0;
-          for (let i = i0; i <= i1; i++) {
-            const x = this._xFor(i);
-            const y = yOf(d[i].close);
-            if (!started) {
-              ctx.moveTo(x, y);
-              firstX = x;
-              started = true;
-            } else ctx.lineTo(x, y);
-            lastX = x;
+          ctx.moveTo(pts.length ? pts[0][0] : 0, pts.length ? pts[0][1] : main.y1);
+          for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+          if (pts.length) {
+            ctx.lineTo(pts[pts.length - 1][0], main.y1);
+            ctx.lineTo(pts[0][0], main.y1);
           }
-          ctx.lineTo(lastX, main.y1);
-          ctx.lineTo(Math.max(firstX, -1e3), main.y1);
           ctx.closePath();
           ctx.fillStyle = grad;
           ctx.fill();
           ctx.globalAlpha = 1;
         }
         ctx.beginPath();
-        let started = false;
-        for (let i = i0; i <= i1; i++) {
-          const x = this._xFor(i);
-          const y = yOf(d[i].close);
-          if (!started) {
-            ctx.moveTo(x, y);
-            started = true;
-          } else ctx.lineTo(x, y);
+        for (let k = 0; k < pts.length; k++) {
+          if (k === 0) ctx.moveTo(pts[k][0], pts[k][1]);
+          else ctx.lineTo(pts[k][0], pts[k][1]);
         }
         ctx.strokeStyle = accent;
         ctx.lineWidth = 2;
@@ -1295,13 +1373,14 @@ import {
         ctx.stroke();
         ctx.lineWidth = 1;
         // last point dot
-        const lx = this._xFor(i1);
-        const lyv = yOf(d[i1].close);
-        if (lx >= -4 && lx <= plotRight + 4) {
-          ctx.fillStyle = accent;
-          ctx.beginPath();
-          ctx.arc(clamp(lx, 0, plotRight), clamp(lyv, main.y0, main.y1), 2.6, 0, Math.PI * 2);
-          ctx.fill();
+        if (pts.length) {
+          const [lx, lyv] = pts[pts.length - 1];
+          if (lx >= -4 && lx <= plotRight + 4) {
+            ctx.fillStyle = accent;
+            ctx.beginPath();
+            ctx.arc(clamp(lx, 0, plotRight), clamp(lyv, main.y0, main.y1), 2.6, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
 
@@ -1317,18 +1396,32 @@ import {
           ctx.lineJoin = 'round';
           ctx.beginPath();
           let started = false;
-          for (let i = i0; i <= i1; i++) {
-            const val = s[i];
-            if (!isNum(val)) {
-              started = false;
-              continue;
+          if (cols) {
+            for (const c of cols) {
+              const val = s[c.i1];
+              if (!isNum(val)) {
+                started = false;
+                continue;
+              }
+              if (!started) {
+                ctx.moveTo(c.x, yOf(val));
+                started = true;
+              } else ctx.lineTo(c.x, yOf(val));
             }
-            const x = this._xFor(i);
-            const y = yOf(val);
-            if (!started) {
-              ctx.moveTo(x, y);
-              started = true;
-            } else ctx.lineTo(x, y);
+          } else {
+            for (let i = i0; i <= i1; i++) {
+              const val = s[i];
+              if (!isNum(val)) {
+                started = false;
+                continue;
+              }
+              const x = this._xFor(i);
+              const y = yOf(val);
+              if (!started) {
+                ctx.moveTo(x, y);
+                started = true;
+              } else ctx.lineTo(x, y);
+            }
           }
           ctx.stroke();
         });
@@ -1482,6 +1575,15 @@ import {
           const bodyW = Math.max(1, Math.floor(sp * 0.55));
           const y0 = clamp(pyOf(0), pr.y0, pr.y1);
           ctx.globalAlpha = 0.55;
+          if (cols) {
+            for (const c of cols) {
+              const val = res.histogram[c.i1];
+              if (!isNum(val)) continue;
+              ctx.fillStyle = val >= 0 ? pal.up : pal.down;
+              const y = pyOf(val);
+              ctx.fillRect(c.x, Math.min(y, y0), 1, Math.max(1, Math.abs(y - y0)));
+            }
+          } else {
           for (let pass = 0; pass < 2; pass++) {
             ctx.fillStyle = pass === 0 ? pal.up : pal.down;
             for (let i = i0; i <= i1; i++) {
@@ -1498,6 +1600,7 @@ import {
               );
             }
           }
+          }
           ctx.globalAlpha = 1;
         }
 
@@ -1509,18 +1612,30 @@ import {
           ctx.lineJoin = 'round';
           ctx.beginPath();
           let started = false;
-          for (let i = i0; i <= i1; i++) {
-            const val = ln.values[i];
-            if (!isNum(val)) {
-              started = false;
-              continue;
-            }
-            const x = this._xFor(i);
-            const y = pyOf(val);
+          const plot = (x, val) => {
             if (!started) {
-              ctx.moveTo(x, y);
+              ctx.moveTo(x, pyOf(val));
               started = true;
-            } else ctx.lineTo(x, y);
+            } else ctx.lineTo(x, pyOf(val));
+          };
+          if (cols) {
+            for (const c of cols) {
+              const val = ln.values[c.i1];
+              if (!isNum(val)) {
+                started = false;
+                continue;
+              }
+              plot(c.x, val);
+            }
+          } else {
+            for (let i = i0; i <= i1; i++) {
+              const val = ln.values[i];
+              if (!isNum(val)) {
+                started = false;
+                continue;
+              }
+              plot(this._xFor(i), val);
+            }
           }
           ctx.stroke();
         });
@@ -1904,7 +2019,7 @@ import {
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
         const s = clamp(
           (this._pinch.spacing * dist) / this._pinch.dist,
-          HabChart._MIN_SP,
+          this._minSpacing(),
           HabChart._MAX_SP
         );
         this._view.spacing = s;
@@ -2018,7 +2133,7 @@ import {
 
       const factor = Math.exp(-dy * (e.ctrlKey ? 0.008 : 0.0016));
       const oldSp = this._view.spacing;
-      const newSp = clamp(oldSp * factor, HabChart._MIN_SP, HabChart._MAX_SP);
+      const newSp = clamp(oldSp * factor, this._minSpacing(), HabChart._MAX_SP);
       if (newSp === oldSp) return;
       const idxAtCursor = this._indexForX(pt.x);
       this._view.spacing = newSp;
@@ -2054,12 +2169,12 @@ import {
         this._invalidate();
         this._emitRange();
       } else if (key === '+' || key === '=') {
-        this._view.spacing = clamp(this._view.spacing * 1.25, HabChart._MIN_SP, HabChart._MAX_SP);
+        this._view.spacing = clamp(this._view.spacing * 1.25, this._minSpacing(), HabChart._MAX_SP);
         this._clampView();
         this._invalidate();
         this._emitRange();
       } else if (key === '-' || key === '_') {
-        this._view.spacing = clamp(this._view.spacing / 1.25, HabChart._MIN_SP, HabChart._MAX_SP);
+        this._view.spacing = clamp(this._view.spacing / 1.25, this._minSpacing(), HabChart._MAX_SP);
         this._clampView();
         this._invalidate();
         this._emitRange();

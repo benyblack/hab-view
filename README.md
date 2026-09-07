@@ -304,6 +304,12 @@ Hot paths are deliberately allocation-light: date labels are built lazily only
 for actual axis ticks (with cached `Intl.DateTimeFormat`s), and candles/volume
 are drawn in two batched passes by direction instead of one draw call per bar.
 
+**Deep zoom-outs are columnar**: when more bars are visible than ~1.5× the
+pixel width, bars aggregate into per-pixel min/max columns (first open / max
+high / min low / last close / summed volume), so rendering any history at any
+zoom costs O(screen width), not O(bars). The minimum zoom level adapts to the
+dataset — every chart can be zoomed out until the entire history fits.
+
 If you ever push past this (100k+ simultaneously visible bars, dozens of
 series, high-frequency ticks), the scaling levers are: incremental indicator
 updates (SMA/EMA/RSI are O(1) online), min/max columnar downsampling per pixel
