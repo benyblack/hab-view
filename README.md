@@ -411,6 +411,31 @@ s.volPctile; // 84 → hot regime relative to the window itself
 s.patterns;  // [{ time, note }] — most recent first
 ```
 
+### AI agent interface — the chart as a tool surface
+
+The chart can publish its own **tool manifest** and accept validated
+tool-calls, so any LLM can operate it with zero glue code — the chart never
+touches the network; you supply the model call.
+
+```js
+chart.aiTools();    // manifest: get_data_window, set_indicators, set_overlays, add_alert, …
+chart.aiPrompt();   // system prompt demanding JSON [{tool, args}] ops
+chart.aiContext();  // grounding: current state + visible-window summary
+chart.applyAI(ops); // validated dispatcher — per-op {ok, result} / {ok:false, error}
+
+const { results } = await chart.ask(
+  'add RSI, mark the demand zone, and alert me on volume spikes',
+  { run: async (payload) => (await callMyLLM(payload)).ops }
+);
+```
+
+Every op is whitelisted and its args validated (indicator names checked
+against the registry, overlays through the sanitizer, enums enforced) — LLM
+output is treated as untrusted input, and a bad op returns an error the
+model can self-correct from instead of throwing. The
+[docs page](./docs.html) has a live playground driving `applyAI()` with an
+offline demo agent (no network, no keys).
+
 `text` renders like:
 
 ```

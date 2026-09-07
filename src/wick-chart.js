@@ -30,6 +30,7 @@ import {
   calcRealizedVol, volRegimeBands, percentileOfSorted, parseVolShading,
   windowSummary, normalizeOverlays, barIndexForTime, resolveOverlayColor,
   compileScript, predicateTrueSeries, scriptAlertStep,
+  AI_TOOLS, aiPromptText, applyChartOps,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -870,6 +871,67 @@ class WickChart extends HTMLElementBase {
     clearOverlays() {
       this._overlays = [];
       this._invalidate();
+    }
+
+    /* ------------------------------------------------------------ *
+     * AI agent interface — the chart as a tool surface
+     * ------------------------------------------------------------ */
+
+    /** Tool manifest for LLM control — JSON-safe copy of AI_TOOLS. */
+    aiTools() {
+      return JSON.parse(JSON.stringify(AI_TOOLS));
+    }
+
+    /** System prompt for agent control — paste into any LLM alongside aiTools(). */
+    aiPrompt() {
+      return aiPromptText();
+    }
+
+    /** Grounding context for a model: current state + visible-window summary. */
+    aiContext() {
+      return { state: this.getState(), window: this.getDataWindow() };
+    }
+
+    /**
+     * Apply a list of {tool, args} ops (typically LLM output) through the
+     * validated dispatcher in core. Never throws — each op resolves
+     * {ok, tool, result} or {ok: false, tool, error} so an agent can
+     * self-correct.
+     * @param {any} ops
+     * @returns {Array<object>}
+     */
+    applyAI(ops) {
+      return applyChartOps(this, ops);
+    }
+
+    /**
+     * Ask an AI to operate the chart. Builds the payload {system,
+     * instruction, chart, tools}; with a `run` async function (your model
+     * call — the chart itself never touches the network), applies the
+     * returned ops and resolves {payload, ops, results}. Without `run`,
+     * returns the payload for manual wiring — send it anywhere, then call
+     * chart.applyAI(ops) with the model's answer.
+     *
+     *   const { results } = await chart.ask('add RSI and mark the demand zone', {
+     *     run: async (payload) => (await callMyLLM(payload)).ops,
+     *   });
+     *
+     * @param {string} instruction natural-language request
+     * @param {{run?: (payload: object) => Promise<any>}} [opts]
+     */
+    async ask(instruction, opts = {}) {
+      const payload = {
+        system: aiPromptText(),
+        instruction: String(instruction == null ? '' : instruction),
+        chart: this.aiContext(),
+        tools: this.aiTools(),
+      };
+      if (typeof opts.run !== 'function') {
+        return { payload, ops: null, results: null };
+      }
+      const ops = await opts.run(payload);
+      const results = this.applyAI(ops);
+      return { payload, ops, results };
     }
 
     /** Check alerts against an incoming bar (prev close → new close).

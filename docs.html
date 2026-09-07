@@ -199,6 +199,7 @@
         <li><a href="#trading">Positions &amp; alerts</a></li>
         <li><a href="#analysis">Stats, profile &amp; annotations</a></li>
         <li><a href="#ai">AI-ready data window</a></li>
+        <li><a href="#agent">AI agent interface</a></li>
         <li><a href="#feeds">Feeds (&lt;wick-feed&gt;)</a></li>
         <li><a href="#events">Events</a></li>
         <li><a href="#state">State &amp; shareable URLs</a></li>
@@ -514,6 +515,39 @@ s.patterns;   <span class="cmt">// [{ time, note }] — most recent first</span>
           <pre class="out" id="ai-out" style="display:none"></pre>
         </div>
       </section>
+      <section id="agent">
+        <h2>AI agent interface <a class="anchor" href="#agent">#</a> <span class="pill new">NEW</span></h2>
+        <p>The chart can publish its own <b>tool manifest</b> and accept validated tool-calls — wire <em>any</em> LLM to it with zero glue. The chart itself never touches the network: you supply the model call.</p>
+        <div class="codewrap"><pre class="code"><span class="cmt">// 1 — the pieces (paste aiPrompt() into any chat, then apply the answer)</span>
+chart.<span class="attr">aiTools</span>();    <span class="cmt">// tool manifest: get_data_window, set_indicators, set_overlays, add_alert, …</span>
+chart.<span class="attr">aiPrompt</span>();   <span class="cmt">// system prompt demanding JSON [{tool, args}] ops</span>
+chart.<span class="attr">aiContext</span>();  <span class="cmt">// grounding: current state + visible-window summary</span>
+chart.<span class="attr">applyAI</span>(ops); <span class="cmt">// validated dispatcher — each op returns {ok, result} or {ok:false, error}</span>
+
+<span class="cmt">// 2 — one call, full round trip (bring your own model)</span>
+<span class="tag">const</span> { results } = <span class="tag">await</span> chart.<span class="attr">ask</span>(
+  <span class="str">'add RSI, mark the demand zone below price, and alert me on volume spikes'</span>,
+  { <span class="attr">run</span>: <span class="tag">async</span> (payload) =&gt; (<span class="tag">await</span> callMyLLM(payload)).ops }
+);</pre></div>
+        <p>Every op is whitelisted and its args validated (indicator names checked against the registry, overlays through the normal sanitizer, enums enforced) — LLM output is untrusted input, so a bad op returns an error the model can self-correct from instead of breaking the chart.</p>
+
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live playground</span>
+            <span class="spacer"></span>
+            <span style="font-size:12px;color:var(--muted)">offline demo agent — no LLM, no network</span>
+          </div>
+          <div style="display:flex; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); background: var(--panel); flex-wrap:wrap;">
+            <input type="text" id="ag-instruction" style="flex:1 1 320px" spellcheck="false"
+                   value="show RSI and MACD, mark the demand zone, and alert on volume spikes" aria-label="Instruction for the demo agent" />
+            <button class="primary" id="ag-run">Run agent → applyAI()</button>
+          </div>
+          <wick-feed for="ex-agent" demo="BTC" tf="1h" limit="300"></wick-feed>
+          <wick-chart id="ex-agent" label="BTC · 1h · agent-controlled" indicators="sma:20"></wick-chart>
+          <pre class="out" id="ag-out" style="display:none"></pre>
+        </div>
+      </section>
+
       <section id="feeds">
         <h2>Feeds — <code>&lt;wick-feed&gt;</code> <a class="anchor" href="#feeds">#</a></h2>
         <p>A declarative data source that pairs with any chart — a fully live chart with zero JavaScript written.</p>
@@ -914,6 +948,50 @@ location.hash = encodeStateQuery(chart.getState());   <span class="cmt">// → U
       out.style.display = 'block';
       out.textContent = $('ex-ai').getDataWindow().text;
     });
+
+    /* ---------- offline demo agent (no LLM — keyword → ops, via applyAI) ---------- */
+    {
+      const c = $('ex-agent'), out = $('ag-out');
+      const agentOps = (instruction) => {
+        const s = String(instruction).toLowerCase();
+        const ops = [];
+        if (/(summary|explain|analy[sz])/.test(s)) ops.push({ tool: 'get_data_window' });
+        const ind = [];
+        if (s.includes('rsi')) ind.push('rsi:14');
+        if (s.includes('macd')) ind.push('macd:12/26/9');
+        if (s.includes('sma')) ind.push('sma:20');
+        if (ind.length) ops.push({ tool: 'set_indicators', args: { indicators: ind.join(' ') } });
+        for (const t of ['line', 'area', 'candles', 'heikin']) {
+          if (s.includes(t)) ops.push({ tool: 'set_type', args: { type: t } });
+        }
+        if (/(zone|demand|supply|support)/.test(s)) {
+          const d = c.data;
+          if (d && d.length) {
+            const recent = d.slice(-140);
+            let hi = -Infinity, lo = Infinity;
+            for (const b of recent) { if (b.high > hi) hi = b.high; if (b.low < lo) lo = b.low; }
+            ops.push({ tool: 'set_overlays', args: { overlays: [
+              { type: 'zone', priceFrom: hi * 1.004, priceTo: hi * 1.028, color: '#26a69a', alpha: 0.2, label: 'supply' },
+              { type: 'zone', priceFrom: lo * 0.972, priceTo: lo * 0.996, color: '#ef5350', alpha: 0.2, label: 'demand' },
+            ] } });
+          }
+        }
+        if (/alert/.test(s)) ops.push({ tool: 'add_alert', args: { when: 'volume > sma(volume,20) * 3' } });
+        if (/(shading|volatil)/.test(s)) ops.push({ tool: 'set_volshading', args: { enabled: true, low: 20, high: 85 } });
+        if (!ops.length) ops.push({ tool: 'get_data_window' });
+        return ops;
+      };
+      $('ag-run').addEventListener('click', () => {
+        const ops = agentOps($('ag-instruction').value);
+        const results = c.applyAI(ops);
+        out.style.display = 'block';
+        out.textContent =
+          'ops →\n' + JSON.stringify(ops, null, 2) + '\n\nresults →\n' +
+          results
+            .map((r) => (r.ok ? '✓ ' + r.tool : '✗ ' + (r.tool || '?') + ' — ' + r.error))
+            .join('\n');
+      });
+    }
 
     /* ---------- events log ---------- */
     {
