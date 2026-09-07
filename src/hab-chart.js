@@ -23,7 +23,7 @@ import {
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
   positionPnl, checkAlertCross, computeStats, safeColor,
   SERIES_TYPES, calcHeikinAshi, buildColumns, computeVolumeProfile,
-  calcRSI, detectAnnotations,
+  calcRSI, detectAnnotations, priceToFreq,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -32,7 +32,7 @@ import {
 
   class HabChart extends HTMLElement {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'co-view'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'co-view', 'sonify'];
     }
 
     constructor() {
@@ -188,6 +188,12 @@ import {
       this._coviewLast = 0;
       this._ghost = null;
       this._ghostTimer = 0;
+
+      // sonification state
+      this._sonify = false;
+      this._actx = null;
+      this._lastToneIdx = -1;
+      this._playToken = 0;
       this._measure = null; // { iA, pA, iB, pB, done }
       this._measuring = false;
       this._ind = { overlays: [], panes: [], volume: true };
@@ -309,6 +315,10 @@ import {
         case 'co-view':
           this._coviewName = val || null;
           this._setupCoView();
+          break;
+        case 'sonify':
+          this._sonify = val != null && val !== 'false';
+          this._lastToneIdx = -1;
           break;
       }
       this._invalidate();
@@ -2266,6 +2276,7 @@ import {
       // hover / crosshair
       const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
       this._hover = { index: idx, x: this._xFor(idx), y: pt.y };
+      this._maybeSonify(idx);
       this._emitCrosshair(this._hover);
       this._invalidate();
     }
@@ -2367,6 +2378,7 @@ import {
         const cur = this._hover ? this._hover.index : d.length - 1;
         const idx = clamp(cur + (key === 'ArrowRight' ? step : -step), 0, d.length - 1);
         this._hover = { index: idx, x: this._xFor(idx), y: this._hover ? this._hover.y : ly.main.y1 * 0.5 };
+        this._maybeSonify(idx);
         this._emitCrosshair(this._hover);
         this._invalidate();
       } else if (key === 'Home') {
@@ -2401,6 +2413,104 @@ import {
         handled = false;
       }
       if (handled) e.preventDefault();
+    }
+
+    /* ------------------------------------------------------------ *
+     * Sonification — the chart by ear (a11y)
+     * ------------------------------------------------------------ */
+
+    /** Lazily-created shared AudioContext (enable within a user gesture). */
+    _audio() {
+      if (this._actx) return this._actx;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      try {
+        this._actx = new AC();
+      } catch (_) {
+        this._actx = null;
+      }
+      return this._actx;
+    }
+
+    /** Short sine blip; `when` schedules against AudioContext time. */
+    _tone(freq, dur = 0.14, when = 0) {
+      const ctx = this._audio();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const t0 = when || ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.18, t0 + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.03);
+    }
+
+    /** One tone for a bar's close, pitched by its position on the y-scale. */
+    _sonifyBar(i) {
+      if (!this._sonify || !this._data.length || !this._lastScale) return;
+      const d = this._renderBars();
+      const b = d[clamp(i, 0, d.length - 1)];
+      if (!b) return;
+      this._tone(priceToFreq(b.close, this._lastScale));
+    }
+
+    /** One tone per crosshair bar change (dedupes y-only moves). */
+    _maybeSonify(idx) {
+      if (!this._sonify) return;
+      if (this._lastToneIdx === idx) return;
+      this._lastToneIdx = idx;
+      this._sonifyBar(idx);
+    }
+
+    /**
+     * Play the visible range as a pitch sweep (~4s), riding the crosshair —
+     * the audible equivalent of running your eye along the price line.
+     */
+    playRange() {
+      if (!this._data.length || !this._ly) return;
+      const ctx = this._audio();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const d = this._renderBars();
+      const count = Math.max(2, Math.round(this._ly.plotRight / this._view.spacing));
+      const i0 = clamp(Math.floor(this._view.rightIndex - count) - 1, 0, d.length - 1);
+      const i1 = clamp(Math.ceil(this._view.rightIndex), 0, d.length - 1);
+      if (i1 - i0 < 2) return;
+      const N = Math.min(120, i1 - i0 + 1);
+      const stepMs = Math.min(70, Math.max(24, 4000 / N));
+      const t0 = ctx.currentTime + 0.05;
+      for (let k = 0; k < N; k++) {
+        const i = Math.round(i0 + ((i1 - i0) * k) / (N - 1));
+        const b = d[i];
+        if (!b) continue;
+        this._tone(priceToFreq(b.close, this._lastScale), stepMs / 1000 * 0.9, t0 + (k * stepMs) / 1000);
+      }
+      // ride the crosshair along the sweep for sighted users
+      this._playToken++;
+      const token = this._playToken;
+      let k = 0;
+      const timer = setInterval(() => {
+        if (token !== this._playToken || !this._connected) {
+          clearInterval(timer);
+          return;
+        }
+        if (k >= N) {
+          clearInterval(timer);
+          this._hover = null;
+          this._emitCrosshair(null);
+          this._invalidate();
+          return;
+        }
+        const i = Math.round(i0 + ((i1 - i0) * k) / (N - 1));
+        this._hover = { index: i, x: this._xFor(i), y: this._ly ? this._ly.main.h * 0.5 : 0 };
+        this._invalidate();
+        k++;
+      }, stepMs);
     }
 
     _emitCrosshair(hover) {

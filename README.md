@@ -168,6 +168,16 @@ chart.indicators = 'vwap:20';
 `HabChart.registerIndicator(...)` (the element is registered as a side effect
 of importing the package).
 
+### Sonification — the chart by ear
+
+`<hab-chart sonify>` maps price to pitch (180–880 Hz across the visible
+scale, log-aware): moving the crosshair with the mouse or **arrow keys** plays
+a short tone per bar, so trend and shape are audible — a rare accessibility
+win for screen-reader users. `chart.playRange()` sweeps the whole visible
+range as a ~4-second pitch sequence, riding the crosshair along for sighted
+users. Audio starts lazily within the enabling user gesture (autoplay-policy
+safe).
+
 ### Cross-tab co-view
 
 Tag charts with the same channel and they share pointers — across browser
