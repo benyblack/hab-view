@@ -1,6 +1,35 @@
 /* HabView demo — data feeds & UI wiring around <hab-chart>. */
-import '../src/hab-chart.js';
+import HabChart from '../src/hab-chart.js';
 import { encodeStateQuery, decodeStateQuery } from '../src/core.js';
+
+/* ------------------------------------------------------------------ *
+ * VWAP — a reference custom indicator built entirely through the
+ * public registry API (same code as the README example).
+ * ------------------------------------------------------------------ */
+HabChart.registerIndicator('vwap', {
+  kind: 'overlay',
+  params: {},
+  compute(bars) {
+    const out = new Array(bars.length).fill(null);
+    let pv = 0;
+    let vv = 0;
+    let day = -1;
+    for (let i = 0; i < bars.length; i++) {
+      const b = bars[i];
+      const d = new Date(b.time).setHours(0, 0, 0, 0);
+      if (d !== day) {
+        day = d;
+        pv = 0;
+        vv = 0;
+      }
+      const tp = (b.high + b.low + b.close) / 3;
+      pv += tp * b.volume;
+      vv += b.volume;
+      out[i] = vv ? pv / vv : null;
+    }
+    return out;
+  },
+});
 
 /* ------------------------------------------------------------------ *
  * Config
@@ -27,6 +56,7 @@ const INDICATORS = [
   { id: 'sma:20', label: 'SMA 20', color: '#f0b429' },
   { id: 'ema:50', label: 'EMA 50', color: '#38bdf8' },
   { id: 'bb:20', label: 'BB 20', color: '#e64980' },
+  { id: 'vwap', label: 'VWAP', color: '#22d3ee' },
   { id: 'rsi:14', label: 'RSI 14', color: '#a78bfa' },
   { id: 'macd:12/26/9', label: 'MACD', color: '#34d399' },
   { id: 'volume', label: 'Volume', color: '#7c8598' },
@@ -418,7 +448,7 @@ function readHash() {
   const tf = p.get('tf');
   if (tf && TFS.some((t) => t.id === tf)) state.tf = tf;
   const s = decodeStateQuery(location.hash.slice(1));
-  if (s.type && ['candles', 'line', 'area'].includes(s.type)) state.type = s.type;
+  if (s.type && ['candles', 'line', 'area', 'bars', 'hollow', 'heikin'].includes(s.type)) state.type = s.type;
   if (s.theme === 'light' || s.theme === 'dark') state.theme = s.theme;
   if (typeof s.stats === 'boolean') state.stats = s.stats;
   if (s.indicators) {

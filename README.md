@@ -87,7 +87,7 @@ chart.setData([
 | Attribute     | Default    | Description                                                        |
 | ------------- | ---------- | ------------------------------------------------------------------ |
 | `theme`       | `dark`     | `dark` or `light`                                                   |
-| `type`        | `candles`  | `candles`, `line`, or `area`                                        |
+| `type`        | `candles`  | `candles`, `line`, `area`, `bars` (OHLC), `hollow` (hollow up-candles), `heikin` (Heikin-Ashi) |
 | `indicators`  | `volume`*  | Space/comma-separated: `sma:20`, `ema:50`, `bb:20`, `rsi:14`, `macd:12/26/9`, `volume`, or any registered indicator |
 | `label`       | –          | Text shown in the legend (e.g. `"BTC · 1h"`)                        |
 | `log`         | off        | Logarithmic price scale                                             |
@@ -135,6 +135,35 @@ chart.indicators = 'vwap:20';
 `import HabChart from 'hab-view'` gives you the class for
 `HabChart.registerIndicator(...)` (the element is registered as a side effect
 of importing the package).
+
+### Example: VWAP via the registry
+
+VWAP ships in the demo but *not* as a builtin — it's the reference for writing
+your own (session-anchored, resets each trading day):
+
+```js
+import HabChart from 'hab-view';
+
+HabChart.registerIndicator('vwap', {
+  kind: 'overlay',
+  params: {},
+  compute(bars) {
+    const out = new Array(bars.length).fill(null);
+    let pv = 0, vv = 0, day = -1;
+    for (let i = 0; i < bars.length; i++) {
+      const b = bars[i];
+      const d = new Date(b.time).setHours(0, 0, 0, 0);
+      if (d !== day) { day = d; pv = 0; vv = 0; }
+      const tp = (b.high + b.low + b.close) / 3;
+      pv += tp * b.volume;
+      vv += b.volume;
+      out[i] = vv ? pv / vv : null;
+    }
+    return out;
+  },
+});
+chart.indicators = 'vwap';
+```
 
 ## Methods
 

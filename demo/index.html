@@ -53,6 +53,26 @@
             <path d="M3 15.5l5-6 4 3.4L21 6v12H3z" fill="currentColor" fill-opacity=".18" stroke="none"/>
           </svg><span>Area</span>
         </button>
+        <button type="button" data-type="bars" aria-pressed="false" title="OHLC bars">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+            <path d="M7 4v16M4 9h3M7 15h3M17 6v12M14 10h3M17 14h3"/>
+          </svg><span>Bars</span>
+        </button>
+        <button type="button" data-type="hollow" aria-pressed="false" title="Hollow candles">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+            <path d="M7 4v3.2M7 14.8V20"/>
+            <rect x="4.8" y="7.2" width="4.4" height="7.6" rx="1" fill="none"/>
+            <path d="M17 6.5v1.7M17 14.1V20M14.8 8.2h4.4v5.9h-4.4z" fill="currentColor" fill-opacity=".25" stroke="none"/>
+          </svg><span>Hollow</span>
+        </button>
+        <button type="button" data-type="heikin" aria-pressed="false" title="Heikin-Ashi">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+            <path d="M7 3.5v3M7 15v5.5"/>
+            <rect x="4.9" y="6.5" width="4.2" height="8.5" rx="1" fill="currentColor" fill-opacity=".3"/>
+            <path d="M17 5v2.3M17 15.5V19"/>
+            <rect x="14.9" y="7.3" width="4.2" height="8.2" rx="1" fill="currentColor" fill-opacity=".3"/>
+          </svg><span>Heikin</span>
+        </button>
       </div>
       <div class="chips" id="chips" role="group" aria-label="Indicators"></div>
       <div class="seg" id="seg-trade" role="group" aria-label="Trading">

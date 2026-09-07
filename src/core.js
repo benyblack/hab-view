@@ -63,7 +63,7 @@
 /**
  * Serializable chart snapshot (see `getState()` / `setState()`).
  * @typedef {object} ChartState
- * @property {'candles'|'line'|'area'} [type]
+ * @property {'candles'|'line'|'area'|'bars'|'hollow'|'heikin'} [type]
  * @property {'dark'|'light'} [theme]
  * @property {boolean} [log]
  * @property {boolean} [stats]
@@ -487,6 +487,36 @@ export function detectGaps(bars, i0, i1, dtMs, threshold = 3) {
     if (bars[i].time - bars[i - 1].time > th) gaps.push(i);
   }
   return gaps;
+}
+
+/** Supported values for the `type` attribute. */
+export const SERIES_TYPES = ['candles', 'line', 'area', 'bars', 'hollow', 'heikin'];
+
+/**
+ * Heikin-Ashi transform (smoothed candles; time/volume pass through).
+ * @param {Bar[]} bars
+ * @returns {Bar[]}
+ */
+export function calcHeikinAshi(bars) {
+  const out = new Array(bars.length);
+  let po = null;
+  let pc = null;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    const close = (b.open + b.high + b.low + b.close) / 4;
+    const open = po == null ? (b.open + b.close) / 2 : (po + pc) / 2;
+    out[i] = {
+      time: b.time,
+      open,
+      close,
+      high: Math.max(b.high, open, close),
+      low: Math.min(b.low, open, close),
+      volume: b.volume,
+    };
+    po = open;
+    pc = close;
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ *
