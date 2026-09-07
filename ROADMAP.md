@@ -3,9 +3,16 @@
 North star: **"TradingView-class usefulness inside a zero-dependency custom element."**
 Every feature must survive the test: *one tag, zero build step, sane defaults*.
 
-Current state (v0.1): candles/line/area, volume, SMA/EMA overlays, RSI pane,
-crosshair + OHLC legend, zoom/pan/pinch/keyboard, streaming, theming, PNG
-export, ~0.2 ms per frame at default zoom.
+Current state (v0.2): candles/line/area, volume, SMA/EMA/BB overlays, RSI/MACD
+panes + custom indicator registry, history backfill, gap dividers, positions
+& alerts with live P&L, visible-range stats, measure tool, shareable URL
+state, crosshair + OHLC legend, zoom/pan/pinch/keyboard, streaming, theming,
+PNG export, ~0.2 ms per frame at default zoom.
+
+**Done (2026-09):** the five recommended PRs below — loadMore backfill + gap
+dividers, indicator registry + Bollinger + MACD, positions/orders + alerts,
+stats panel + measure tool, getState/setState + URL sharing. Plus a security
+hardening pass (strict color validation for untrusted attribute input).
 
 Effort: **S** ≤ a day · **M** a few days · **L** a week+. Order within a track
 is suggested priority.
@@ -88,10 +95,14 @@ Canvas 2D floor is ~1 ms at our scale — revisit only with profiler evidence).
 
 ## Recommended next five PRs (value ÷ effort)
 
-1. **`loadMore` backfill + gap dividers** — unblocks real production apps.
-2. **Indicator registry + Bollinger + MACD** — proves extensibility, most requested.
-3. **Positions/orders + alerts** — the headline "more useful than TradingView" feature.
-4. **Stats panel + measure tool** — two cheap, high-visibility wins.
-5. **`getState()/setState()` + URL sharing** — stickiness and shareable links.
+1. ~~**`loadMore` backfill + gap dividers**~~ ✅ shipped
+2. ~~**Indicator registry + Bollinger + MACD**~~ ✅ shipped
+3. ~~**Positions/orders + alerts**~~ ✅ shipped
+4. ~~**Stats panel + measure tool**~~ ✅ shipped
+5. ~~**`getState()/setState()` + URL sharing**~~ ✅ shipped
+
+**Next up (suggested):** OHLC-bars/hollow/Heikin-Ashi series types, VWAP via
+the registry as a reference custom indicator, a `loadMore` + worker compute
+path for 1M-bar histories, and npm packaging with TypeScript types.
 
 Each PR lands with the perf gate green (<1 ms default view, <8 ms max zoom-out).
