@@ -1,5 +1,5 @@
 /* ==========================================================================
- * HabView feeds — data-source helpers shared by <hab-feed> and the demo app.
+ * WickChart feeds — data-source helpers shared by <wick-feed> and the demo app.
  * Browser module (uses fetch/WebSocket inside functions); importable in Node
  * for unit-testing the pure generators.
  * MIT License.

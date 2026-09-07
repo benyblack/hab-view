@@ -1,6 +1,6 @@
-# HabView
+# WickChart
 
-**`<hab-chart>` — a modern, simpler, more useful charting web component.**
+**`<wick-chart>` — a modern, simpler, more useful charting web component.**
 
 A TradingView-style financial chart as a single framework-agnostic Web Component.
 One file, zero dependencies, one HTML tag. Canvas-rendered, fast, themeable, and
@@ -14,8 +14,8 @@ npm install wickchart
 
 ```js
 // any bundler / framework — TypeScript types included
-import 'wickchart';                       // registers <hab-chart>
-import HabChart from 'wickchart';         // for HabChart.registerIndicator(...)
+import 'wickchart';                       // registers <wick-chart>
+import WickChart from 'wickchart';         // for WickChart.registerIndicator(...)
 import { encodeStateQuery } from 'wickchart/core';  // pure helpers
 ```
 
@@ -24,10 +24,10 @@ Or straight from a CDN — no install, no build:
 ```html
 <script type="module" src="https://unpkg.com/wickchart"></script>
 
-<hab-chart label="BTC · 1h" type="candles" indicators="sma:20 volume"></hab-chart>
+<wick-chart label="BTC · 1h" type="candles" indicators="sma:20 volume"></wick-chart>
 
 <script type="module">
-  const chart = document.querySelector('hab-chart');
+  const chart = document.querySelector('wick-chart');
   chart.setData(bars);   // [{ time, open, high, low, close, volume }]
   chart.update(bar);     // stream live updates
 </script>
@@ -37,7 +37,7 @@ Works in plain HTML, React, Vue, Svelte, Angular — anywhere a `<div>` works.
 TypeScript declarations ship inside the package (generated at pack time from
 the JSDoc-annotated source — the repo itself stays 100% dependency-free JS).
 
-## Declarative live charts with `<hab-feed>`
+## Declarative live charts with `<wick-feed>`
 
 One more script tag and your chart is fully live — data, backfill, streaming —
 with **zero JavaScript written**:
@@ -45,13 +45,13 @@ with **zero JavaScript written**:
 ```html
 <script type="module" src="https://unpkg.com/wickchart/feed"></script>
 
-<hab-feed for="chart" binance="BTCUSDT" tf="1h"></hab-feed>
-<hab-chart id="chart" indicators="sma:20 volume" profile></hab-chart>
+<wick-feed for="chart" binance="BTCUSDT" tf="1h"></wick-feed>
+<wick-chart id="chart" indicators="sma:20 volume" profile></wick-chart>
 ```
 
 | Attribute   | Meaning                                                                 |
 | ----------- | ----------------------------------------------------------------------- |
-| `for`       | target `<hab-chart>` id (auto-pairs with the first chart when omitted)   |
+| `for`       | target `<wick-chart>` id (auto-pairs with the first chart when omitted)   |
 | `binance`   | Binance symbol (`BTCUSDT`) — REST load + WebSocket live + backfill       |
 | `demo`      | deterministic offline synthetic feed (`demo="ETH"` picks a base price)   |
 | `url`       | generic REST endpoint returning a JSON array of bars (+ `poll="10"` sec) |
@@ -61,7 +61,7 @@ with **zero JavaScript written**:
 
 The element reflects its state in the `status` attribute (`loading`, `live`,
 `polling`, `fallback`, `loaded`, `waiting`, `idle`) and emits
-`hab-feed:status` / `hab-feed:fallback` events. When Binance is unreachable
+`wick-feed:status` / `wick-feed:fallback` events. When Binance is unreachable
 (geo-blocked, offline), it degrades gracefully: WebSocket → REST polling → a
 synthetic stream bridged from the last real price, so the chart never goes
 blank. It also wires `chart.onloadmore` for infinite backfill automatically.
@@ -71,7 +71,7 @@ blank. It also wires `chart.onloadmore` for infinite backfill automatically.
 ## Why another chart library?
 
 TradingView's charting library is powerful but heavy and enterprise-licensed;
-most wrappers add build steps and framework lock-in. HabView takes the opposite
+most wrappers add build steps and framework lock-in. WickChart takes the opposite
 bet:
 
 - **Zero dependencies, single file** (~40 KB unminified, no build step required)
@@ -147,7 +147,7 @@ Register your own — anything from a one-liner moving average to a multi-line
 pane:
 
 ```js
-HabChart.registerIndicator('vwap', {
+WickChart.registerIndicator('vwap', {
   kind: 'overlay',               // or 'pane'
   params: { period: 20 },        // defaults; set via indicators="vwap:30"
   compute(bars, params) {        // bars: normalized {time,open,high,low,close,volume}
@@ -165,11 +165,11 @@ HabChart.registerIndicator('vwap', {
 chart.indicators = 'vwap:20';
 ```
 
-`import HabChart from 'wickchart'` gives you the class for
-`HabChart.registerIndicator(...)` (the element is registered as a side effect
+`import WickChart from 'wickchart'` gives you the class for
+`WickChart.registerIndicator(...)` (the element is registered as a side effect
 of importing the package).
 
-### HabScript — custom indicators as expressions
+### WickScript — custom indicators as expressions
 
 No build step, no JS: write an indicator inline in the attribute. `expr:{…}`
 draws on the price chart; `pexpr:{…}` gets its own pane. Add an optional
@@ -177,10 +177,10 @@ draws on the price chart; `pexpr:{…}` gets its own pane. Add an optional
 shareable URLs.
 
 ```html
-<hab-chart indicators="sma:20 expr:{(close - sma(close,20)) / sma(close,20) * 100}@ff6a00"></hab-chart>
+<wick-chart indicators="sma:20 expr:{(close - sma(close,20)) / sma(close,20) * 100}@ff6a00"></wick-chart>
 
 <!-- oscillator in its own pane -->
-<hab-chart indicators="pexpr:{rsi(close,14)} pexpr:{change(close) / close * 100}"></hab-chart>
+<wick-chart indicators="pexpr:{rsi(close,14)} pexpr:{change(close) / close * 100}"></wick-chart>
 ```
 
 | Series variables | |
@@ -213,7 +213,7 @@ attribute syntax:
 ```js
 import { scriptIndicator } from 'wickchart/core';
 
-HabChart.registerIndicator('spread', scriptIndicator('close - ema(close,21)'));
+WickChart.registerIndicator('spread', scriptIndicator('close - ema(close,21)'));
 chart.indicators = 'spread';   // now usable like any built-in
 ```
 
@@ -222,7 +222,7 @@ press **+ Expr** — invalid expressions show the compiler's error inline).
 
 ### Volatility-regime shading
 
-`<hab-chart volshading>` tints the price pane background by realized
+`<wick-chart volshading>` tints the price pane background by realized
 volatility — the rolling stddev of log returns (20 bars by default),
 classified against its own full-history percentiles: **calm** (≤ 30th
 percentile, subtle blue), **normal** (untinted), **hot** (≥ 70th percentile,
@@ -231,9 +231,9 @@ read instantly, and the legend shows the hovered bar's regime and
 percentile (`VOL 30/70 · hot · 94%ile`).
 
 ```html
-<hab-chart volshading></hab-chart>                 <!-- defaults 30/70, 20 bars -->
-<hab-chart volshading="20/85"></hab-chart>         <!-- custom cutoffs -->
-<hab-chart volshading="20/85/50"></hab-chart>      <!-- + 50-bar vol window -->
+<wick-chart volshading></wick-chart>                 <!-- defaults 30/70, 20 bars -->
+<wick-chart volshading="20/85"></wick-chart>         <!-- custom cutoffs -->
+<wick-chart volshading="20/85/50"></wick-chart>      <!-- + 50-bar vol window -->
 ```
 
 Cutoffs are clamped so the low percentile always stays at least 2 points
@@ -277,7 +277,7 @@ from `wickchart/core` for server-side use.
 
 ### Sonification — the chart by ear
 
-`<hab-chart sonify>` maps price to pitch (180–880 Hz across the visible
+`<wick-chart sonify>` maps price to pitch (180–880 Hz across the visible
 scale, log-aware): moving the crosshair with the mouse or **arrow keys** plays
 a short tone per bar, so trend and shape are audible — a rare accessibility
 win for screen-reader users. `chart.playRange()` sweeps the whole visible
@@ -291,7 +291,7 @@ Tag charts with the same channel and they share pointers — across browser
 tabs, or between multiple charts on one page:
 
 ```html
-<hab-chart co-view="btc-room"></hab-chart>
+<wick-chart co-view="btc-room"></wick-chart>
 ```
 
 Hovering in one tab draws a ghost crosshair (accent, dotted, with the time
@@ -302,12 +302,12 @@ stops moving. Same-origin only (BroadcastChannel); the connection follows the
 
 ### Smart annotations
 
-`<hab-chart annotations>` marks notable events on the visible range — volume
+`<wick-chart annotations>` marks notable events on the visible range — volume
 spikes (>3× average), price gaps, 41-bar pivot highs/lows, and RSI
 divergences — with lettered badges (V/G/H/L/D). Hover a badged bar and the
 legend shows a one-line insight ("Volume 4.2× average", "Bearish RSI
 divergence"). The current set is emitted on every recompute via the
-`hab:annotations` event, so hosts can build their own UI from it. Badges are
+`wick:annotations` event, so hosts can build their own UI from it. Badges are
 hidden at extreme zoom-out, where bars collapse into columns.
 
 ### Example: VWAP via the registry
@@ -316,9 +316,9 @@ VWAP ships in the demo but *not* as a builtin — it's the reference for writing
 your own (session-anchored, resets each trading day):
 
 ```js
-import HabChart from 'wickchart';
+import WickChart from 'wickchart';
 
-HabChart.registerIndicator('vwap', {
+WickChart.registerIndicator('vwap', {
   kind: 'overlay',
   params: {},
   compute(bars) {
@@ -381,7 +381,7 @@ chart.addPosition({ id: 'x1', side: 'short', entry: 66000, qty: 1 });
 chart.removePosition('x1');
 
 chart.addAlert({ price: 65000, direction: 'above' }); // 'above' | 'below' | 'cross'
-chart.addEventListener('hab:alert', (e) => {
+chart.addEventListener('wick:alert', (e) => {
   console.log('crossed!', e.detail.id, e.detail.price);
 });
 ```
@@ -391,12 +391,12 @@ The P&L chip recalculates on every streamed bar. Alerts are edge-triggered
 
 ### Stats & measure
 
-`<hab-chart stats>` shows live statistics of the visible range — return %,
+`<wick-chart stats>` shows live statistics of the visible range — return %,
 max drawdown, annualized volatility, up/down bar counts, average volume —
 recalculated as you pan and zoom.
 
 Hold **Shift and drag** across the chart to measure a move: an overlay shows
-Δprice, Δ%, bar count and elapsed time, and a `hab:measure` event fires on
+Δprice, Δ%, bar count and elapsed time, and a `wick:measure` event fires on
 release (`detail.from` / `detail.to` carry index, time and price). Click or
 press `Esc` to clear.
 
@@ -423,9 +423,9 @@ Reflected properties (`chart.type = 'line'`) work for `theme`, `type`, `label`,
 
 | Event           | Detail                                                     |
 | --------------- | ---------------------------------------------------------- |
-| `hab:crosshair` | `{ index, bar, x, y, price }` on hover / arrows, `null` on leave |
-| `hab:range`     | `{ from, to }` after zoom / pan / jump                      |
-| `hab:select`    | `{ index, bar, price }` on click/tap (e.g. open an order form at that price) |
+| `wick:crosshair` | `{ index, bar, x, y, price }` on hover / arrows, `null` on leave |
+| `wick:range`     | `{ from, to }` after zoom / pan / jump                      |
+| `wick:select`    | `{ index, bar, price }` on click/tap (e.g. open an order form at that price) |
 
 ## Theming
 
@@ -433,18 +433,18 @@ All colors are CSS custom properties settable on the element (they pierce the
 Shadow DOM):
 
 ```css
-hab-chart {
-  --hab-bg: #0d1117;          /* transparent works too */
-  --hab-up: #16c784;
-  --hab-down: #ea3943;
-  --hab-accent: #4c8dff;      /* line & area color */
-  --hab-text: #8b949e;        /* axis text */
-  --hab-text-strong: #e6edf3; /* legend values */
-  --hab-grid: rgba(230,237,243,.05);
-  --hab-border: rgba(230,237,243,.09);
-  --hab-crosshair: rgba(230,237,243,.42);
-  --hab-rsi: #a78bfa;
-  --hab-overlay-0: #f0b429;   /* SMA color, …-1, -2, … for more overlays */
+wick-chart {
+  --wick-bg: #0d1117;          /* transparent works too */
+  --wick-up: #16c784;
+  --wick-down: #ea3943;
+  --wick-accent: #4c8dff;      /* line & area color */
+  --wick-text: #8b949e;        /* axis text */
+  --wick-text-strong: #e6edf3; /* legend values */
+  --wick-grid: rgba(230,237,243,.05);
+  --wick-border: rgba(230,237,243,.09);
+  --wick-crosshair: rgba(230,237,243,.42);
+  --wick-rsi: #a78bfa;
+  --wick-overlay-0: #f0b429;   /* SMA color, …-1, -2, … for more overlays */
 }
 ```
 
@@ -506,6 +506,27 @@ column, and an offscreen layer so hover only repaints the crosshair.
 - Data callbacks (`loadMore` for infinite history)
 - Incremental (O(1)) indicator updates for high-frequency streaming
 - Min/max downsampling and/or an offscreen hover layer if profiling ever demands
+
+## Migrating from 0.x (HabView)
+
+1.0 renames the public surface to the WickChart brand. The 0.x names keep
+working as **deprecated aliases** (removed in 2.0), so upgrading is safe to
+do lazily:
+
+| 0.x (deprecated alias) | 1.0 canonical |
+|---|---|
+| `<hab-chart>` / `<hab-feed>` | `<wick-chart>` / `<wick-feed>` |
+| `hab:range`, `hab:select`, `hab:alert`, `hab:crosshair`, `hab:measure`, `hab:annotations` | `wick:*` of the same name (both fire during 1.x) |
+| `hab-feed:status` / `hab-feed:fallback` | `wick-feed:status` / `wick-feed:fallback` (both fire during 1.x) |
+| `--hab-bg`, `--hab-up`, … | `--wick-*` of the same name (`--wick-*` wins; `--hab-*` is the fallback) |
+| `HabChart` / `HabFeed` classes | `WickChart` / `WickFeed` (also as named exports) |
+| HabScript (the `expr:{…}` language) | WickScript — syntax unchanged |
+| `import … from 'wickchart/src/hab-chart.js'` | use the package entry points (`wickchart`, `wickchart/core`, `wickchart/feed`) — module files are renamed |
+
+Two behavioral notes: custom indicators registered via
+`WickChart.registerIndicator()` are shared with the legacy `<hab-chart>`
+alias (one registry), and cross-tab co-view channels are now prefixed
+`wick-co-view:` (a 0.x tab and a 1.x tab won't pair — refresh both).
 
 ## License
 

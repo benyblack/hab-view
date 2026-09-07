@@ -1,5 +1,5 @@
-/* HabView demo — data feeds & UI wiring around <hab-chart>. */
-import HabChart from '../src/hab-chart.js';
+/* WickChart demo — data feeds & UI wiring around <wick-chart>. */
+import WickChart from '../src/wick-chart.js';
 import { encodeStateQuery, decodeStateQuery, splitIndicatorTokens, compileScript } from '../src/core.js';
 import {
   genSynthetic,
@@ -13,7 +13,7 @@ import {
  * VWAP — a reference custom indicator built entirely through the
  * public registry API (same code as the README example).
  * ------------------------------------------------------------------ */
-HabChart.registerIndicator('vwap', {
+WickChart.registerIndicator('vwap', {
   kind: 'overlay',
   params: {},
   compute(bars) {
@@ -253,7 +253,7 @@ const fmtDate = (t) =>
     minute: '2-digit',
   });
 
-chart.addEventListener('hab:range', (e) => {
+chart.addEventListener('wick:range', (e) => {
   rangeText.textContent = `${fmtDate(e.detail.from)} → ${fmtDate(e.detail.to)}`;
 });
 
@@ -347,7 +347,7 @@ function readHash() {
   return s;
 }
 
-chart.addEventListener('hab:range', writeHash);
+chart.addEventListener('wick:range', writeHash);
 
 /* ---------------- build controls ---------------- */
 
@@ -414,7 +414,7 @@ for (const ind of INDICATORS) {
   chips.appendChild(btn);
 }
 
-/* ---------------- custom HabScript indicators ---------------- */
+/* ---------------- custom WickScript indicators ---------------- */
 
 const scriptChips = document.getElementById('script-chips');
 const scriptInput = document.getElementById('script-input');
@@ -520,7 +520,7 @@ document.getElementById('btn-coview').addEventListener('click', (e) => {
   const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
   e.currentTarget.setAttribute('aria-pressed', String(on));
   const chartEl = document.getElementById('chart');
-  if (on) chartEl.setAttribute('co-view', 'habview-demo');
+  if (on) chartEl.setAttribute('co-view', 'wick-demo');
   else chartEl.removeAttribute('co-view');
   toast(
     on
@@ -571,8 +571,8 @@ document.getElementById('btn-theme').addEventListener('click', () => {
   writeHash();
 });
 
-chart.addEventListener('hab:select', (e) => {
-  console.log('hab:select', e.detail.bar.time, '@', e.detail.price?.toFixed(2));
+chart.addEventListener('wick:select', (e) => {
+  console.log('wick:select', e.detail.bar.time, '@', e.detail.price?.toFixed(2));
 });
 
 /* ---------------- trade demo: positions & alerts ---------------- */
@@ -610,7 +610,7 @@ document.getElementById('btn-clear-trade').addEventListener('click', () => {
   chart.clearAlerts();
 });
 
-chart.addEventListener('hab:alert', (e) => {
+chart.addEventListener('wick:alert', (e) => {
   toast(`Alert ${e.detail.id}: price crossed ${e.detail.price.toFixed(2)}`);
 });
 

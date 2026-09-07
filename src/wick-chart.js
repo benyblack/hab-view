@@ -1,16 +1,19 @@
 /* ==========================================================================
- * <hab-chart> — a modern, dependency-free financial charting web component.
+ * <wick-chart> — a modern, dependency-free financial charting web component.
  *
- *   <hab-chart label="BTC · 1h" type="candles" indicators="sma:20 volume">
- *   </hab-chart>
+ *   <wick-chart label="BTC · 1h" type="candles" indicators="sma:20 volume">
+ *   </wick-chart>
  *   <script type="module">
- *     const chart = document.querySelector('hab-chart');
+ *     const chart = document.querySelector('wick-chart');
  *     chart.setData(bars);      // [{ time, open, high, low, close, volume }]
  *     chart.update(bar);        // streaming update / append
  *   </script>
  *
  * Zero dependencies. Canvas-rendered. Framework-agnostic (works in React,
- * Vue, Svelte, plain HTML). Themeable with --hab-* CSS custom properties.
+ * Vue, plain HTML). Themeable with --wick-* CSS custom properties.
+ *
+ * The 0.x names (<hab-chart>, --hab-*, hab:* events) still work as
+ * deprecated aliases — see the README migration notes.
  *
  * MIT License.
  * ========================================================================== */
@@ -29,14 +32,18 @@ import {
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
- * <hab-chart>
+ * <wick-chart>
  * ------------------------------------------------------------------ */
+
+/** Indicator registry — module scope so registrations are shared by
+ *  <wick-chart> and the deprecated <hab-chart> alias element. */
+const REGISTRY = new Map(BUILTIN_INDICATORS);
 
   /* SSR safety: importing this module under Node (Next.js/Nuxt server render)
  * must not throw — the element simply registers only in browsers. */
 const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class {};
 
-class HabChart extends HTMLElementBase {
+class WickChart extends HTMLElementBase {
     static get observedAttributes() {
       return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'co-view', 'sonify'];
     }
@@ -55,7 +62,7 @@ class HabChart extends HTMLElementBase {
             contain: content;
           }
           :host(:focus-visible) {
-            outline: 2px solid var(--hab-accent, #4c8dff);
+            outline: 2px solid var(--wick-accent, var(--hab-accent, #4c8dff));
             outline-offset: -2px;
           }
           .wrap { position: absolute; inset: 0; overflow: hidden; }
@@ -78,26 +85,26 @@ class HabChart extends HTMLElementBase {
           }
           .legend .row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
           .legend .sym {
-            color: var(--hab-text-strong, #e6edf3);
+            color: var(--wick-text-strong, var(--hab-text-strong, #e6edf3));
             font-weight: 700;
             font-size: 13px;
             letter-spacing: 0.02em;
           }
           .legend .kv { display: inline-flex; gap: 5px; align-items: baseline; white-space: nowrap; }
-          .legend .k { color: var(--hab-text, #8b949e); font-size: 11px; }
-          .legend .v { color: var(--hab-text-strong, #e6edf3); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+          .legend .k { color: var(--wick-text, var(--hab-text, #8b949e)); font-size: 11px; }
+          .legend .v { color: var(--wick-text-strong, var(--hab-text-strong, #e6edf3)); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
           .legend .pct { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-          .legend .up { color: var(--hab-up, #16c784); }
-          .legend .dn { color: var(--hab-down, #ea3943); }
+          .legend .up { color: var(--wick-up, var(--hab-up, #16c784)); }
+          .legend .dn { color: var(--wick-down, var(--hab-down, #ea3943)); }
           .legend .ind {
             display: inline-flex; align-items: center; gap: 6px;
-            color: var(--hab-text, #8b949e); font-size: 11.5px; white-space: nowrap;
+            color: var(--wick-text, var(--hab-text, #8b949e)); font-size: 11.5px; white-space: nowrap;
           }
           .legend .ind i { width: 8px; height: 2.5px; border-radius: 2px; display: inline-block; }
           .legend .ind .v { font-size: 12px; }
           .legend .insight {
-            color: var(--hab-accent, #4c8dff);
-            background: var(--hab-chip, rgba(127, 137, 153, 0.12));
+            color: var(--wick-accent, var(--hab-accent, #4c8dff));
+            background: var(--wick-chip, var(--hab-chip, rgba(127, 137, 153, 0.12)));
             border-radius: 6px;
             padding: 1px 8px;
             font-size: 11.5px;
@@ -106,7 +113,7 @@ class HabChart extends HTMLElementBase {
           .nodata {
             position: absolute; inset: 0;
             display: flex; align-items: center; justify-content: center;
-            color: var(--hab-text, #8b949e);
+            color: var(--wick-text, var(--hab-text, #8b949e));
             font: 500 13px ${FONT_STACK};
             pointer-events: none;
           }
@@ -119,25 +126,25 @@ class HabChart extends HTMLElementBase {
           }
           .hud .pos {
             display: inline-flex; gap: 9px; align-items: baseline; white-space: nowrap;
-            background: var(--hab-chip, rgba(127, 137, 153, 0.12));
-            border: 1px solid var(--hab-border, rgba(148, 163, 184, 0.2));
+            background: var(--wick-chip, var(--hab-chip, rgba(127, 137, 153, 0.12)));
+            border: 1px solid var(--wick-border, var(--hab-border, rgba(148, 163, 184, 0.2)));
             border-radius: 7px;
             padding: 3px 9px;
           }
           .hud .statsrow {
             display: inline-flex; gap: 12px; white-space: nowrap;
-            background: var(--hab-chip, rgba(127, 137, 153, 0.12));
-            border: 1px solid var(--hab-border, rgba(148, 163, 184, 0.2));
+            background: var(--wick-chip, var(--hab-chip, rgba(127, 137, 153, 0.12)));
+            border: 1px solid var(--wick-border, var(--hab-border, rgba(148, 163, 184, 0.2)));
             border-radius: 7px;
             padding: 3px 10px;
-            color: var(--hab-text, #8b949e);
+            color: var(--wick-text, var(--hab-text, #8b949e));
             font-variant-numeric: tabular-nums;
           }
-          .hud .statsrow b { color: var(--hab-text-strong, #e6edf3); font-weight: 600; }
-          .hud .k { color: var(--hab-text, #8b949e); font-weight: 500; }
-          .hud .v { color: var(--hab-text-strong, #e6edf3); font-variant-numeric: tabular-nums; }
-          .hud .up { color: var(--hab-up, #16c784); }
-          .hud .dn { color: var(--hab-down, #ea3943); }
+          .hud .statsrow b { color: var(--wick-text-strong, var(--hab-text-strong, #e6edf3)); font-weight: 600; }
+          .hud .k { color: var(--wick-text, var(--hab-text, #8b949e)); font-weight: 500; }
+          .hud .v { color: var(--wick-text-strong, var(--hab-text-strong, #e6edf3)); font-variant-numeric: tabular-nums; }
+          .hud .up { color: var(--wick-up, var(--hab-up, #16c784)); }
+          .hud .dn { color: var(--wick-down, var(--hab-down, #ea3943)); }
         </style>
         <div class="wrap" part="wrap">
           <canvas part="canvas" role="img"></canvas>
@@ -305,7 +312,7 @@ class HabChart extends HTMLElementBase {
           this._label = val || '';
           break;
         case 'indicators':
-          this._ind = parseIndicators(val, HabChart._registry());
+          this._ind = parseIndicators(val, WickChart._registry());
           break;
         case 'stats':
           this._stats = val != null && val !== 'false';
@@ -339,20 +346,15 @@ class HabChart extends HTMLElementBase {
      * Indicator registry
      * ------------------------------------------------------------ */
 
-    static _registryMap = null;
-
-    /** Lazily-built registry, seeded with the built-in indicators. */
+    /** Indicator registry (module scope — shared with the legacy alias tag). */
     static _registry() {
-      if (!HabChart._registryMap) {
-        HabChart._registryMap = new Map(BUILTIN_INDICATORS);
-      }
-      return HabChart._registryMap;
+      return REGISTRY;
     }
 
     /**
      * Register a custom indicator.
      *
-     *   HabChart.registerIndicator('vwap', {
+     *   WickChart.registerIndicator('vwap', {
      *     kind: 'overlay',                    // or 'pane'
      *     params: { period: 20 },             // defaults; settable via name:period
      *     compute(bars, params) {             // bars: normalized {time,o,h,l,c,v}
@@ -373,7 +375,7 @@ class HabChart extends HTMLElementBase {
       if (!def || typeof def.compute !== 'function') {
         throw new Error('registerIndicator: def.compute must be a function');
       }
-      HabChart._registry().set(name.toLowerCase(), {
+      REGISTRY.set(name.toLowerCase(), {
         kind: def.kind === 'pane' ? 'pane' : 'overlay',
         ...def,
       });
@@ -403,7 +405,7 @@ class HabChart extends HTMLElementBase {
       }
       const norm = [];
       for (const b of bars) {
-        const nb = HabChart._normBar(b);
+        const nb = WickChart._normBar(b);
         if (nb) norm.push(nb);
       }
       // skip the O(n log n) sort when already ascending (typical for feeds)
@@ -432,7 +434,7 @@ class HabChart extends HTMLElementBase {
      * @param {import('./core.js').Bar} bar
      */
     update(bar) {
-      const b = HabChart._normBar(bar);
+      const b = WickChart._normBar(bar);
       if (!b) return;
       const d = this._data;
       const last = d[d.length - 1];
@@ -492,7 +494,7 @@ class HabChart extends HTMLElementBase {
           }
           const older = [];
           for (const b of bars) {
-            const nb = HabChart._normBar(b);
+            const nb = WickChart._normBar(b);
             if (nb) older.push(nb);
           }
           const { bars: merged, added } = mergeOlderData(this._data, older);
@@ -540,14 +542,14 @@ class HabChart extends HTMLElementBase {
     setVisibleRange(range) {
       const d = this._data;
       if (!d.length || !range || !this._ly) return;
-      const from = HabChart._timeToMs(range.from);
-      const to = HabChart._timeToMs(range.to);
-      let i0 = HabChart._indexForTime(d, from);
-      let i1 = HabChart._indexForTime(d, to);
+      const from = WickChart._timeToMs(range.from);
+      const to = WickChart._timeToMs(range.to);
+      let i0 = WickChart._indexForTime(d, from);
+      let i1 = WickChart._indexForTime(d, to);
       if (i0 > i1) [i0, i1] = [i1, i0];
       if (i1 - i0 < 2) return;
       const { plotRight } = this._ly;
-      this._view.spacing = clamp(plotRight / (i1 - i0), this._minSpacing(), HabChart._MAX_SP);
+      this._view.spacing = clamp(plotRight / (i1 - i0), this._minSpacing(), WickChart._MAX_SP);
       this._view.rightIndex = i1;
       this._auto = false;
       this._clampView();
@@ -725,7 +727,8 @@ class HabChart extends HTMLElementBase {
     }
 
     /**
-     * Price alert. Fires `hab:alert` ({id, price, bar}) on an edge crossing
+     * Price alert. Fires `wick:alert` ({id, price, bar}) on an edge crossing
+     * (plus the deprecated `hab:alert` alias)
      * during streaming updates.
      * @param {{id?: string, price: number, direction?: 'above'|'below'|'cross',
      *          once?: boolean}} alert
@@ -764,9 +767,7 @@ class HabChart extends HTMLElementBase {
         if (a.fired) continue;
         if (checkAlertCross(a, prevClose, bar.close)) {
           a.fired = true;
-          this.dispatchEvent(
-            new CustomEvent('hab:alert', { detail: { id: a.id, price: a.price, bar } })
-          );
+          this._fire('alert', { id: a.id, price: a.price, bar });
           if (a.once) this._alerts = this._alerts.filter((x) => x !== a);
         }
       }
@@ -808,7 +809,7 @@ class HabChart extends HTMLElementBase {
       if (!b) return null;
       const t = b.time != null ? b.time : b.t;
       if (!isNum(t)) return null;
-      const time = HabChart._timeToMs(t);
+      const time = WickChart._timeToMs(t);
       const close = isNum(b.close) ? b.close : isNum(b.value) ? b.value : NaN;
       if (!isNum(close)) return null;
       const open = isNum(b.open) ? b.open : close;
@@ -887,8 +888,9 @@ class HabChart extends HTMLElementBase {
       if (this._pal && this._palKey === this._theme) return this._pal;
       const base = THEMES[this._theme] || THEMES.dark;
       const cs = getComputedStyle(this);
+      // --wick-* is canonical; --hab-* still honored as the 0.x fallback
       const get = (name, fallback) => {
-        const v = cs.getPropertyValue('--hab-' + name).trim();
+        const v = cs.getPropertyValue('--wick-' + name).trim() || cs.getPropertyValue('--hab-' + name).trim();
         return v || fallback;
       };
       const pal = {};
@@ -899,7 +901,8 @@ class HabChart extends HTMLElementBase {
             o.push(get('overlay-' + i, base.overlay[i]));
           }
           // allow single overlay color
-          const single = cs.getPropertyValue('--hab-overlay').trim();
+          const single =
+            cs.getPropertyValue('--wick-overlay').trim() || cs.getPropertyValue('--hab-overlay').trim();
           pal.overlay = single ? base.overlay.map(() => single) : o;
         } else {
           pal[k] = get(k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase()), base[k]);
@@ -1018,7 +1021,7 @@ class HabChart extends HTMLElementBase {
       if (!d.length || !this._ly) return;
       const { plotRight } = this._ly;
       const target = Math.min(d.length, 150);
-      this._view.spacing = clamp(plotRight / target, this._minSpacing(), HabChart._MAX_SP);
+      this._view.spacing = clamp(plotRight / target, this._minSpacing(), WickChart._MAX_SP);
       this._view.rightIndex = d.length - 1 + this._rightMargin();
     }
 
@@ -1027,7 +1030,7 @@ class HabChart extends HTMLElementBase {
       const ly = this._ly;
       if (!d.length || !ly) return;
       const v = this._view;
-      v.spacing = clamp(v.spacing, this._minSpacing(), HabChart._MAX_SP);
+      v.spacing = clamp(v.spacing, this._minSpacing(), WickChart._MAX_SP);
       const visible = ly.plotRight / v.spacing;
       const maxRight = d.length - 1 + Math.max(6, visible * 0.5);
       const minRight = Math.min(2, d.length - 1);
@@ -1457,9 +1460,7 @@ class HabChart extends HTMLElementBase {
           this._annoList = detectAnnotations(this._data, i0, i1, this._cachedRSI14());
           this._annoKey = akey;
           this._legendKey = ''; // legend may now show insights at the hovered bar
-          this.dispatchEvent(
-            new CustomEvent('hab:annotations', { detail: { annotations: this._annoList } })
-          );
+          this._fire('annotations', { annotations: this._annoList });
         }
         const A = this._annoList;
         if (A.length) {
@@ -2353,7 +2354,7 @@ class HabChart extends HTMLElementBase {
         const s = clamp(
           (this._pinch.spacing * dist) / this._pinch.dist,
           this._minSpacing(),
-          HabChart._MAX_SP
+          WickChart._MAX_SP
         );
         this._view.spacing = s;
         this._view.rightIndex = this._pinch.idxAtMid + (ly.plotRight - mid.x) / s;
@@ -2406,15 +2407,11 @@ class HabChart extends HTMLElementBase {
             const d = this._data;
             const barA = d[clamp(m.iA, 0, d.length - 1)];
             const barB = d[clamp(m.iB, 0, d.length - 1)];
-            this.dispatchEvent(
-              new CustomEvent('hab:measure', {
-                detail: {
-                  from: { index: m.iA, time: barA.time, price: m.pA },
-                  to: { index: m.iB, time: barB.time, price: m.pB },
-                  bars: Math.abs(m.iB - m.iA),
-                },
-              })
-            );
+            this._fire('measure', {
+              from: { index: m.iA, time: barA.time, price: m.pA },
+              to: { index: m.iB, time: barB.time, price: m.pB },
+              bars: Math.abs(m.iB - m.iA),
+            });
           }
         } else if (this._pan && had && !this._pan.moved && this._data.length) {
           if (this._measure) {
@@ -2426,11 +2423,7 @@ class HabChart extends HTMLElementBase {
             const pt = this._localPoint(e);
             const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
             const price = this._yToPrice(pt.y);
-            this.dispatchEvent(
-              new CustomEvent('hab:select', {
-                detail: { index: idx, bar: this._data[idx], price },
-              })
-            );
+            this._fire('select', { index: idx, bar: this._data[idx], price });
           }
         }
         this._pan = null;
@@ -2467,7 +2460,7 @@ class HabChart extends HTMLElementBase {
 
       const factor = Math.exp(-dy * (e.ctrlKey ? 0.008 : 0.0016));
       const oldSp = this._view.spacing;
-      const newSp = clamp(oldSp * factor, this._minSpacing(), HabChart._MAX_SP);
+      const newSp = clamp(oldSp * factor, this._minSpacing(), WickChart._MAX_SP);
       if (newSp === oldSp) return;
       const idxAtCursor = this._indexForX(pt.x);
       this._view.spacing = newSp;
@@ -2504,12 +2497,12 @@ class HabChart extends HTMLElementBase {
         this._invalidate();
         this._emitRange();
       } else if (key === '+' || key === '=') {
-        this._view.spacing = clamp(this._view.spacing * 1.25, this._minSpacing(), HabChart._MAX_SP);
+        this._view.spacing = clamp(this._view.spacing * 1.25, this._minSpacing(), WickChart._MAX_SP);
         this._clampView();
         this._invalidate();
         this._emitRange();
       } else if (key === '-' || key === '_') {
-        this._view.spacing = clamp(this._view.spacing / 1.25, this._minSpacing(), HabChart._MAX_SP);
+        this._view.spacing = clamp(this._view.spacing / 1.25, this._minSpacing(), WickChart._MAX_SP);
         this._clampView();
         this._invalidate();
         this._emitRange();
@@ -2636,7 +2629,7 @@ class HabChart extends HTMLElementBase {
           price: this._yToPrice(hover.y),
         };
       }
-      this.dispatchEvent(new CustomEvent('hab:crosshair', { detail }));
+      this._fire('crosshair', detail);
 
       // co-view: share the pointer with peer charts (leave events bypass throttle)
       if (this._coviewCh) {
@@ -2678,7 +2671,7 @@ class HabChart extends HTMLElementBase {
       if (!name || !this._connected || typeof BroadcastChannel === 'undefined') return;
       if (!this._coviewPeer) this._coviewPeer = 'p' + Math.random().toString(36).slice(2, 8);
       try {
-        const ch = new BroadcastChannel('hab-co-view:' + name);
+        const ch = new BroadcastChannel('wick-co-view:' + name);
         ch.onmessage = (ev) => this._onCoMessage(ev.data);
         this._coviewCh = ch;
       } catch (_) {}
@@ -2703,7 +2696,7 @@ class HabChart extends HTMLElementBase {
       }
       if (!isNum(m.time) || !this._data.length) return;
       this._ghost = {
-        index: HabChart._indexForTime(this._data, m.time),
+        index: WickChart._indexForTime(this._data, m.time),
         yFrac: isNum(m.yFrac) ? clamp(m.yFrac, 0, 1) : null,
         at: Date.now(),
       };
@@ -2715,15 +2708,31 @@ class HabChart extends HTMLElementBase {
       this._invalidate();
     }
 
+    /** Dispatch `wick:name` (canonical) plus the deprecated `hab:name` alias,
+     *  so 0.x listeners keep working until 2.0. */
+    _fire(name, detail) {
+      this.dispatchEvent(new CustomEvent('wick:' + name, { detail }));
+      this.dispatchEvent(new CustomEvent('hab:' + name, { detail }));
+    }
+
     _emitRange() {
       const r = this.getVisibleRange();
       if (!r) return;
-      this.dispatchEvent(new CustomEvent('hab:range', { detail: r }));
+      this._fire('range', r);
     }
   }
 
-if (typeof customElements !== 'undefined' && !customElements.get('hab-chart')) {
-  customElements.define('hab-chart', HabChart);
+if (typeof customElements !== 'undefined') {
+  if (!customElements.get('wick-chart')) {
+    customElements.define('wick-chart', WickChart);
+  }
+  // 0.x alias: same element under its old tag name (deprecated, removed in 2.0)
+  if (!customElements.get('hab-chart')) {
+    /** @deprecated use <wick-chart> */
+    class HabChart extends WickChart {}
+    customElements.define('hab-chart', HabChart);
+  }
 }
 
-export default HabChart;
+export default WickChart;
+export { WickChart };

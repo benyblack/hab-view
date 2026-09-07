@@ -1,4 +1,4 @@
-/* HabView demo — page chrome around the <hab-chart> component */
+/* WickChart demo — page chrome around the <wick-chart> component */
 
 :root {
   --bg: #0b0d12;
@@ -303,7 +303,7 @@ button:focus-visible {
   padding: 10px 12px 4px;
 }
 
-hab-chart {
+wick-chart {
   display: block;
   width: 100%;
   height: 100%;
@@ -312,12 +312,12 @@ hab-chart {
   overflow: hidden;
   background: var(--panel);
   /* theme the component with its CSS variables */
-  --hab-bg: var(--panel);
-  --hab-up: var(--up);
-  --hab-down: var(--down);
-  --hab-accent: var(--accent-2);
-  --hab-text: var(--text-muted);
-  --hab-text-strong: var(--text);
+  --wick-bg: var(--panel);
+  --wick-up: var(--up);
+  --wick-down: var(--down);
+  --wick-accent: var(--accent-2);
+  --wick-text: var(--text-muted);
+  --wick-text-strong: var(--text);
 }
 
 /* ---------------- status bar ---------------- */

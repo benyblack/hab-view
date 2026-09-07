@@ -1,5 +1,5 @@
 /* ==========================================================================
- * HabView core — pure, DOM-free functions shared by <hab-chart> and tests.
+ * WickChart core — pure, DOM-free functions shared by <wick-chart> and tests.
  * Importable in the browser (ESM) and in Node (`node --test`).
  * MIT License.
  * ========================================================================== */
@@ -252,7 +252,8 @@ export const fmtFull = (t) => {
 };
 
 /* ------------------------------------------------------------------ *
- * Themes (every key overridable via --hab-* CSS custom properties)
+ * Themes (every key overridable via --wick-* CSS custom properties;
+ * the 0.x --hab-* names still work as fallbacks)
  * ------------------------------------------------------------------ */
 
 export const THEMES = {
@@ -867,7 +868,7 @@ export const BUILTIN_INDICATORS = new Map(
 /**
  * Parse an `indicators` attribute string against a registry.
  * Token: `name[:param[/param…]][@color]`, the `volume` keyword, and
- * HabScript blobs `expr:{…}` (overlay) / `pexpr:{…}` (separate pane).
+ * WickScript blobs `expr:{…}` (overlay) / `pexpr:{…}` (separate pane).
  * @param {string|null|undefined} str
  * @param {Map<string, IndicatorDef>} registry
  * @returns {{overlays: IndicatorEntry[], panes: IndicatorEntry[], volume: boolean, unknown: string[]}}
@@ -940,11 +941,12 @@ export function parseIndicators(str, registry) {
 }
 
 /* ------------------------------------------------------------------ *
- * HabScript — safe expression mini-language for custom indicators
+ * WickScript — safe expression mini-language for custom indicators
  *
  * `expr:{(close - sma(close,20)) / sma(close,20)}` compiles through a
  * hand-written tokenizer + recursive-descent parser (no eval / Function)
- * and evaluates element-wise over the bar series.
+ * and evaluates element-wise over the bar series. (Called "HabScript" in
+ * 0.x releases.)
  * ------------------------------------------------------------------ */
 
 const SCRIPT_MAX_LEN = 512;
@@ -1156,7 +1158,7 @@ function validateScriptNode(n) {
 }
 
 /**
- * Compile a HabScript expression. Throws a descriptive error on any syntax
+ * Compile a WickScript expression. Throws a descriptive error on any syntax
  * or semantic problem — never evaluates strings at runtime.
  * @param {string} src
  * @returns {{src: string, ast: object}}
@@ -1303,7 +1305,7 @@ export function evalScript(compiled, bars) {
 }
 
 /**
- * Build an indicator definition from a HabScript expression — used inline by
+ * Build an indicator definition from a WickScript expression — used inline by
  * `indicators="expr:{…}"` / `pexpr:{…}"`, or register it under a name:
  * `HabChart.registerIndicator('myspread', scriptIndicator('close - ema(close,21)'))`.
  * @param {string} src
