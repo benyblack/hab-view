@@ -1531,6 +1531,194 @@ export function parseVolShading(val) {
 }
 
 /* ------------------------------------------------------------------ *
+ * AI-ready window summary
+ * ------------------------------------------------------------------ */
+
+/** Least-squares trend of a value sequence: slope per bar + goodness of fit. */
+function lsTrend(vals) {
+  const n = vals.length;
+  let sx = 0;
+  let sy = 0;
+  let sxx = 0;
+  let sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sx += i;
+    sy += vals[i];
+    sxx += i * i;
+    sxy += i * vals[i];
+  }
+  const denom = n * sxx - sx * sx;
+  if (!denom) return { slope: 0, r2: 0 };
+  const slope = (n * sxy - sx * sy) / denom;
+  const intercept = (sy - slope * sx) / n;
+  const meanY = sy / n;
+  let ssTot = 0;
+  let ssRes = 0;
+  for (let i = 0; i < n; i++) {
+    ssTot += (vals[i] - meanY) * (vals[i] - meanY);
+    ssRes += (vals[i] - (intercept + slope * i)) * (vals[i] - (intercept + slope * i));
+  }
+  return { slope, r2: ssTot ? Math.max(0, 1 - ssRes / ssTot) : 0 };
+}
+
+export const tfLabelOf = (dtMs) => {
+  if (!isNum(dtMs) || dtMs <= 0) return '';
+  const s = Math.round(dtMs / 1000);
+  if (s < 60) return s + 's';
+  const m = Math.round(s / 60);
+  if (m < 60) return m + 'm';
+  const h = Math.round(m / 60);
+  if (h < 24) return h + 'h';
+  const d = Math.round(h / 24);
+  if (d < 7) return d + 'd';
+  return Math.round(d / 7) + 'w';
+};
+
+/**
+ * Compact, LLM-friendly summary of a bar window: structured fields plus a
+ * ready-to-paste markdown rendering (`text`). Built entirely from local
+ * data — nothing leaves the page until the user pastes it somewhere.
+ *
+ * @param {Bar[]} bars full dataset
+ * @param {number} i0 first index of the window
+ * @param {number} i1 last index of the window
+ * @param {{dtMs?: number, label?: string}} [opts] bar spacing (ms) + chart label
+ * @returns {object|null} null when the window is empty or out of range
+ */
+export function windowSummary(bars, i0, i1, opts = {}) {
+  const n = i1 - i0 + 1;
+  if (!bars.length || n < 2 || i0 < 0 || i1 >= bars.length) return null;
+  const closes = bars.map((b) => b.close);
+  const stats = computeStats(bars, i0, i1, opts.dtMs || 0);
+
+  let hi = -Infinity;
+  let lo = Infinity;
+  let hiI = i0;
+  let loI = i0;
+  let vMax = -Infinity;
+  let vMaxI = i0;
+  for (let i = i0; i <= i1; i++) {
+    if (bars[i].high > hi) {
+      hi = bars[i].high;
+      hiI = i;
+    }
+    if (bars[i].low < lo) {
+      lo = bars[i].low;
+      loI = i;
+    }
+    if (isNum(bars[i].volume) && bars[i].volume > vMax) {
+      vMax = bars[i].volume;
+      vMaxI = i;
+    }
+  }
+
+  // trend over the window: % drift per bar + fit quality
+  const win = closes.slice(i0, i1 + 1);
+  const t = lsTrend(win);
+  const meanY = win.reduce((a, b) => a + b, 0) / n;
+  const slopePct = meanY ? (t.slope / meanY) * 100 : 0;
+  let trendLabel;
+  if (t.r2 < 0.25) trendLabel = 'range-bound';
+  else if (slopePct >= 0.15) trendLabel = 'strong uptrend';
+  else if (slopePct <= -0.15) trendLabel = 'strong downtrend';
+  else if (slopePct >= 0.05) trendLabel = 'uptrend';
+  else if (slopePct <= -0.05) trendLabel = 'downtrend';
+  else trendLabel = 'mild drift ' + (slopePct >= 0 ? 'up' : 'down');
+
+  // realized-vol percentile of the latest bar within the window itself
+  let volPctile = null;
+  const wvol = calcRealizedVol(win, Math.min(20, Math.max(2, Math.floor(n / 3))));
+  let lastVol = null;
+  for (let i = wvol.length - 1; i >= 0; i--) {
+    if (isNum(wvol[i])) {
+      lastVol = wvol[i];
+      break;
+    }
+  }
+  if (lastVol != null) {
+    const sorted = wvol.filter((x) => isNum(x)).sort((a, b) => a - b);
+    volPctile = Math.round(percentileOfSorted(sorted, lastVol));
+  }
+
+  const sma20 = n >= 20 ? calcSMA(win, 20)[n - 1] : null;
+  const rsi14 = n > 15 ? calcRSI(win, 14)[n - 1] : null;
+
+  // notable events (most recent first, capped)
+  const ann = detectAnnotations(bars, i0, i1, calcRSI(closes, 14))
+    .sort((a, b) => b.i - a.i)
+    .slice(0, 8)
+    .map((a) => ({ time: bars[a.i].time, note: a.note }));
+
+  const f = numberFmt(autoPrecision(closes[i1]));
+  const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const from = bars[i0].time;
+  const to = bars[i1].time;
+  const label = opts.label || 'Chart';
+  const tf = tfLabelOf(opts.dtMs);
+  const showTf = tf && !label.includes(tf) ? ` · ${tf}` : '';
+
+  const out = {
+    label,
+    bars: n,
+    from,
+    to,
+    timeframe: tf,
+    open: closes[i0],
+    close: closes[i1],
+    changePct: stats.changePct,
+    high: hi,
+    highTime: bars[hiI].time,
+    low: lo,
+    lowTime: bars[loI].time,
+    maxDDPct: stats.maxDDPct,
+    upBars: stats.up,
+    downBars: stats.dn,
+    avgVolume: stats.avgVolume,
+    maxVolume: vMax,
+    maxVolumeTime: bars[vMaxI].time,
+    annVolPct: stats.annVolPct,
+    volPctile,
+    trend: { slopePctPerBar: slopePct, r2: t.r2, label: trendLabel },
+    sma20: isNum(sma20) ? { value: sma20, priceAbove: closes[i1] >= sma20 } : null,
+    rsi14: isNum(rsi14) ? rsi14 : null,
+    patterns: ann,
+  };
+
+  const lines = [];
+  lines.push(
+    `CHART SUMMARY — ${label}${showTf} · ${n} bars · ${day(from)} → ${day(to)}`
+  );
+  lines.push(
+    `- Close ${f.format(out.close)} (${out.changePct >= 0 ? '+' : ''}${out.changePct.toFixed(2)}% over window). ` +
+      `High ${f.format(hi)} on ${day(out.highTime)}, low ${f.format(lo)} on ${day(out.lowTime)}. ` +
+      `Max drawdown ${out.maxDDPct.toFixed(1)}%.`
+  );
+  lines.push(
+    `- Trend: ${trendLabel} (drift ${slopePct >= 0 ? '+' : ''}${slopePct.toFixed(3)}%/bar, fit r² ${t.r2.toFixed(2)}).` +
+      (out.sma20 ? ` Price ${out.sma20.priceAbove ? 'above' : 'below'} SMA20 (${f.format(out.sma20.value)}).` : '') +
+      (out.rsi14 != null ? ` RSI(14) ${out.rsi14.toFixed(1)}.` : '')
+  );
+  lines.push(
+    `- Volatility: annualized ${out.annVolPct.toFixed(0)}%` +
+      (volPctile != null
+        ? `; latest realized vol at the ${volPctile}th percentile of the window ` +
+          `(${volPctile >= 70 ? 'hot' : volPctile <= 30 ? 'calm' : 'normal'} regime).`
+        : '.')
+  );
+  lines.push(
+    `- Bars: ${out.upBars} up / ${out.downBars} down. Volume avg ${fmtCompact(out.avgVolume)}/bar, ` +
+      `peak ${fmtCompact(vMax)} on ${day(out.maxVolumeTime)}.`
+  );
+  lines.push(
+    out.patterns.length
+      ? `- Notable: ${out.patterns.map((a) => `${a.note} (${day(a.time)})`).join('; ')}.`
+      : '- Notable: no gaps, volume spikes or pivots flagged.'
+  );
+  out.text = lines.join('\n');
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
  * State serialization (shareable URLs)
  * ------------------------------------------------------------------ */
 

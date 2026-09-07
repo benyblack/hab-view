@@ -353,6 +353,70 @@ hab-chart {
   .brand-tag { display: none; }
 }
 
+/* ---------------- AI summary panel ---------------- */
+
+.chart-area { position: relative; }
+
+.explain-panel {
+  position: absolute;
+  right: 22px;
+  bottom: 14px;
+  width: min(520px, calc(100% - 44px));
+  max-height: min(60%, 420px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg, #11141c) 92%, #fff);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.explain-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  font: 700 12px var(--font);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.explain-actions { display: inline-flex; gap: 6px; }
+
+.explain-actions button {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: 600 11px var(--font);
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.explain-actions button:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+
+.explain-panel pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  font: 500 11.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.explain-hint {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font: 500 11px var(--font);
+  color: var(--text-muted);
+}
+
 /* ---------------- toasts ---------------- */
 
 .toasts {

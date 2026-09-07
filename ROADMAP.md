@@ -64,7 +64,7 @@ is suggested priority.
 | ~~**HabScript mini-language**~~ ✅ shipped | `indicators="expr:{close - sma(close,20)}"` / `pexpr:{…}` — hand-written tokenizer + recursive-descent parser (no `eval`) over builtins, URL-safe, live demo input. | L |
 | ~~Cross-tab co-view~~ ✅ shipped | BroadcastChannel syncs crosshair/markings between two open tabs. Great demo flex, tiny code. | S–M |
 | ~~Sonification toggle~~ ✅ shipped | Pitch maps to price movement — screen-reader traders get trend by ear. Rare a11y win. | S–M |
-| AI-ready data hook | `getDataWindow()` + demo "Explain this chart" button (sends visible-window summary to an LLM). Data stays local until user acts. | S |
+| ~~AI-ready data hook~~ ✅ shipped | `chart.getDataWindow()` — structured + markdown summary of the visible window (trend, vol percentile, patterns); demo "Explain" button with copy-to-clipboard. Data stays local. | S |
 | Branded snapshot/report export | exportPNG + stats table + watermark composed into one shareable image. | M |
 | Spread & ratio charts | `formula="BTC/ETH"` live derived series. | M |
 

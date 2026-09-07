@@ -494,6 +494,28 @@ document.getElementById('btn-play').addEventListener('click', () => {
   document.getElementById('chart').playRange();
 });
 
+/* ---------------- AI-ready summary (local, no network) ---------------- */
+
+const explainPanel = document.getElementById('explain-panel');
+const explainText = document.getElementById('explain-text');
+
+document.getElementById('btn-explain').addEventListener('click', () => {
+  const s = chart.getDataWindow();
+  explainText.textContent = s ? s.text : 'No data — load a chart first.';
+  explainPanel.hidden = false;
+});
+document.getElementById('explain-close').addEventListener('click', () => {
+  explainPanel.hidden = true;
+});
+document.getElementById('explain-copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(explainText.textContent);
+    toast('Summary copied — paste it into any AI chat.');
+  } catch (err) {
+    toast('Copy blocked — select the text and copy manually.');
+  }
+});
+
 document.getElementById('btn-coview').addEventListener('click', (e) => {
   const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
   e.currentTarget.setAttribute('aria-pressed', String(on));
