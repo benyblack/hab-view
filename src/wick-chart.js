@@ -29,6 +29,7 @@ import {
   calcRSI, detectAnnotations, priceToFreq,
   calcRealizedVol, volRegimeBands, percentileOfSorted, parseVolShading,
   windowSummary, normalizeOverlays, barIndexForTime, resolveOverlayColor,
+  compileScript, predicateTrueSeries, scriptAlertStep,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -644,7 +645,11 @@ class WickChart extends HTMLElementBase {
         })),
         alerts: this._alerts
           .filter((a) => !a.fired)
-          .map((a) => ({ id: a.id, price: a.price, direction: a.direction, once: a.once })),
+          .map((a) =>
+            a.when != null
+              ? { id: a.id, when: a.when, once: a.once }
+              : { id: a.id, price: a.price, direction: a.direction, once: a.once }
+          ),
       };
     }
 
@@ -682,14 +687,31 @@ class WickChart extends HTMLElementBase {
       }
       if (Array.isArray(state.alerts)) {
         this._alerts = state.alerts
-          .filter((a) => a && isNum(a.price))
-          .map((a) => ({
-            id: a.id != null ? String(a.id) : 'alert-' + ++this._seq,
-            price: a.price,
-            direction: a.direction || 'cross',
-            once: a.once !== false,
-            fired: false,
-          }));
+          .filter((a) => a && (isNum(a.price) || typeof a.when === 'string'))
+          .map((a) => {
+            if (typeof a.when === 'string' && a.when.trim()) {
+              try {
+                return {
+                  id: a.id != null ? String(a.id) : 'alert-' + ++this._seq,
+                  when: a.when.trim(),
+                  compiled: compileScript(a.when),
+                  once: a.once !== false,
+                  fired: false,
+                  armed: true,
+                };
+              } catch (err) {
+                return null;
+              }
+            }
+            return {
+              id: a.id != null ? String(a.id) : 'alert-' + ++this._seq,
+              price: a.price,
+              direction: a.direction || 'cross',
+              once: a.once !== false,
+              fired: false,
+            };
+          })
+          .filter(Boolean);
       }
       if (state.view && state.view.from != null && state.view.to != null) {
         if (this._ly && this._data.length > 1) {
@@ -742,22 +764,46 @@ class WickChart extends HTMLElementBase {
     }
 
     /**
-     * Price alert. Fires `wick:alert` ({id, price, bar}) on an edge crossing
-     * (plus the deprecated `hab:alert` alias)
-     * during streaming updates.
-     * @param {{id?: string, price: number, direction?: 'above'|'below'|'cross',
-     *          once?: boolean}} alert
-     * @returns {string|null} the alert id
+     * Price or scripted alert. Price alerts fire `wick:alert`
+     * ({id, price, bar}) on an edge crossing; scripted alerts evaluate a
+     * WickScript predicate (`when`) on every streamed bar and fire on its
+     * false→true edge — e.g. `when: 'crossup(rsi(close,14), 30)'` or
+     * `when: 'volume > sma(volume,20) * 3'`. Scripted events carry the
+     * triggering close as `price` plus the `when` source (deprecated
+     * `hab:alert` alias still dispatched).
+     * @param {{id?: string, price?: number, direction?: 'above'|'below'|'cross',
+     *          when?: string, once?: boolean}} alert
+     * @returns {string|null} the alert id (null when no valid price/when,
+     *          or the predicate fails to compile)
      */
     addAlert(alert) {
-      if (!alert || !isNum(alert.price)) return null;
-      const a = {
-        id: alert.id != null ? String(alert.id) : 'alert-' + ++this._seq,
-        price: alert.price,
-        direction: alert.direction || 'cross',
-        once: alert.once !== false,
-        fired: false,
-      };
+      if (!alert) return null;
+      let a;
+      if (typeof alert.when === 'string' && alert.when.trim()) {
+        let compiled;
+        try {
+          compiled = compileScript(alert.when);
+        } catch (err) {
+          return null;
+        }
+        a = {
+          id: alert.id != null ? String(alert.id) : 'alert-' + ++this._seq,
+          when: alert.when.trim(),
+          compiled,
+          once: alert.once !== false,
+          fired: false,
+          armed: true,
+        };
+      } else {
+        if (!isNum(alert.price)) return null;
+        a = {
+          id: alert.id != null ? String(alert.id) : 'alert-' + ++this._seq,
+          price: alert.price,
+          direction: alert.direction || 'cross',
+          once: alert.once !== false,
+          fired: false,
+        };
+      }
       const i = this._alerts.findIndex((x) => x.id === a.id);
       if (i >= 0) this._alerts[i] = a;
       else this._alerts.push(a);
@@ -826,17 +872,44 @@ class WickChart extends HTMLElementBase {
       this._invalidate();
     }
 
-    /** Check alerts against an incoming bar (prev close → new close). */
+    /** Check alerts against an incoming bar (prev close → new close).
+     *  Scripted (`when`) alerts evaluate their predicate series, cached per
+     *  data version, and fire on the false→true edge. */
     _checkAlerts(prevClose, bar) {
-      if (!this._alerts.length || !isNum(prevClose)) return;
+      if (!this._alerts.length) return;
       for (const a of [...this._alerts]) {
         if (a.fired) continue;
+        if (a.when != null) {
+          const series = this._predicateCache(a);
+          const curTrue = series.length ? series[series.length - 1] : false;
+          const step = scriptAlertStep(a.armed, curTrue);
+          a.armed = step.armed;
+          if (step.fire) {
+            a.fired = true;
+            this._fire('alert', { id: a.id, price: bar.close, when: a.when, bar });
+            if (a.once) this._alerts = this._alerts.filter((x) => x !== a);
+          }
+          continue;
+        }
+        if (!isNum(prevClose)) continue;
         if (checkAlertCross(a, prevClose, bar.close)) {
           a.fired = true;
           this._fire('alert', { id: a.id, price: a.price, bar });
           if (a.once) this._alerts = this._alerts.filter((x) => x !== a);
         }
       }
+    }
+
+    /** Cached boolean series for a scripted alert's predicate (per data version). */
+    _predicateCache(alert) {
+      if (this._cache.v !== this._version) {
+        this._cache = { v: this._version, map: {} };
+      }
+      const k = 'pred:' + alert.when;
+      if (!this._cache.map[k]) {
+        this._cache.map[k] = predicateTrueSeries(alert.compiled, this._data);
+      }
+      return this._cache.map[k];
     }
 
     /* reflected properties */
@@ -1855,7 +1928,7 @@ class WickChart extends HTMLElementBase {
         ctx.setLineDash([5, 4]);
         ctx.strokeStyle = pal.overlay[0];
         for (const a of this._alerts) {
-          if (a.fired) continue;
+          if (a.fired || !isNum(a.price)) continue; // scripted alerts have no line
           const y = yOf(a.price);
           if (y < main.y0 || y > main.y1) continue;
           ctx.globalAlpha = 0.8;

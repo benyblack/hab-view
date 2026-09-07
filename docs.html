@@ -367,7 +367,7 @@ WickChart.<span class="attr">registerIndicator</span>('hlmid', {
           <li><code>expr:{…}</code> draws on the price chart; <code>pexpr:{…}</code> gets its own pane. Optional <code>@color</code> suffix.</li>
           <li><b>Series variables:</b> <code>open high low close volume hl2 hlc3 ohlc4</code></li>
           <li><b>Functions:</b> <code>sma ema wma stddev rsi hh ll prev change abs sqrt log min max crossup crossdown</code> — e.g. <code>hh(high,20)</code>, <code>crossup(close, sma(close,50))</code></li>
-          <li><b>Operators:</b> <code>+ - * / %</code>, parentheses, unary minus</li>
+          <li><b>Operators:</b> <code>+ - * / %</code>, comparisons <code>&gt; &lt; &gt;= &lt;= == !=</code> (1/0), parentheses, unary minus</li>
           <li><b>Caps:</b> 512 chars, 128 tokens, nesting depth 24; window periods must be whole-number literals</li>
         </ul>
         <div class="demo-card">
@@ -460,10 +460,13 @@ chart.<span class="attr">overlays</span>;               <span class="cmt">// get
         <div class="codewrap"><pre class="code">chart.<span class="attr">addPosition</span>({ <span class="attr">id</span>: 'p1', <span class="attr">side</span>: 'long', <span class="attr">entry</span>: 43100, <span class="attr">stop</span>: 42240, <span class="attr">target</span>: 44830, <span class="attr">qty</span>: 0.5 });
 chart.<span class="attr">removePosition</span>('p1');  chart.<span class="attr">clearPositions</span>();</pre></div>
         <h3>Alerts</h3>
-        <p>Edge-triggered on streaming closes — fire once per crossing, then <code>wick:alert</code>:</p>
+        <p>Price alerts are edge-triggered on streaming closes. <b>Scripted alerts</b> take a WickScript predicate instead of a price — evaluated locally on every bar, firing on its false→true edge:</p>
         <div class="codewrap"><pre class="code">chart.<span class="attr">addAlert</span>({ <span class="attr">id</span>: 'a1', <span class="attr">price</span>: 43900, <span class="attr">direction</span>: 'above' });  <span class="cmt">// 'above' | 'below' | 'cross'</span>
+chart.<span class="attr">addAlert</span>({ <span class="attr">when</span>: 'crossup(rsi(close,14), 30)' });        <span class="cmt">// scripted predicate</span>
+chart.<span class="attr">addAlert</span>({ <span class="attr">when</span>: 'volume &gt; sma(volume,20) * 3', <span class="attr">once</span>: <span class="tag">false</span> });
 chart.<span class="attr">removeAlert</span>('a1');  chart.<span class="attr">clearAlerts</span>();
 chart.<span class="attr">addEventListener</span>('wick:alert', (e) =&gt; console.log(e.detail.id, e.detail.price));</pre></div>
+        <p>Scripted events carry the triggering close as <code>price</code> plus the <code>when</code> source; <code>once: false</code> re-arms after the condition drops false again. Invalid predicates return <code>null</code> — never throw.</p>
         <div class="demo-card">
           <div class="demo-head">
             <span class="t">Live</span><span class="spacer"></span>

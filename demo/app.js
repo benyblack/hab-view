@@ -644,13 +644,28 @@ document.getElementById('btn-alert').addEventListener('click', () => {
   void id;
 });
 
+document.getElementById('btn-expr-alert').addEventListener('click', () => {
+  const when = 'volume > sma(volume,20) * 2.5';
+  demoAlertCount += 1;
+  const id = chart.addAlert({ id: 'expr-' + demoAlertCount, when, once: false });
+  toast(
+    id
+      ? `Scripted alert armed: ${when} — fires on the next volume spike.`
+      : 'Scripted alert rejected — invalid predicate.'
+  );
+});
+
 document.getElementById('btn-clear-trade').addEventListener('click', () => {
   chart.clearPositions();
   chart.clearAlerts();
 });
 
 chart.addEventListener('wick:alert', (e) => {
-  toast(`Alert ${e.detail.id}: price crossed ${e.detail.price.toFixed(2)}`);
+  if (e.detail.when) {
+    toast(`Expr alert ${e.detail.id} fired — close ${e.detail.price.toFixed(2)} · ${e.detail.when}`);
+  } else {
+    toast(`Alert ${e.detail.id}: price crossed ${e.detail.price.toFixed(2)}`);
+  }
 });
 
 /* ---------------- boot ---------------- */

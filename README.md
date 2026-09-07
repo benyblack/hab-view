@@ -535,10 +535,17 @@ chart.addAlert({ price: 65000, direction: 'above' }); // 'above' | 'below' | 'cr
 chart.addEventListener('wick:alert', (e) => {
   console.log('crossed!', e.detail.id, e.detail.price);
 });
+
+// scripted alerts — any WickScript predicate, fired on its false→true edge
+chart.addAlert({ when: 'crossup(rsi(close,14), 30)' });
+chart.addAlert({ when: 'volume > sma(volume,20) * 3', once: false }); // re-arms
 ```
 
 The P&L chip recalculates on every streamed bar. Alerts are edge-triggered
 (fire once per crossing) and one-shot by default (`once: false` to re-arm).
+Scripted alerts are evaluated locally on every streamed bar — the event
+carries the triggering close as `price` plus the `when` source; an invalid
+predicate is rejected (`addAlert` returns `null`), never thrown.
 
 ### Stats & measure
 
