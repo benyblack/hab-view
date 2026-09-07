@@ -1,6 +1,13 @@
 /* HabView demo — data feeds & UI wiring around <hab-chart>. */
 import HabChart from '../src/hab-chart.js';
 import { encodeStateQuery, decodeStateQuery } from '../src/core.js';
+import {
+  genSynthetic,
+  makeSynthStream,
+  fetchBinanceKlines,
+  openBinanceSocket,
+  BASE_PRICES,
+} from '../src/feeds.js';
 
 /* ------------------------------------------------------------------ *
  * VWAP — a reference custom indicator built entirely through the
@@ -50,7 +57,6 @@ const TFS = [
 ];
 
 const BINANCE = { BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT' };
-const BASE_PRICES = { DEMO: 64250, BTC: 64250, ETH: 3120, SOL: 148 };
 
 const INDICATORS = [
   { id: 'sma:20', label: 'SMA 20', color: '#f0b429' },
@@ -87,74 +93,13 @@ function historyKey(symbol, tfId) {
   return symbol + ':' + tfId;
 }
 
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function () {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function gauss(rnd) {
-  let u = 0;
-  let v = 0;
-  while (!u) u = rnd();
-  while (!v) v = rnd();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
-function hashStr(s) {
-  let h = 2166136261;
-  for (const c of s) {
-    h ^= c.charCodeAt(0);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function genSynthetic(symbol, tfSec, n = CHUNK) {
-  const rnd = mulberry32(hashStr(symbol + ':' + tfSec) ^ 0x9e3779b9);
-  const tfMs = tfSec * 1000;
-  const t0 = Math.floor(Date.now() / tfMs) * tfMs - (n - 1) * tfMs;
-  let price = BASE_PRICES[symbol] || 100;
-  const base = price;
-  let drift = 0.0002;
-  let vol = 0.011;
-  let regimeLeft = 0;
-  const bars = [];
-  for (let i = 0; i < n; i++) {
-    if (regimeLeft <= 0) {
-      regimeLeft = (40 + rnd() * 140) | 0;
-      drift = (rnd() - 0.48) * 0.0016;
-      vol = 0.005 + rnd() * 0.02;
-    }
-    regimeLeft--;
-    const open = price;
-    // mild mean reversion keeps the demo walk in a plausible band
-    const revert = -0.004 * Math.log(price / base);
-    const ret = drift + revert + vol * gauss(rnd);
-    const close = open * Math.exp(ret);
-    const high = Math.max(open, close) * (1 + Math.abs(gauss(rnd)) * vol * 0.6);
-    const low = Math.min(open, close) * (1 - Math.abs(gauss(rnd)) * vol * 0.6);
-    const volume = Math.round(
-      420 * (1 + (Math.abs(ret) / vol) * 2 + rnd() * 0.6) * (symbol === 'ETH' ? 6 : symbol === 'SOL' ? 30 : 1)
-    );
-    bars.push({ time: t0 + i * tfMs, open, high, low, close, volume });
-    price = close;
-  }
-  return bars;
-}
-
 /** Long synthetic history for a symbol+timeframe (generated once). */
 function getHistory(symbol, tfId) {
   const key = historyKey(symbol, tfId);
   let hist = histCache.get(key);
   if (!hist) {
     const tfSec = TFS.find((t) => t.id === tfId).sec;
-    hist = genSynthetic(symbol, tfSec, HIST_LEN);
+    hist = genSynthetic(symbol, tfSec, HIST_LEN, BASE_PRICES[symbol] || 100);
     histCache.set(key, hist);
   }
   return hist;
@@ -167,87 +112,9 @@ function olderSynthetic(symbol, tfId, fromTime, limit = CHUNK) {
   return older.slice(-limit);
 }
 
-/** Stateful synthetic live stream: mutates the current bar, rolls on boundary. */
-function makeSynthStream(symbol, tfSec, startPrice) {
-  const tfMs = tfSec * 1000;
-  const rnd = mulberry32((Math.random() * 1e9) >>> 0);
-  let cur = null;
-  return () => {
-    const t = Math.floor(Date.now() / tfMs) * tfMs;
-    if (!cur || cur.time !== t) {
-      const base = startPrice ?? BASE_PRICES[symbol] ?? 100;
-      const open = cur ? cur.close : base * (1 + gauss(rnd) * 0.002);
-      cur = { time: t, open, high: open, low: open, close: open, volume: 0 };
-    } else {
-      const vol = 0.004;
-      cur.close = Math.max(1e-8, cur.close * Math.exp(vol * gauss(rnd) * 0.35));
-      cur.high = Math.max(cur.high, cur.close);
-      cur.low = Math.min(cur.low, cur.close);
-      cur.volume += Math.round(20 + rnd() * 60);
-    }
-    return { ...cur };
-  };
-}
-
 /* ------------------------------------------------------------------ *
  * Binance feed (real data, graceful fallback)
  * ------------------------------------------------------------------ */
-
-async function fetchKlines(symbol, tfId, limit = CHUNK, endTime) {
-  const pair = BINANCE[symbol];
-  let url = `https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${tfId}&limit=${limit}`;
-  if (endTime) url += `&endTime=${endTime - 1}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-  const rows = await res.json();
-  return rows.map((k) => ({
-    time: k[0],
-    open: +k[1],
-    high: +k[2],
-    low: +k[3],
-    close: +k[4],
-    volume: +k[5],
-  }));
-}
-
-function openBinanceSocket(symbol, tfId, onBar, onDown) {
-  const pair = BINANCE[symbol];
-  let ws;
-  try {
-    ws = new WebSocket(`wss://stream.binance.com:9443/ws/${pair.toLowerCase()}@kline_${tfId}`);
-  } catch (err) {
-    onDown(err);
-    return { close() {} };
-  }
-  const failTimer = setTimeout(() => {
-    if (ws.readyState !== WebSocket.OPEN) {
-      try { ws.close(); } catch (_) {}
-      onDown(new Error('timeout'));
-    }
-  }, 8000);
-  ws.onopen = () => clearTimeout(failTimer);
-  ws.onmessage = (ev) => {
-    try {
-      const msg = JSON.parse(ev.data);
-      const k = msg.k;
-      if (!k) return;
-      onBar({ time: k.t, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v });
-    } catch (_) {}
-  };
-  ws.onerror = () => {};
-  ws.onclose = () => {
-    clearTimeout(failTimer);
-    onDown(new Error('closed'));
-  };
-  return {
-    close() {
-      ws.onclose = null;
-      ws.onerror = null;
-      clearTimeout(failTimer);
-      try { ws.close(); } catch (_) {}
-    },
-  };
-}
 
 /* ------------------------------------------------------------------ *
  * Feed controller
@@ -274,7 +141,7 @@ function startFeed({ syntheticFallbackToast = false } = {}) {
 
   if (symbol === 'DEMO' || !BINANCE[symbol]) {
     const sec = TFS.find((t) => t.id === tf).sec;
-    const next = makeSynthStream(symbol, sec, lastChartClose());
+    const next = makeSynthStream(sec, lastChartClose());
     const timer = setInterval(() => chart.update(next()), 650);
     setStatus('ok', 'live · synthetic feed');
     feed = { stop: () => clearInterval(timer) };
@@ -291,7 +158,7 @@ function startFeed({ syntheticFallbackToast = false } = {}) {
     setStatus('warn', 'live · polling Binance');
     pollTimer = setInterval(async () => {
       try {
-        const bars = await fetchKlines(symbol, tf, 2);
+        const bars = await fetchBinanceKlines(BINANCE[symbol], tf, 2);
         for (const b of bars) chart.update(b);
       } catch (_) {
         clearInterval(pollTimer);
@@ -305,7 +172,7 @@ function startFeed({ syntheticFallbackToast = false } = {}) {
     if (dead) return;
     if (syntheticFallbackToast || msg) toast(msg || 'Binance unreachable — showing synthetic data.');
     const sec = TFS.find((t) => t.id === tf).sec;
-    const next = makeSynthStream(symbol, sec, lastChartClose());
+    const next = makeSynthStream(sec, lastChartClose());
     const timer = setInterval(() => chart.update(next()), 650);
     setStatus('warn', 'live · synthetic (Binance unreachable)');
     feed = { stop: () => clearInterval(timer) };
@@ -314,7 +181,7 @@ function startFeed({ syntheticFallbackToast = false } = {}) {
   };
 
   ws = openBinanceSocket(
-    symbol,
+    BINANCE[symbol],
     tf,
     (bar) => {
       if (dead) return;
@@ -350,8 +217,8 @@ async function loadSymbol() {
 
   setStatus('warn', `loading ${BINANCE[symbol]} ${tf}…`);
   try {
-    const bars = await fetchKlines(symbol, tf);
-    chart.onloadmore = (fromTime) => fetchKlines(symbol, tf, CHUNK, fromTime);
+    const bars = await fetchBinanceKlines(BINANCE[symbol], tf);
+    chart.onloadmore = (fromTime) => fetchBinanceKlines(BINANCE[symbol], tf, CHUNK, fromTime);
     chart.setData(bars);
     startFeed({ syntheticFallbackToast: true });
   } catch (err) {
