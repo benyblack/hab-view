@@ -82,7 +82,13 @@ bet:
   outside the component (Shadow DOM friendly)
 - **Accessible** — focusable, arrow-key crosshair, ARIA summary of the data
 
-## Run the demo
+## Try it online
+
+The demo site is deployed to GitHub Pages:
+**https://benyblack.github.io/wickchart/** — a landing page with a live hero
+chart, the full interactive demo, and the zero-JavaScript declarative page.
+
+## Run the demo locally
 
 ```bash
 npm run dev        # serves on http://localhost:5173

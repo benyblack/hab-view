@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WickChart — a TradingView-grade chart in one tag, zero dependencies</title>
+  <meta name="description" content="wickchart — a modern, dependency-free financial charting web component. Candles, indicators, WickScript expressions, live streaming via <wick-feed>, volatility shading, AI-ready summaries." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%236366f1'/%3E%3Crect x='6' y='9' width='3.4' height='7' rx='1' fill='white'/%3E%3Crect x='14.5' y='7' width='3.4' height='5' rx='1' fill='white' opacity='.6'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #11141c;
+      --panel-2: #151926;
+      --border: rgba(148, 163, 184, 0.14);
+      --text: #e6edf3;
+      --muted: #8b95a7;
+      --accent: #6366f1;
+      --cyan: #22d3ee;
+      --up: #16c784;
+      --down: #ea3943;
+      --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg); color: var(--text);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.55;
+    }
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: 1060px; margin: 0 auto; padding: 0 22px; }
+
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 22px;
+      background: color-mix(in srgb, var(--bg) 82%, transparent);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      display: inline-flex; align-items: center; gap: 9px;
+      font-weight: 800; font-size: 15.5px; letter-spacing: -0.01em; color: var(--text);
+    }
+    .logo:hover { text-decoration: none; }
+    .logo svg { flex: none; }
+    nav .links { margin-left: auto; display: flex; gap: 16px; font-size: 13.5px; font-weight: 600; }
+    nav .links a { color: var(--muted); }
+    nav .links a:hover { color: var(--text); text-decoration: none; }
+
+    .hero { padding: 58px 0 26px; }
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 5vw, 44px);
+      line-height: 1.12; letter-spacing: -0.025em; font-weight: 800;
+    }
+    .hero h1 em { font-style: normal; color: var(--cyan); }
+    .hero p.sub { margin: 0 0 22px; color: var(--muted); font-size: 17px; max-width: 640px; }
+    .hero .ctas { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 17px; border-radius: 999px;
+      font: 600 13.5px var(--font); cursor: pointer;
+      border: 1px solid var(--border); color: var(--text); background: var(--panel);
+      transition: border-color 150ms ease, transform 150ms ease;
+    }
+    .btn:hover { text-decoration: none; border-color: color-mix(in srgb, var(--cyan) 50%, var(--border)); }
+    .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+    .btn.primary:hover { background: #575af0; }
+    .hero .note { color: var(--muted); font-size: 12.5px; }
+    .hero .note code { color: var(--cyan); font-family: var(--mono); font-size: 12px; }
+
+    .stage {
+      margin: 26px 0 8px;
+      border: 1px solid var(--border); border-radius: 14px;
+      background: var(--panel); overflow: hidden;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
+    .stage wick-chart {
+      display: block; width: 100%; height: clamp(340px, 48vw, 520px);
+      --wick-bg: var(--panel);
+      --wick-up: var(--up);
+      --wick-down: var(--down);
+      --wick-accent: var(--cyan);
+      --wick-text: var(--muted);
+      --wick-text-strong: var(--text);
+    }
+    .stage .caption {
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+      padding: 9px 14px; border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 12px;
+    }
+    .stage .caption b { color: var(--text); font-weight: 600; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 2px 10px; font-size: 11.5px; font-weight: 600;
+    }
+    .pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--up); }
+    .pill.off { opacity: 0.7; } .pill.off::before { background: #f59e0b; }
+
+    section { padding: 42px 0 6px; }
+    h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -0.02em; }
+    h2 + p { margin: 0 0 22px; color: var(--muted); font-size: 15px; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+    .card {
+      border: 1px solid var(--border); border-radius: 12px;
+      background: var(--panel); padding: 16px 17px;
+    }
+    .card h3 { margin: 0 0 6px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+    .card h3 .ico { color: var(--cyan); display: inline-flex; }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    pre.code {
+      margin: 0; padding: 18px 20px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      overflow: auto; font: 500 12.8px/1.7 var(--mono); color: var(--text);
+    }
+    pre.code .tag { color: var(--cyan); }
+    pre.code .attr { color: #a5b4fc; }
+    pre.code .str { color: #86efac; }
+    pre.code .cmt { color: var(--muted); }
+
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+    .col p.hint { color: var(--muted); font-size: 12.5px; margin: 8px 2px 0; }
+
+    footer {
+      margin-top: 56px; padding: 22px 0 34px;
+      border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 13px;
+      display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+    }
+    footer .sep { margin-left: auto; }
+  </style>
+  <!-- the only script on this page: the component itself, no build step -->
+  <script type="module" src="./src/wick-feed.js"></script>
+</head>
+<body>
+  <nav>
+    <a class="logo" href="./">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <rect x="1" y="1" width="22" height="22" rx="6" fill="#6366f1"/>
+        <rect x="6" y="9" width="3.4" height="7" rx="1" fill="#fff"/>
+        <rect x="14.5" y="7" width="3.4" height="5" rx="1" fill="#fff" opacity=".6"/>
+        <rect x="14.5" y="13.5" width="3.4" height="4" rx="1" fill="#fff"/>
+      </svg>
+      WickChart
+    </a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#quickstart">Quickstart</a>
+      <a href="./demo/">Demo</a>
+      <a href="https://github.com/benyblack/wickchart">GitHub</a>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="hero">
+      <h1>A TradingView-grade chart.<br /><em>One tag. Zero dependencies.</em></h1>
+      <p class="sub">
+        <b>wickchart</b> is a modern financial charting Web Component: candles, indicators,
+        live streaming, theming — in a single framework-agnostic element that renders
+        anywhere a <code>&lt;div&gt;</code> does.
+      </p>
+      <div class="ctas">
+        <a class="btn primary" href="./demo/">Open the full demo</a>
+        <a class="btn" href="https://www.npmjs.com/package/wickchart">npm · wickchart</a>
+        <a class="btn" href="https://github.com/benyblack/wickchart">Source on GitHub</a>
+      </div>
+      <p class="note">
+        The chart below is the real component, live — placed with two HTML tags
+        (<code>&lt;wick-feed&gt;</code> + <code>&lt;wick-chart&gt;</code>) and zero JavaScript.
+      </p>
+
+      <div class="stage">
+        <!-- deterministic offline feed so the hero always renders, even sandboxed -->
+        <wick-feed id="hero-feed" for="hero" demo="BTC" tf="1h" limit="400"></wick-feed>
+        <wick-chart id="hero" label="BTC · 1h · demo feed" type="candles"
+                    indicators="sma:20 ema:50 volume" volshading></wick-chart>
+        <div class="caption">
+          <span class="pill" id="feed-pill">loading</span>
+          <span><b>Try it:</b> scroll to zoom · drag to pan · shift-drag to measure · double-click to reset</span>
+        </div>
+      </div>
+    </div>
+
+    <section id="features">
+      <h2>Everything a trader needs, nothing they don't</h2>
+      <p>Built as one Canvas-rendered element — ~100 KB unminified, no framework, no build step.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><span class="ico">⌁</span>Zero-dependency streaming</h3>
+          <p><code>&lt;wick-feed&gt;</code> streams Binance over WebSocket with REST backfill — degrading gracefully to polling, then a synthetic bridge. Or bring your own data with <code>setData()</code> / <code>update()</code>.</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico">ƒ</span>WickScript indicators</h3>
+          <p>Write custom indicators inline: <code>expr:{(close - sma(close,20)) / sma(close,20) * 100}</code>. A hand-written parser — no <code>eval</code> — with sma/ema/rsi/hh/ll/crossings built in.</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico">◐</span>Volatility-regime shading</h3>
+          <p><code>volshading</code> tints the chart by realized-vol percentiles — calm vs hot markets read at a glance, with the regime in the legend.</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico">✦</span>Smart annotations</h3>
+          <p>Volume spikes, gaps, pivot highs/lows and RSI divergences auto-badge themselves with a one-line insight on hover.</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico">⇄</span>Trading tools</h3>
+          <p>Positions with stop/target zones and live P&amp;L, edge-triggered price alerts, shift-drag measure, visible-range stats, volume profile with POC/VAH/VAL.</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico">🤖</span>AI-ready summaries</h3>
+          <p><code>getDataWindow()</code> turns what's on screen into a compact, paste-anywhere summary: trend, vol percentile, patterns, indicator snapshots. All computed locally.</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico">♪</span>Sonification</h3>
+          <p>Price maps to pitch — arrow keys play the chart so trend and shape are audible. A rare accessibility win for screen-reader traders.</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico">⧉</span>Share everything</h3>
+          <p>Chart state round-trips through the URL hash, PNG export is built in, and co-view syncs your crosshair across tabs over BroadcastChannel.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="quickstart">
+      <h2>Two tags to a live chart</h2>
+      <p>No install, no bundler — one script tag from a CDN and pure HTML. That's the whole integration.</p>
+      <div class="cols">
+        <div>
+          <pre class="code"><span class="cmt">&lt;!-- live Binance chart, zero JS --&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="str">"module"</span> <span class="attr">src</span>=<span class="str">"https://unpkg.com/wickchart/feed"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="tag">&lt;wick-feed</span> <span class="attr">for</span>=<span class="str">"c"</span> <span class="attr">binance</span>=<span class="str">"BTCUSDT"</span> <span class="attr">tf</span>=<span class="str">"1h"</span><span class="tag">&gt;&lt;/wick-feed&gt;</span>
+<span class="tag">&lt;wick-chart</span> <span class="attr">id</span>=<span class="str">"c"</span> <span class="attr">indicators</span>=<span class="str">"sma:20 volume"</span> <span class="attr">volshading</span><span class="tag">&gt;&lt;/wick-chart&gt;</span></pre>
+        </div>
+        <div>
+          <pre class="code"><span class="cmt">// or npm, with types included</span>
+<span class="tag">npm</span> install wickchart
+
+<span class="cmt">// full programmatic control</span>
+<span class="tag">import</span> WickChart <span class="tag">from</span> <span class="str">'wickchart'</span>;
+chart.setData(bars);      <span class="cmt">// [{time,o,h,l,c,v}]</span>
+chart.update(bar);        <span class="cmt">// stream live</span>
+chart.getDataWindow();    <span class="cmt">// AI-ready summary</span></pre>
+          <p class="hint">Also exported: <code>wickchart/core</code> (pure functions — indicators, stats, the WickScript engine) and <code>wickchart/feed</code> (the declarative element).</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>WickChart · MIT license</span>
+      <a href="https://github.com/benyblack/wickchart">GitHub</a>
+      <a href="https://www.npmjs.com/package/wickchart">npm</a>
+      <a href="./demo/declarative.html">Declarative demo</a>
+      <span class="sep">0.x <code>hab-*</code> names still work — see the README migration notes.</span>
+    </footer>
+  </div>
+
+  <script>
+    // mirror the feed status into the hero pill (the only JS on the page)
+    document.getElementById('hero-feed').addEventListener('wick-feed:status', (e) => {
+      const pill = document.getElementById('feed-pill');
+      const s = e.detail.status;
+      pill.textContent = s === 'live' ? 'live' : s === 'fallback' ? 'synthetic feed' : s;
+      pill.classList.toggle('off', s === 'fallback' || s === 'polling');
+    });
+  </script>
+</body>
+</html>
