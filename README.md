@@ -6,8 +6,23 @@ A TradingView-style financial chart as a single framework-agnostic Web Component
 One file, zero dependencies, one HTML tag. Canvas-rendered, fast, themeable, and
 streaming-ready.
 
+## Install
+
+```bash
+npm install hab-view
+```
+
+```js
+// any bundler / framework — TypeScript types included
+import 'hab-view';                       // registers <hab-chart>
+import HabChart from 'hab-view';         // for HabChart.registerIndicator(...)
+import { encodeStateQuery } from 'hab-view/core';  // pure helpers
+```
+
+Or straight from a CDN — no install, no build:
+
 ```html
-<script type="module" src="https://unpkg.com/hab-view/src/hab-chart.js"></script>
+<script type="module" src="https://unpkg.com/hab-view"></script>
 
 <hab-chart label="BTC · 1h" type="candles" indicators="sma:20 volume"></hab-chart>
 
@@ -19,6 +34,8 @@ streaming-ready.
 ```
 
 Works in plain HTML, React, Vue, Svelte, Angular — anywhere a `<div>` works.
+TypeScript declarations ship inside the package (generated at pack time from
+the JSDoc-annotated source — the repo itself stays 100% dependency-free JS).
 
 ---
 
@@ -115,8 +132,9 @@ HabChart.registerIndicator('vwap', {
 chart.indicators = 'vwap:20';
 ```
 
-`document.querySelector('hab-chart').constructor` gives you the `HabChart`
-class for registration.
+`import HabChart from 'hab-view'` gives you the class for
+`HabChart.registerIndicator(...)` (the element is registered as a side effect
+of importing the package).
 
 ## Methods
 
