@@ -50,15 +50,56 @@ body {
 
 .topbar {
   display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
-  padding: 10px 16px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(10px);
   z-index: 10;
 }
+
+.topbar-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 9px 16px 10px;
+}
+
+.topbar-row + .topbar-row {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+/* labeled control groups: tiny caption above each cluster */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.group-label {
+  font: 700 9.5px/1 var(--font);
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--text-muted);
+  opacity: 0.85;
+  padding-left: 2px;
+}
+
+.group-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.topbar-second .group + .group { padding-left: 16px; border-left: 1px solid var(--border); }
+
+.group-studies { flex: 1 1 340px; min-width: 0; }
+.group-view .group-body { gap: 6px; }
+.group-trade { margin-left: auto; }
 
 .brand {
   display: flex;
@@ -90,14 +131,7 @@ body {
   padding: 2px 8px;
 }
 
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  flex: 1;
-  min-width: 0;
-}
+.topbar-main .brand { align-self: center; margin-right: 4px; }
 
 .seg {
   display: flex;
@@ -194,7 +228,7 @@ body {
   font: 500 12px var(--font);
   padding: 6px 11px;
   min-height: 32px;
-  width: 300px;
+  width: clamp(170px, 24vw, 320px);
   border-radius: 999px;
   transition: border-color 160ms ease;
 }
@@ -237,8 +271,9 @@ body {
 
 .topbar-right {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
+  margin-left: auto;
 }
 
 .icon-btn {
