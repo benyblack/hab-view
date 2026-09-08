@@ -522,13 +522,25 @@ document.getElementById('btn-coview').addEventListener('click', (e) => {
   const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
   e.currentTarget.setAttribute('aria-pressed', String(on));
   const chartEl = document.getElementById('chart');
-  if (on) chartEl.setAttribute('co-view', 'wick-demo');
-  else chartEl.removeAttribute('co-view');
+  if (on) {
+    chartEl.setAttribute('co-view-name', 'tab-' + Math.random().toString(36).slice(2, 5));
+    chartEl.setAttribute('co-view', 'wick-demo');
+  } else {
+    chartEl.removeAttribute('co-view');
+    chartEl.removeAttribute('co-view-name');
+  }
   toast(
     on
-      ? 'Co-view on — open this page in a second tab and hover the chart.'
+      ? 'Co-view on — open this page in a second tab: crosshairs sync, and each tab shows the other\u2019s viewport as a colored band.'
       : 'Co-view off.'
   );
+});
+
+chart.addEventListener('wick:peers', (e) => {
+  const { joined, left } = e.detail;
+  const who = (p) => p.name || p.id;
+  if (joined.length) toast(`${who(joined[0])} joined co-view — their viewport shows as a band at the top.`);
+  if (left.length) toast(`${who(left[0])} left co-view.`);
 });
 
 document.getElementById('btn-annotations').setAttribute('aria-pressed', String(state.annotations));

@@ -207,6 +207,7 @@
         <li><a href="#state">State &amp; shareable URLs</a></li>
         <li><a href="#theming">Theming</a></li>
         <li><a href="#interactions">Interactions &amp; a11y</a></li>
+        <li><a href="#coview">Co-view presence<span class="new-pill">NEW</span></a></li>
         <li><a href="#react">React, Vue, Svelte</a></li>
         <li><a href="#perf">Performance &amp; export</a></li>
         <li><a href="#migrate">Migrating from 0.x</a></li>
@@ -693,6 +694,29 @@ location.hash = encodeStateQuery(chart.getState());   <span class="cmt">// → U
         <p>The canvas carries an <code>aria-label</code> with the latest price, change % and bar count; crosshair + legend keep a text readout for pointer users.</p>
       </section>
 
+      <section id="coview">
+        <h2>Co-view presence <a class="anchor" href="#coview">#</a> <span class="pill new">NEW</span></h2>
+        <p>Charts sharing a <code>co-view</code> room see each other: peer <b>crosshairs</b> appear as ghosts, and now peer <b>viewports</b> render as colored bands along the top of the plot — like document cursors, but for where each person is looking. Pan one chart and every peer watches your window slide; zoom out and they see you zoom out.</p>
+        <div class="codewrap"><pre class="code">&lt;wick-chart <span class="attr">co-view</span>=<span class="str">"warroom"</span> <span class="attr">co-view-name</span>=<span class="str">"ben"</span>&gt;&lt;/wick-chart&gt;
+
+chart.<span class="attr">getPeers</span>();
+<span class="cmt">// [{ id: 'p9xk2a', name: 'maya', range: { from: 1725148800000, to: 1725840000000 }, at: … }]</span>
+
+chart.addEventListener(<span class="str">'wick:peers'</span>, (e) =&gt; {
+  <span class="cmt">// e.detail = { peers, joined, left } — membership changes only</span>
+});</pre></div>
+        <div class="note">Transport is same-origin <code>BroadcastChannel</code> — tabs, windows, and multiple charts on one page. Peers fade ~12 s after their last sighting; a closed tab is a fast <code>bye</code>. Presence never leaves the browser: to sync across the network, forward <code>wick:range</code> through your own WebSocket and replay it — the component ships no network code.</div>
+
+        <div class="demo-card">
+          <div class="demo-head"><span class="t">Live playground — two charts, one room</span></div>
+          <wick-feed for="ex-cv-a" demo="BTC" tf="1h" limit="300"></wick-feed>
+          <wick-chart id="ex-cv-a" co-view="docs-room" co-view-name="alice" label="alice · drag me"></wick-chart>
+          <wick-feed for="ex-cv-b" demo="ETH" tf="1h" limit="300"></wick-feed>
+          <wick-chart id="ex-cv-b" co-view="docs-room" co-view-name="bob" label="bob · or me" style="border-top:1px solid var(--border)"></wick-chart>
+          <div class="foot" id="cv-foot">drag either chart — the other shows the peer's viewport band + ghost crosshair. <span id="cv-count"></span></div>
+        </div>
+      </section>
+
       <section id="react">
         <h2>React, Vue, Svelte <a class="anchor" href="#react">#</a></h2>
         <p>The element is framework-agnostic. For React there is an official binding — <code>react</code> is an optional peer dependency:</p>
@@ -1032,6 +1056,17 @@ location.hash = encodeStateQuery(chart.getState());   <span class="cmt">// → U
       seg($('rp-seg'), [['off', 'off'], ['scalp', 'scalp 1%'], ['swing', 'swing'], ['short', 'short']], 'off', (v) => { mode = v; apply(); });
       const kick = () => (c.data && c.data.length ? apply() : setTimeout(kick, 400));
       setTimeout(kick, 500);
+    }
+
+    /* ---------- co-view presence playground ---------- */
+    {
+      const a = $('ex-cv-a'), b = $('ex-cv-b'), count = $('cv-count');
+      const upd = (src) => {
+        const peers = src.getPeers();
+        if (peers.length) count.textContent = `${src.getAttribute('co-view-name')} sees: ${peers.map((p) => p.name || p.id).join(', ')}.`;
+      };
+      a.addEventListener('wick:peers', () => upd(a));
+      b.addEventListener('wick:peers', () => upd(b));
     }
 
     /* ---------- trading ---------- */

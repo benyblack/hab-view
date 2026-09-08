@@ -1869,6 +1869,87 @@ export function normalizeRiskPlan(spec) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Co-view presence — peer viewport tracking with TTL expiry
+ * ------------------------------------------------------------------ */
+
+/**
+ * Tracks other charts viewing the same room: last-sighting timestamps per
+ * peer plus the viewport each one is looking at. Pure bookkeeping — the
+ * transport (BroadcastChannel, WebSocket, …) lives in the component/app.
+ *
+ * Peers expire `ttl` ms after their last sighting, so a closed tab fades
+ * out of the room without an explicit goodbye.
+ */
+export class PresenceTracker {
+  /** @param {number} [ttl=12000] ms a peer survives without a sighting */
+  constructor(ttl = 12000) {
+    this.ttl = Math.max(1000, +ttl || 12000);
+    /** @type {Map<string, {id: string, name: string|null, range: {from:number,to:number}|null, at: number}>} */
+    this.peers = new Map();
+  }
+
+  /**
+   * Record a sighting. `patch.range` ({from,to} times) is validated and
+   * normalized; a sighting without a range keeps the previous one.
+   * @returns {boolean} true when this sighting is a join (new peer)
+   */
+  track(id, patch = {}, now = Date.now()) {
+    if (!id || typeof id !== 'string') return false;
+    const existing = this.peers.get(id);
+    if (existing) {
+      if (patch && patch.range) {
+        const f = +patch.range.from;
+        const t = +patch.range.to;
+        if (Number.isFinite(f) && Number.isFinite(t)) {
+          existing.range = { from: Math.min(f, t), to: Math.max(f, t) };
+        }
+      }
+      if (patch && patch.name != null) existing.name = String(patch.name).slice(0, 24) || null;
+      existing.at = now;
+      return false;
+    }
+    const f = patch && patch.range ? +patch.range.from : NaN;
+    const t = patch && patch.range ? +patch.range.to : NaN;
+    this.peers.set(id, {
+      id,
+      name: patch && patch.name != null ? (String(patch.name).slice(0, 24) || null) : null,
+      range: Number.isFinite(f) && Number.isFinite(t)
+        ? { from: Math.min(f, t), to: Math.max(f, t) }
+        : null,
+      at: now,
+    });
+    return true;
+  }
+
+  /** @returns {object|null} the removed peer entry, or null when unknown */
+  drop(id) {
+    const p = this.peers.get(id);
+    this.peers.delete(id);
+    return p || null;
+  }
+
+  /** Expire peers not seen within the ttl.
+   *  @returns {object[]} the peer entries that left */
+  sweep(now = Date.now()) {
+    const left = [];
+    for (const [id, p] of this.peers) {
+      if (now - p.at > this.ttl) {
+        this.peers.delete(id);
+        left.push(p);
+      }
+    }
+    return left;
+  }
+
+  /** @returns {{id: string, name: string|null, range: object|null, at: number}[]} copies, oldest sighting first */
+  list() {
+    return [...this.peers.values()]
+      .sort((a, b) => a.at - b.at)
+      .map((p) => ({ ...p, range: p.range ? { ...p.range } : null }));
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * AI-ready window summary
  * ------------------------------------------------------------------ */
 
