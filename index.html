@@ -166,8 +166,8 @@
       <h1>A TradingView-grade chart.<br /><em>One tag. Zero dependencies.</em></h1>
       <p class="sub">
         <b>wickchart</b> is a modern financial charting Web Component: candles, indicators,
-        live streaming, theming — in a single framework-agnostic element that renders
-        anywhere a <code>&lt;div&gt;</code> does.
+        live streaming, scenario planning — plus an opt-in drawing toolkit — in a single
+        framework-agnostic element that renders anywhere a <code>&lt;div&gt;</code> does.
       </p>
       <div class="ctas">
         <a class="btn primary" href="./demo/">Open the full demo</a>
@@ -204,6 +204,14 @@
           <p>Write custom indicators inline: <code>expr:{(close - sma(close,20)) / sma(close,20) * 100}</code>. A hand-written parser — no <code>eval</code> — with sma/ema/rsi/hh/ll/crossings built in.</p>
         </div>
         <div class="card">
+          <h3><span class="ico">✎</span>Drawings, as opt-in bytes</h3>
+          <p>Trendlines &amp; rays, levels, boxes, fibonacci retracements and editable notes — the <code>wickchart-draw</code> plugin (~8&nbsp;KB gz) adds them without the core growing a single tool. Anchors magnet-snap to bars &amp; OHLC, serialize to JSON, and <b>sync across tabs</b>: draw on one window, it appears on the other.</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico">⌥</span>A real plugin API</h3>
+          <p><code>addLayer()</code> paints into the render pipeline and claims pointer gestures, with coordinate transforms that extrapolate into future space. The whole surface is ~2&nbsp;KB — and a CI size budget keeps the core under 64&nbsp;KB gzipped, so “small” is an invariant, not a promise.</p>
+        </div>
+        <div class="card">
           <h3><span class="ico">◐</span>Volatility-regime shading</h3>
           <p><code>volshading</code> tints the chart by realized-vol percentiles — calm vs hot markets read at a glance, with the regime in the legend.</p>
         </div>
@@ -213,7 +221,7 @@
         </div>
         <div class="card">
           <h3><span class="ico">⇄</span>Trading tools</h3>
-          <p>Positions with stop/target zones and live P&amp;L, edge-triggered price alerts, shift-drag measure, visible-range stats, volume profile with POC/VAH/VAL — plus server-side supply/demand zones &amp; levels via <code>setOverlays()</code>.</p>
+          <p>Positions with stop/target zones and live P&amp;L, edge-triggered price alerts, an R-multiple risk planner, scenario mode with σ-cones, shift-drag measure, visible-range stats, volume profile with POC/VAH/VAL — plus server-side zones &amp; levels via <code>setOverlays()</code>.</p>
         </div>
         <div class="card">
           <h3><span class="ico">🤖</span>AI-ready summaries</h3>
@@ -225,7 +233,7 @@
         </div>
         <div class="card">
           <h3><span class="ico">⧉</span>Share everything</h3>
-          <p>Chart state round-trips through the URL hash, PNG export is built in, and co-view syncs your crosshair across tabs over BroadcastChannel.</p>
+          <p>Chart state round-trips through the URL hash, PNG export is built in — and co-view syncs crosshairs, viewport presence bands and shared drawings across tabs, all over BroadcastChannel with no server.</p>
         </div>
       </div>
     </section>
