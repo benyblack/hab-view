@@ -6,6 +6,9 @@ A TradingView-style financial chart as a single framework-agnostic Web Component
 One file, zero dependencies, one HTML tag. Canvas-rendered, fast, themeable, and
 streaming-ready.
 
+<img width="759" height="390" alt="image" src="https://github.com/user-attachments/assets/f335cecc-d5b3-4d27-a982-600b6bc72d6f" />
+
+
 ## Install
 
 ```bash
