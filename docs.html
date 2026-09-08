@@ -244,6 +244,17 @@
           <wick-chart id="ex-start" label="BTC · 1h · demo feed" indicators="sma:20 volume"></wick-chart>
         </div>
         <div class="note">Everything renders into a shadow-DOM canvas at device-pixel resolution with rAF batching — ~100 KB unminified, zero dependencies.</div>
+
+        <h3>Optional: drawing tools</h3>
+        <p>Drawings are <b>not part of the core</b> — they ship as a separate package, <code>wickchart-draw</code> (~8 KB gzipped, peer: wickchart ≥ 1.4), so you only pay for them if you use them. Same two install paths as the chart:</p>
+        <div class="codewrap"><pre class="code"><span class="tag">npm</span> install wickchart-draw
+
+<span class="tag">import</span> { attachDrawings } <span class="tag">from</span> <span class="str">'wickchart-draw'</span>;</pre></div>
+        <div class="codewrap"><pre class="code"><span class="cmt">&lt;!-- CDN — a plain module import, no build step --&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="str">"module"</span><span class="tag">&gt;</span>
+  <span class="tag">import</span> { attachDrawings } <span class="tag">from</span> <span class="str">'https://unpkg.com/wickchart-draw'</span>;
+<span class="tag">&lt;/script&gt;</span></pre></div>
+        <p>Then <code>attachDrawings(chart)</code> — the full tour (tools, magnet snap, sharing across tabs) is in the <a href="#drawing">Drawings</a> section.</p>
       </section>
 
       <section id="data">
@@ -869,7 +880,8 @@ chart.<span class="attr">requestDraw</span>();        <span class="cmt">// repai
       <section id="drawing">
         <h2>Drawings <a class="anchor" href="#drawing">#</a> <span class="pill new">NEW</span></h2>
         <p><b>wickchart-draw</b> is an opt-in package, not core bytes: trendlines (segment / ray / infinite), horizontal levels, rectangles, fibonacci retracements and text notes — built entirely on the <a href="#plugins">plugin layer API</a>, ~8 KB gzipped under its own CI budget. Drawings are plain <code>{ time, price }</code> data: they ride zoom &amp; pan, survive data reloads, extrapolate into future space, and serialize to JSON.</p>
-        <div class="codewrap"><pre class="code"><span class="tag">import</span> { attachDrawings } <span class="tag">from</span> <span class="str">'wickchart-draw'</span>;
+        <p>Install it separately from the chart — <code>npm install wickchart-draw</code>, or <code>import … from 'https://unpkg.com/wickchart-draw'</code> straight from the CDN (peer: wickchart ≥ 1.4, already on the page from <a href="#start">Getting started</a>):</p>
+        <div class="codewrap"><pre class="code"><span class="tag">import</span> { attachDrawings } <span class="tag">from</span> <span class="str">'wickchart-draw'</span>;  <span class="cmt">// npm i wickchart-draw — a separate package</span>
 
 <span class="tag">const</span> draw = <span class="attr">attachDrawings</span>(chart, { magnet: <span class="tag">true</span> });
 draw.<span class="attr">setTool</span>(<span class="str">'trendline'</span>);  <span class="cmt">// arm a tool — dragging draws instead of panning</span>

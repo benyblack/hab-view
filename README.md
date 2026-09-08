@@ -673,6 +673,8 @@ data that rides zoom & pan, survives reloads, extrapolates into future
 space, and serializes to JSON. Anchors magnet-snap to bar times and OHLC.
 
 ```js
+npm install wickchart wickchart-draw   // drawings are a separate opt-in package
+
 import { attachDrawings } from 'wickchart-draw';
 
 const draw = attachDrawings(chart);
