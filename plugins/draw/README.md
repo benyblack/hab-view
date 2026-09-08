@@ -26,16 +26,22 @@ draw.setDrawings(saved);
 draw.deleteSelected();
 draw.clear();
 draw.detach();
+
+// shared drawings: draw on one tab, appears on the others
+draw.setShare(true);        // reuses the chart's co-view room
+draw.setShare('team-room'); // …or an explicit BroadcastChannel room
 ```
 
 Events on the chart element:
 
 - `wick:drawings` — `{ detail: { drawings, action } }` after every change
-  (`add | move | edit | delete | clear | set | undo`)
+  (`add | move | edit | delete | clear | set | undo | remote`)
 - `wick:drawselect` — `{ detail: { id } }` when the selection changes
 
-Options: `attachDrawings(chart, { magnet: true, color: '#4c8dff', width: 1.5, drawings: [...] })`.
+Options: `attachDrawings(chart, { magnet: true, color: '#4c8dff', width: 1.5, drawings: [...], share: 'room' })`.
 Delete/Backspace removes the selected drawing (ignored while typing in inputs).
+Shared drawings use last-writer-wins list sync; remote updates never touch the
+local undo stack.
 
 Requires wickchart ≥ 1.4.0 (the plugin layer API). Full docs and a live
 playground: the **Drawings** section of the wickchart documentation.

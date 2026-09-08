@@ -679,13 +679,18 @@ const draw = attachDrawings(chart);
 draw.setTool('trendline'); // drag to draw; setTool(null) = select/move mode
 draw.getDrawings();        // → JSON array (save it); setDrawings(saved)
 draw.undo(); draw.clear();
+draw.setShare(true);       // shared drawings: draw on one tab, appears on all
 chart.addEventListener('wick:drawings', (e) => save(e.detail.drawings));
 ```
 
 Select mode: click a drawing to select it, drag to move, drag the square
 handles to re-anchor, `Delete` removes, `Esc` cancels a gesture; clicks on
-empty space fall through to the chart. Peer dependency: wickchart ≥ 1.4.
-See the live playground in the docs (Drawings section).
+empty space fall through to the chart. Placing a note opens an inline editor
+(type + `Enter`); click a selected note again to re-edit. `setShare(true)`
+reuses the chart's `co-view` room (or pass an explicit room name) — last
+writer wins, remote updates never touch the local undo stack. Peer
+dependency: wickchart ≥ 1.4. See the live playground in the docs (Drawings
+section — it shares a room, so open it twice and draw on either chart).
 
 ## Methods
 

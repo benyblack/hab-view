@@ -69,6 +69,16 @@ test('normalizeDrawings: caps at 100 drawings', () => {
   assert.equal(normalizeDrawings(list).length, 100);
 });
 
+test('normalizeDrawings: duplicate ids are deduped (first wins)', () => {
+  const out = normalizeDrawings([
+    { id: 'x', type: 'hline', points: [{ t: 1, p: 2 }] },
+    { id: 'x', type: 'hline', points: [{ t: 3, p: 4 }] }, // dropped — same id
+    { id: 'y', type: 'text', text: 'hi', points: [{ t: 5, p: 6 }] },
+  ]);
+  assert.deepEqual(out.map((d) => d.id), ['x', 'y']);
+  assert.equal(out[0].points[0].p, 2);
+});
+
 /* ------------------------- fibPrices ------------------------- */
 
 test('fibPrices: 0 at the second anchor, 1 at the first, 0.5 midway', () => {

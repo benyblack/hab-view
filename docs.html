@@ -897,7 +897,7 @@ chart.addEventListener(<span class="str">'wick:drawings'</span>, (e) =&gt; save(
           <wick-chart id="ex-draw" label="BTC · 1h · drawings"></wick-chart>
           <div class="foot" id="dr-foot">pick a tool and drag on the chart — drawings anchor in time &amp; price</div>
         </div>
-        <div class="note">The package ships as <code>wickchart-draw</code> on npm (peer: wickchart ≥ 1.4) with its own gzip budget — the drawing toolkit can never silently bloat the core. Locked/invisible flags, per-drawing color and width ride along in the JSON.</div>
+        <div class="note">The package ships as <code>wickchart-draw</code> on npm (peer: wickchart ≥ 1.4) with its own gzip budget — the drawing toolkit can never silently bloat the core. Locked/invisible flags, per-drawing color and width ride along in the JSON. Pass <code>share: true</code> (or a room name) to sync drawings across tabs over BroadcastChannel — this playground shares the <code>docs-draw</code> room, so <b>open the page in a second window and draw</b>: every trendline, fib and note appears on both charts. Last writer wins; remote updates fire <code>wick:drawings</code> with action <code>remote</code> and never touch the local undo stack.</div>
       </section>
 
       <section id="perf">
@@ -1390,7 +1390,8 @@ chart.addEventListener(<span class="str">'wick:drawings'</span>, (e) =&gt; save(
     {
       const c = $('ex-draw'), foot = $('dr-foot');
       const { attachDrawings } = await import('./plugins/draw/draw.mjs');
-      const draw = attachDrawings(c, { magnet: true });
+      // shared room: open this page in a second window and draw on either chart
+      const draw = attachDrawings(c, { magnet: true, share: 'docs-draw' });
       c.__draw = draw; // console handle for curious visitors
       let magnet = true;
       const TOOLS = [
