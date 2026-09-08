@@ -11,6 +11,8 @@ opens when you place a note and reopens when you click a selected note again —
 serialize to JSON. Anchors magnet-snap to bar times and OHLC prices.
 
 ```js
+npm install wickchart wickchart-draw   // the plugin is a separate package
+
 import 'wickchart';                       // the chart itself
 import { attachDrawings } from 'wickchart-draw';
 
