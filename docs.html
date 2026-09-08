@@ -212,6 +212,7 @@
         <li><a href="#interactions">Interactions &amp; a11y</a></li>
         <li><a href="#coview">Co-view presence<span class="new-pill">NEW</span></a></li>
         <li><a href="#react">React, Vue, Svelte</a></li>
+        <li><a href="#plugins">Plugin layers<span class="new-pill">NEW</span></a></li>
         <li><a href="#perf">Performance &amp; export</a></li>
         <li><a href="#migrate">Migrating from 0.x</a></li>
       </ul>
@@ -822,6 +823,48 @@ chart.addEventListener(<span class="str">'wick:peers'</span>, (e) =&gt; {
 <span class="cmt">// $: if (el &amp;&amp; bars.length) el.data = bars;</span></pre></div>
       </section>
 
+      <section id="plugins">
+        <h2>Plugin layers <a class="anchor" href="#plugins">#</a> <span class="pill new">NEW</span></h2>
+        <p>A <b>layer</b> is an external draw hook: <code>addLayer()</code> paints into the render pipeline — above chart content, under the crosshair — and can claim pointer gestures so drags reach your code instead of panning the chart. It is the whole extension surface: markers, watermarks, signal badges, or a full drawing toolkit plug in without the core growing a single tool of its own.</p>
+        <div class="codewrap"><pre class="code"><span class="tag">const</span> handle = chart.<span class="attr">addLayer</span>({
+  <span class="attr">id</span>: <span class="str">'my-layer'</span>,               <span class="cmt">// optional; same id replaces</span>
+  <span class="attr">draw</span>(api) {
+    <span class="tag">const</span> { ctx, palette: pal, layout } = api;
+    <span class="tag">const</span> x = api.<span class="attr">timeToX</span>(bar.time);   <span class="cmt">// anchors move with the chart</span>
+    <span class="tag">const</span> y = api.<span class="attr">priceToY</span>(price);
+    ctx.strokeStyle = pal.accent;
+    <span class="cmt">// …paint in CSS pixels; ctx is already DPR-scaled</span>
+  },
+  <span class="attr">onPointer</span>(ev) {
+    <span class="cmt">// ev = { type: 'down'|'move'|'up'|'cancel', x, y, pointerId, shiftKey… }</span>
+    <span class="tag">if</span> (ev.type === <span class="str">'down'</span> &amp;&amp; hitsMyContent(ev)) <span class="tag">return true</span>; <span class="cmt">// claim</span>
+  },
+});
+chart.<span class="attr">removeLayer</span>(handle);  <span class="cmt">// or removeLayer('my-layer')</span>
+chart.<span class="attr">requestDraw</span>();        <span class="cmt">// repaint hook for interactive layers</span></pre></div>
+        <p>Returning <code>true</code> from a <code>down</code> claims that gesture: the layer receives the pointer's <code>move</code>/<code>up</code> (a <code>cancel</code> on Escape or pointercancel) while the chart suppresses pan, brush and measure for it. Layers are asked in registration order — first claim wins; a throwing layer is isolated with a console warning and never breaks the render.</p>
+        <p>The draw <code>api</code> carries live state plus the four coordinate transforms (also public methods on the element, for use in event handlers):</p>
+        <table>
+          <tr><th>api</th><th>what it gives you</th></tr>
+          <tr><td><code>ctx</code></td><td>The canvas 2D context — DPR-scaled, draw in CSS pixels</td></tr>
+          <tr><td><code>layout</code></td><td><code>{ W, H, priceW, timeH, plotRight, plotBottom, main: {y0,y1,h}, panes }</code></td></tr>
+          <tr><td><code>palette</code></td><td>Resolved theme colors (<code>up</code>/<code>down</code>/<code>accent</code>/<code>text</code>/<code>border</code>…)</td></tr>
+          <tr><td><code>data</code>, <code>view</code></td><td>Normalized bars + <code>{ rightIndex, spacing }</code></td></tr>
+          <tr><td><code>timeToX</code> ⇄ <code>xToTime</code></td><td>Bar time (ms or s) ⇄ x-pixel — <b>extrapolates past the last bar into future space</b>, so a trendline can point at tomorrow</td></tr>
+          <tr><td><code>priceToY</code> ⇄ <code>yToPrice</code></td><td>Price ⇄ y-pixel in the main pane (log-aware, unclamped)</td></tr>
+        </table>
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live playground</span><span class="spacer"></span>
+            <span class="seg" id="pl-seg"></span>
+          </div>
+          <wick-feed for="ex-pl" demo="BTC" tf="1h" limit="400"></wick-feed>
+          <wick-chart id="ex-pl" label="BTC · 1h · plugin layers"></wick-chart>
+          <div class="foot" id="pl-foot">pick a layer — both are ~25 lines of ordinary JS</div>
+        </div>
+        <div class="note">This is the surface the upcoming <b>wickchart-draw</b> toolkit builds on — trendlines, fibs, rectangles and text as an opt-in package, while the core stays drawing-free. The layer API itself is ~2 KB gzipped and covered by a CI size budget.</div>
+      </section>
+
       <section id="perf">
         <h2>Performance &amp; export <a class="anchor" href="#perf">#</a></h2>
         <ul>
@@ -1198,6 +1241,112 @@ chart.addEventListener(<span class="str">'wick:peers'</span>, (e) =&gt; {
         else {
           c.removeAttribute('brush');
           foot.textContent = 'brush off — plain drag pans again';
+        }
+      });
+    }
+
+    /* ---------- plugin layers playground ---------- */
+    {
+      const c = $('ex-pl'), foot = $('pl-foot');
+
+      // Layer 1 — paint-only: dotted visible-range high/low, recomputed every frame
+      const hilo = {
+        id: 'docs-hilo',
+        draw(api) {
+          const { ctx, layout, palette: pal, data } = api;
+          if (!data.length) return;
+          const t0 = api.xToTime(0), t1 = api.xToTime(layout.plotRight);
+          let i0 = data.findIndex((b) => b.time >= t0);
+          if (i0 < 0) i0 = data.length - 1;
+          let i1 = data.length - 1;
+          while (i1 > 0 && data[i1].time > t1) i1--;
+          let hi = -Infinity, lo = Infinity;
+          for (let k = i0; k <= i1; k++) {
+            if (data[k].high > hi) hi = data[k].high;
+            if (data[k].low < lo) lo = data[k].low;
+          }
+          ctx.save();
+          ctx.setLineDash([3, 4]);
+          ctx.lineWidth = 1;
+          ctx.font = '600 10px ui-sans-serif, system-ui, sans-serif';
+          for (const [v, col, name] of [[hi, pal.up, 'HI'], [lo, pal.down, 'LO']]) {
+            const y = api.priceToY(v);
+            if (y == null || y < layout.main.y0 + 10 || y > layout.main.y1 - 4) continue;
+            ctx.strokeStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(0, Math.round(y) + 0.5);
+            ctx.lineTo(layout.plotRight, Math.round(y) + 0.5);
+            ctx.stroke();
+            ctx.fillStyle = col;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(name + ' ' + Math.round(v).toLocaleString(), 6, y - 3);
+          }
+          ctx.restore();
+        },
+      };
+
+      // Layer 2 — interactive: a draggable flag. Claims the pointer, so the
+      // chart never pans while you plant or drag it.
+      const flag = {
+        id: 'docs-flag',
+        at: null, // { t, p } anchored in data space
+        onPointer(ev) {
+          if (ev.type === 'down') {
+            this.at = { t: c.xToTime(ev.x), p: c.yToPrice(ev.y) };
+            c.requestDraw();
+            return true; // claim: pan/brush/measure are suppressed for this drag
+          }
+          if (ev.type === 'move' && this.at) {
+            this.at = { t: c.xToTime(ev.x), p: c.yToPrice(ev.y) };
+            c.requestDraw();
+          } else if (ev.type === 'cancel') {
+            this.at = null;
+            c.requestDraw();
+          }
+        },
+        draw(api) {
+          if (!this.at) return;
+          const { ctx, palette: pal, layout } = api;
+          const x = api.timeToX(this.at.t), y = api.priceToY(this.at.p);
+          if (x == null || y == null || x < -20 || x > layout.plotRight + 20) return;
+          ctx.save();
+          ctx.strokeStyle = pal.accent;
+          ctx.setLineDash([2, 3]);
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, layout.main.y0);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = pal.accent;
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = '600 10px ui-sans-serif, system-ui, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          const label = '\u2691 ' + Math.round(this.at.p).toLocaleString();
+          const w = ctx.measureText(label).width + 10;
+          const bx = Math.min(x + 7, layout.plotRight - w);
+          ctx.fillRect(bx, y - 8, w, 16);
+          ctx.fillStyle = pal.pillText;
+          ctx.fillText(label, bx + 5, y);
+          ctx.restore();
+        },
+      };
+
+      seg($('pl-seg'), [['off', 'off'], ['hilo', 'hi/lo'], ['flag', 'flag']], 'off', (v) => {
+        c.removeLayer('docs-hilo');
+        c.removeLayer('docs-flag');
+        if (v === 'hilo') {
+          c.addLayer(hilo);
+          foot.textContent = 'paint-only layer — visible-range high/low tracks zoom & pan';
+        } else if (v === 'flag') {
+          c.addLayer(flag);
+          flag.at = null;
+          foot.textContent = 'pointer-claiming layer — drag anywhere: the flag follows, the chart never pans';
+        } else {
+          foot.textContent = 'layers removed — removeLayer() detaches cleanly';
         }
       });
     }

@@ -43,6 +43,8 @@ test('every public method is documented', () => {
     'getPeers', 'narrate', 'walk', 'stopWalk',
     'clearBrush', 'brushSelection',
     'captureScene', 'getStory', 'playStory', 'stopStory',
+    'addLayer', 'removeLayer', 'requestDraw',
+    'timeToX', 'xToTime', 'priceToY', 'yToPrice',
     'registerIndicator', 'onloadmore',
     'aiTools', 'aiPrompt', 'aiContext', 'applyAI', 'ask',
   ];
