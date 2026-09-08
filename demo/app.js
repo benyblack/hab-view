@@ -543,6 +543,34 @@ chart.addEventListener('wick:peers', (e) => {
   if (left.length) toast(`${who(left[0])} left co-view.`);
 });
 
+/* Bar-walk narrator — replay history while the footer narrates events. */
+const walkCaption = document.getElementById('walk-caption');
+document.getElementById('btn-walk').addEventListener('click', (e) => {
+  const btn = e.currentTarget;
+  if (btn.getAttribute('aria-pressed') === 'true') {
+    chart.stopWalk();
+    return;
+  }
+  const d = chart.data;
+  if (!d.length) return;
+  btn.setAttribute('aria-pressed', 'true');
+  chart.walk({ from: Math.max(0, d.length - 400), speed: 90 });
+});
+chart.addEventListener('wick:walk', (e) => {
+  const { phase, index, events, from, to } = e.detail;
+  if (phase === 'stop' || phase === 'end') {
+    walkCaption.hidden = true;
+    document.getElementById('btn-walk').setAttribute('aria-pressed', 'false');
+    if (phase === 'end') toast('Walk finished — the story of the last 400 bars.');
+    return;
+  }
+  const parts = events.map((ev) => `${ev.type === 'leg' ? (ev.legPct >= 0 ? '▲' : '▼') + ev.note : ev.note}`);
+  walkCaption.hidden = false;
+  walkCaption.textContent =
+    `walking ${index - from}/${to - from} — ` +
+    (parts.length ? parts.join(' · ') : '…');
+});
+
 document.getElementById('btn-annotations').setAttribute('aria-pressed', String(state.annotations));
 if (state.annotations) chart.setAttribute('annotations', 'true');
 document.getElementById('btn-annotations').addEventListener('click', (e) => {

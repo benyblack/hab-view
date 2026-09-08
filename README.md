@@ -434,6 +434,24 @@ Explicit `targets` convert to their R multiple (wrong-side prices drop);
 specs clear the plan, never throw. `normalizeRiskPlan` is exported from
 `wickchart/core`.
 
+### Bar-walk narrator — history as a story
+
+`narrate()` builds the timeline of a window (pivot highs/lows, volume
+spikes, gaps, RSI divergences, plus derived legs — the move between
+opposite pivots); `walk()` replays the chart through it while `wick:walk`
+events announce each step, so a caption bar can narrate the replay.
+
+```js
+chart.narrate();                 // [{ i, time, type, note, legPct?, legBars? }]
+chart.walk({ from: 0, to: 500, speed: 120, step: 10 });
+chart.addEventListener('wick:walk', (e) => {
+  // { phase: 'step' | 'end' | 'stop', index, events: [...], from, to }
+});
+chart.stopWalk();                // any pointer/wheel/key input stops it too
+```
+
+`narrateWindow` (the analyzer) is exported from `wickchart/core`.
+
 ### AI-ready data window — `getDataWindow()`
 
 One call turns whatever is on screen into a compact, LLM-pasteable summary.
