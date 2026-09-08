@@ -1,6 +1,6 @@
 {
   "name": "wickchart",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "<wick-chart> — a modern, dependency-free financial charting web component. Candles, line & area charts, crosshair, zoom/pan, indicators (incl. a safe expression mini-language), live streaming via <wick-feed>, theming.",
   "type": "module",
   "main": "src/wick-chart.js",
@@ -57,7 +57,14 @@
     "custom-element",
     "canvas",
     "zero-dependency",
-    "tradingview"
+    "tradingview",
+    "vwap",
+    "supertrend",
+    "bollinger-bands",
+    "macd",
+    "rsi",
+    "stochastic",
+    "technical-analysis"
   ],
   "license": "MIT",
   "repository": {
