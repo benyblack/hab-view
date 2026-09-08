@@ -2331,6 +2331,8 @@ class WickChart extends HTMLElementBase {
         const fmtV = (v) =>
           entry.def.fmt === 'fixed1'
             ? numberFmt(1).format(v)
+            : entry.def.fmt === 'compact'
+            ? fmtCompact(v)
             : numberFmt(this._prec(scale.rawHi || 1)).format(v);
 
         // pane scale (fixed range or autoscaled from visible values)
@@ -2455,13 +2457,19 @@ class WickChart extends HTMLElementBase {
         ctx.lineWidth = 1;
         ctx.restore();
 
-        // right-axis labels for guide levels
+        // right-axis labels: guide levels, or the pane's own min/max when
+        // an autoscaled pane has no guides (atr / obv / pexpr)
         ctx.font = axisFont(400);
         ctx.fillStyle = pal.text;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        for (const g of entry.def.guides || []) {
-          ctx.fillText(fmtV(g), W - 6, pyOf(g));
+        if ((entry.def.guides || []).length) {
+          for (const g of entry.def.guides) {
+            ctx.fillText(fmtV(g), W - 6, pyOf(g));
+          }
+        } else {
+          ctx.fillText(fmtV(pmax), W - 6, pyOf(pmax) + 6);
+          if (pmax !== pmin) ctx.fillText(fmtV(pmin), W - 6, pyOf(pmin) - 6);
         }
 
         // pane label + live values (script panes show their expression label)
@@ -2580,6 +2588,8 @@ class WickChart extends HTMLElementBase {
           const fmtV =
             paneUnder.entry.def.fmt === 'fixed1'
               ? (v) => v.toFixed(1)
+              : paneUnder.entry.def.fmt === 'compact'
+              ? (v) => fmtCompact(v)
               : (v) => f.format(v);
           this._pill(
             plotRight + 2,
