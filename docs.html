@@ -213,6 +213,7 @@
         <li><a href="#coview">Co-view presence<span class="new-pill">NEW</span></a></li>
         <li><a href="#react">React, Vue, Svelte</a></li>
         <li><a href="#plugins">Plugin layers<span class="new-pill">NEW</span></a></li>
+        <li><a href="#drawing">Drawings<span class="new-pill">NEW</span></a></li>
         <li><a href="#perf">Performance &amp; export</a></li>
         <li><a href="#migrate">Migrating from 0.x</a></li>
       </ul>
@@ -862,7 +863,40 @@ chart.<span class="attr">requestDraw</span>();        <span class="cmt">// repai
           <wick-chart id="ex-pl" label="BTC · 1h · plugin layers"></wick-chart>
           <div class="foot" id="pl-foot">pick a layer — both are ~25 lines of ordinary JS</div>
         </div>
-        <div class="note">This is the surface the upcoming <b>wickchart-draw</b> toolkit builds on — trendlines, fibs, rectangles and text as an opt-in package, while the core stays drawing-free. The layer API itself is ~2 KB gzipped and covered by a CI size budget.</div>
+        <div class="note">This is the surface the <a href="#drawing">wickchart-draw</a> toolkit builds on — trendlines, fibs, rectangles and text as an opt-in package, while the core stays drawing-free. The layer API itself is ~2 KB gzipped and covered by a CI size budget.</div>
+      </section>
+
+      <section id="drawing">
+        <h2>Drawings <a class="anchor" href="#drawing">#</a> <span class="pill new">NEW</span></h2>
+        <p><b>wickchart-draw</b> is an opt-in package, not core bytes: trendlines (segment / ray / infinite), horizontal levels, rectangles, fibonacci retracements and text notes — built entirely on the <a href="#plugins">plugin layer API</a>, ~8 KB gzipped under its own CI budget. Drawings are plain <code>{ time, price }</code> data: they ride zoom &amp; pan, survive data reloads, extrapolate into future space, and serialize to JSON.</p>
+        <div class="codewrap"><pre class="code"><span class="tag">import</span> { attachDrawings } <span class="tag">from</span> <span class="str">'wickchart-draw'</span>;
+
+<span class="tag">const</span> draw = <span class="attr">attachDrawings</span>(chart, { magnet: <span class="tag">true</span> });
+draw.<span class="attr">setTool</span>(<span class="str">'trendline'</span>);  <span class="cmt">// arm a tool — dragging draws instead of panning</span>
+draw.<span class="attr">setTool</span>(<span class="tag">null</span>);       <span class="cmt">// select mode: click to select, drag to move,</span>
+                       <span class="cmt">//   drag the square handles to re-anchor</span>
+draw.<span class="attr">getDrawings</span>();          <span class="cmt">// → JSON array — save it</span>
+draw.<span class="attr">setDrawings</span>(saved);
+draw.<span class="attr">undo</span>(); draw.<span class="attr">clear</span>();
+
+chart.addEventListener(<span class="str">'wick:drawings'</span>, (e) =&gt; save(e.detail.drawings));</pre></div>
+        <table>
+          <tr><th>Gesture</th><th>What happens</th></tr>
+          <tr><td>tool armed + drag</td><td>Creates the drawing (anchors magnet-snap to bar times &amp; OHLC); click-only tools: level, text</td></tr>
+          <tr><td>select mode + click on a drawing</td><td>Selects it — handles appear, <code>Delete</code> removes it, <code>Esc</code> cancels a gesture</td></tr>
+          <tr><td>drag body / handle</td><td>Moves the whole drawing / re-anchors one point (undoable)</td></tr>
+          <tr><td>click empty space</td><td>Deselects — the gesture falls through to the chart (pan, brush, measure all keep working)</td></tr>
+        </table>
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live playground</span><span class="spacer"></span>
+            <span class="seg" id="dr-seg"></span>
+          </div>
+          <wick-feed for="ex-draw" demo="BTC" tf="1h" limit="400"></wick-feed>
+          <wick-chart id="ex-draw" label="BTC · 1h · drawings"></wick-chart>
+          <div class="foot" id="dr-foot">pick a tool and drag on the chart — drawings anchor in time &amp; price</div>
+        </div>
+        <div class="note">The package ships as <code>wickchart-draw</code> on npm (peer: wickchart ≥ 1.4) with its own gzip budget — the drawing toolkit can never silently bloat the core. Locked/invisible flags, per-drawing color and width ride along in the JSON.</div>
       </section>
 
       <section id="perf">
@@ -1348,6 +1382,57 @@ chart.<span class="attr">requestDraw</span>();        <span class="cmt">// repai
         } else {
           foot.textContent = 'layers removed — removeLayer() detaches cleanly';
         }
+      });
+    }
+
+    /* ---------- drawings playground (wickchart-draw plugin) ---------- */
+    {
+      const c = $('ex-draw'), foot = $('dr-foot');
+      const { attachDrawings } = await import('./plugins/draw/draw.mjs');
+      const draw = attachDrawings(c, { magnet: true });
+      c.__draw = draw; // console handle for curious visitors
+      let magnet = true;
+      const TOOLS = [
+        [null, 'select'],
+        ['trendline', 'trend'],
+        ['ray', 'ray'],
+        ['hline', 'level'],
+        ['rect', 'box'],
+        ['fib', 'fib'],
+        ['text', 'text'],
+      ];
+      seg($('dr-seg'), TOOLS, null, (v) => {
+        draw.setTool(v);
+        foot.textContent = v
+          ? `drag on the chart to draw a ${v === 'ray' ? 'ray' : v === 'hline' ? 'level' : v === 'rect' ? 'rectangle' : v} — click-only tools commit instantly`
+          : 'select mode — click a drawing to select, drag to move, handles re-anchor, Del removes';
+      });
+      const mkBtn = (label, title, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.title = title;
+        b.addEventListener('click', fn);
+        $('dr-seg').after(b);
+        return b;
+      };
+      mkBtn('🧲', 'toggle magnet snap', () => {
+        magnet = !magnet;
+        draw.setMagnet(magnet);
+        foot.textContent = magnet ? 'magnet on — anchors snap to bars & OHLC' : 'magnet off — free placement';
+      });
+      mkBtn('⤺', 'undo', () => {
+        draw.undo();
+      });
+      mkBtn('✕', 'clear all drawings', () => {
+        draw.clear();
+      });
+      c.addEventListener('wick:drawings', (e) => {
+        const n = e.detail.drawings.length;
+        foot.textContent = `${n} drawing${n === 1 ? '' : 's'} — ${e.detail.action} · select mode to move, JSON via getDrawings()`;
+      });
+      c.addEventListener('wick:drawselect', (e) => {
+        if (e.detail.id) foot.textContent = 'selected — drag to move, drag handles to re-anchor, Del to remove';
       });
     }
 

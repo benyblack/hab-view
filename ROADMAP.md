@@ -94,8 +94,9 @@ is suggested priority.
 
 ### Explicit non-goals
 
-Full drawing-tools parity with TradingView (we'll ship trendline/horizontal/
-fib only if a real use demands), any backend/social layer, an indicator
+Drawing tools inside the core (they live in the opt-in `wickchart-draw`
+plugin — trendline/ray/level/rect/fib/text shipped on the layer API; the
+core stays drawing-free), any backend/social layer, an indicator
 marketplace (before the registry proves itself), and a WebGL renderer (the
 Canvas 2D floor is ~1 ms at our scale — revisit only with profiler evidence).
 

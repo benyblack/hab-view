@@ -664,6 +664,29 @@ badges — or a whole drawing toolkit — plug in without the core growing a
 single tool. The main entry is covered by a CI gzip budget (64 KB) so it
 stays that way.
 
+### Drawings — the `wickchart-draw` plugin
+
+The first official plugin: TradingView-style drawing tools as opt-in bytes
+(~8 KB gz, own CI budget). Trendlines (segment/ray), horizontal levels,
+rectangles, fibonacci retracements and text — all plain `{ time, price }`
+data that rides zoom & pan, survives reloads, extrapolates into future
+space, and serializes to JSON. Anchors magnet-snap to bar times and OHLC.
+
+```js
+import { attachDrawings } from 'wickchart-draw';
+
+const draw = attachDrawings(chart);
+draw.setTool('trendline'); // drag to draw; setTool(null) = select/move mode
+draw.getDrawings();        // → JSON array (save it); setDrawings(saved)
+draw.undo(); draw.clear();
+chart.addEventListener('wick:drawings', (e) => save(e.detail.drawings));
+```
+
+Select mode: click a drawing to select it, drag to move, drag the square
+handles to re-anchor, `Delete` removes, `Esc` cancels a gesture; clicks on
+empty space fall through to the chart. Peer dependency: wickchart ≥ 1.4.
+See the live playground in the docs (Drawings section).
+
 ## Methods
 
 | Method                          | Description                                      |

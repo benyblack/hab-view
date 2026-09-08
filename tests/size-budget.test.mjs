@@ -12,17 +12,37 @@ import { gzipSync } from 'node:zlib';
 const BUDGET_GZ = 64 * 1024; // 64 KB gzipped for the whole main entry
 const FILES = ['src/core.js', 'src/wick-chart.js'];
 
+// the drawing toolkit is opt-in bytes; it earns its own, smaller budget
+const DRAW_BUDGET_GZ = 12 * 1024;
+const DRAW_FILES = ['plugins/draw/core.mjs', 'plugins/draw/draw.mjs'];
+
+const gz = (f) => gzipSync(readFileSync(f)).length;
+
 test('main entry stays under the gzip budget', () => {
   let total = 0;
   const parts = [];
   for (const f of FILES) {
-    const gz = gzipSync(readFileSync(f)).length;
-    total += gz;
-    parts.push(`${f}: ${(gz / 1024).toFixed(1)} KB gz`);
+    const n = gz(f);
+    total += n;
+    parts.push(`${f}: ${(n / 1024).toFixed(1)} KB gz`);
   }
   assert.ok(
     total <= BUDGET_GZ,
     `main entry is ${(total / 1024).toFixed(1)} KB gz, budget is ${BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}\n` +
       'If this growth is intentional, raise BUDGET_GZ in tests/size-budget.test.mjs in a dedicated commit explaining why.'
+  );
+});
+
+test('wickchart-draw plugin stays under its (smaller) gzip budget', () => {
+  let total = 0;
+  const parts = [];
+  for (const f of DRAW_FILES) {
+    const n = gz(f);
+    total += n;
+    parts.push(`${f}: ${(n / 1024).toFixed(1)} KB gz`);
+  }
+  assert.ok(
+    total <= DRAW_BUDGET_GZ,
+    `wickchart-draw is ${(total / 1024).toFixed(1)} KB gz, budget is ${DRAW_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
   );
 });
