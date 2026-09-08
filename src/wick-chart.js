@@ -31,7 +31,7 @@ import {
   windowSummary, normalizeOverlays, barIndexForTime, resolveOverlayColor,
   compileScript, predicateTrueSeries, scriptAlertStep,
   AI_TOOLS, aiPromptText, applyChartOps,
-  calcVolCone, normalizeScenario,
+  calcVolCone, normalizeScenario, normalizeRiskPlan,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -233,6 +233,8 @@ class WickChart extends HTMLElementBase {
 
       // scenario projection (ghost path + vol cone)
       this._scenario = null;
+      // risk plan (R-multiple grid)
+      this._riskPlan = null;
 
       this._onResize = () => this._invalidate();
       this._onPointerDown = (e) => this._pointerDown(e);
@@ -908,6 +910,41 @@ class WickChart extends HTMLElementBase {
     get scenario() {
       if (!this._scenario) return null;
       return { ...this._scenario, path: this._scenario.path.map((p) => ({ ...p })) };
+    }
+
+    /**
+     * Risk plan: an R-multiple grid anchored at entry/stop. 1R = |entry −
+     * stop| (the risk unit); reward lines are drawn at kR beyond the entry
+     * with the risk/reward zones shaded, so sizing and take-profit choices
+     * read directly off the chart.
+     *
+     *   chart.setRiskPlan({ entry: 64500, stop: 63800, multiples: [1, 2, 3] });
+     *   chart.setRiskPlan({ entry: 64500, stop: 63800, targets: [65900, 67300] });
+     *
+     * Direction is derived (stop below entry ⇒ long). Targets convert to
+     * their R multiple; `multiples` win when both are given. Invalid specs
+     * clear the plan (replace semantics, like setScenario); excluded from
+     * getState/setState — it is app state, not chart state.
+     * @param {object} spec
+     * @returns {object|null} the normalized plan, or null when invalid
+     */
+    setRiskPlan(spec) {
+      this._riskPlan = normalizeRiskPlan(spec);
+      this._invalidate();
+      return this._riskPlan;
+    }
+
+    clearRiskPlan() {
+      if (this._riskPlan) {
+        this._riskPlan = null;
+        this._invalidate();
+      }
+    }
+
+    /** @returns {object|null} a copy of the active risk plan */
+    get riskPlan() {
+      if (!this._riskPlan) return null;
+      return { ...this._riskPlan, levels: this._riskPlan.levels.map((l) => ({ ...l })) };
     }
 
     /** σ-cone for the active scenario, cached per data version. */
@@ -1796,6 +1833,67 @@ class WickChart extends HTMLElementBase {
           const yS = clamp(yOf(pos.stop), main.y0, main.y1);
           ctx.fillStyle = hexToRgba(pal.down, 0.07);
           ctx.fillRect(0, Math.min(yE, yS), plotRight, Math.abs(yS - yE));
+        }
+      }
+
+      /* risk plan: R-multiple grid — risk/reward shading + kR lines */
+      if (this._riskPlan && d.length) {
+        const rp = this._riskPlan;
+        const fP = numberFmt(this._prec(scale.rawHi || 1));
+        const yE = yOf(rp.entry);
+        const yS = yOf(rp.stop);
+        ctx.fillStyle = hexToRgba(pal.down, 0.06);
+        ctx.fillRect(0, Math.min(yE, yS), plotRight, Math.abs(yS - yE));
+        const yTop = yOf(rp.levels[rp.levels.length - 1].price);
+        ctx.fillStyle = hexToRgba(pal.up, 0.05);
+        ctx.fillRect(0, Math.min(yE, yTop), plotRight, Math.abs(yTop - yE));
+        const line = (p, col, dash) => {
+          const y = yOf(p);
+          if (y < main.y0 || y > main.y1) return null;
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 1.5;
+          if (dash) ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.moveTo(0, Math.round(y) + 0.5);
+          ctx.lineTo(plotRight, Math.round(y) + 0.5);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.lineWidth = 1;
+          return y;
+        };
+        const pills = [];
+        for (let i = rp.levels.length - 1; i >= 0; i--) {
+          const lv = rp.levels[i];
+          const y = line(lv.price, pal.up, true);
+          if (y != null) {
+            const kk = lv.k % 1 === 0 ? lv.k : +lv.k.toFixed(2);
+            pills.push({ y, text: `${kk}R ${fP.format(lv.price)}`, bg: pal.up });
+          }
+        }
+        const yStop = line(rp.stop, pal.down, false);
+        if (yStop != null) pills.push({ y: yStop, text: `STOP ${fP.format(rp.stop)}`, bg: pal.down });
+        const yEnt = line(rp.entry, pal.accent, false);
+        if (yEnt != null) {
+          pills.push({ y: yEnt, text: `${rp.direction === 'long' ? 'LONG' : 'SHORT'} ${fP.format(rp.entry)}`, bg: pal.accent });
+        }
+        // stack right-edge pills instead of letting close lines overlap
+        pills.sort((a, b) => a.y - b.y);
+        let lastY = -Infinity;
+        for (const p of pills) {
+          const y = Math.max(p.y, lastY + 20);
+          lastY = y;
+          ctx.font = pillFont();
+          const tw = ctx.measureText(p.text).width + 12;
+          this._pill(plotRight - tw - 8, y, p.text, p.bg, pal.pillText, 'left', tw);
+        }
+        if (rp.label) {
+          ctx.font = pillFont();
+          ctx.fillStyle = pal.accent;
+          ctx.globalAlpha = 0.9;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(rp.label, 8, clamp(yE, main.y0 + 14, main.y1) - 3);
+          ctx.globalAlpha = 1;
         }
       }
 

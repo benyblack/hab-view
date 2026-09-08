@@ -62,6 +62,7 @@ is suggested priority.
 | ~~**Smart annotations**~~ ✅ shipped | Auto-badge volume spikes, RSI divergences, gaps, N-bar highs/lows; hover for a one-line insight. "Explain mode" for charts. | M |
 | ~~Server-side overlays~~ ✅ shipped | `setOverlays()` + JSON attribute for API-computed supply/demand zones & price levels — zones extend into future space like TradingView drawings. | S–M |
 | ~~Scenario ghosts + vol cone~~ ✅ shipped | `setScenario({ path, cone })` — hypothetical ghost paths plus ±1σ/±2σ bands widening with √h from realized vol, projected into reserved future space. | M |
+| ~~Risk planner (R-multiple grid)~~ ✅ shipped | `setRiskPlan({ entry, stop, multiples \| targets })` — entry/stop define 1R; dashed kR reward lines + shaded risk/reward zones with labeled pills. Position sizing reads straight off the chart. | S–M |
 | ~~Volatility-regime shading~~ ✅ shipped | Background tint by realized-vol percentile — market state at a glance. `<hab-chart volshading="30/70">`, legend shows hovered regime + percentile. | S–M |
 | ~~**HabScript mini-language**~~ ✅ shipped | `indicators="expr:{close - sma(close,20)}"` / `pexpr:{…}` — hand-written tokenizer + recursive-descent parser (no `eval`) over builtins, URL-safe, live demo input. | L |
 | ~~Cross-tab co-view~~ ✅ shipped | BroadcastChannel syncs crosshair/markings between two open tabs. Great demo flex, tiny code. | S–M |

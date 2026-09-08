@@ -416,6 +416,24 @@ multipliers (default `[1, 2]`). Like overlays, scenarios are analysis data —
 excluded from shareable state, and the same shape a server-side model could
 push. `calcVolCone` / `normalizeScenario` are exported from `wickchart/core`.
 
+### Risk planner — R-multiple grid
+
+Plan the trade on the chart: entry + stop define **1R** (the risk unit) and
+reward lines are drawn at kR beyond the entry, with the risk/reward zones
+shaded. Direction is derived from the stop side.
+
+```js
+chart.setRiskPlan({ entry: 64500, stop: 63800, multiples: [1, 2, 3] });
+chart.setRiskPlan({ entry: 64500, stop: 63800, targets: [65900, 67300] }); // prices → kR
+chart.clearRiskPlan();
+chart.riskPlan; // { entry, stop, risk, direction, levels: [{ k, price }], maxK, label }
+```
+
+Explicit `targets` convert to their R multiple (wrong-side prices drop);
+`multiples` win when both are given. At most 8 levels, each ≤ 20R; invalid
+specs clear the plan, never throw. `normalizeRiskPlan` is exported from
+`wickchart/core`.
+
 ### AI-ready data window — `getDataWindow()`
 
 One call turns whatever is on screen into a compact, LLM-pasteable summary.

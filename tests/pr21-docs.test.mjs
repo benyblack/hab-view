@@ -39,6 +39,7 @@ test('every public method is documented', () => {
     'addAlert', 'removeAlert', 'clearAlerts',
     'setOverlays', 'addOverlay', 'removeOverlay', 'clearOverlays',
     'setScenario', 'clearScenario',
+    'setRiskPlan', 'clearRiskPlan',
     'registerIndicator', 'onloadmore',
     'aiTools', 'aiPrompt', 'aiContext', 'applyAI', 'ask',
   ];

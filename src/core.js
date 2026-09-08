@@ -1808,6 +1808,67 @@ export function normalizeScenario(spec) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Risk planner — R-multiple grid
+ * ------------------------------------------------------------------ */
+
+/**
+ * Validate a risk plan: entry + stop define 1R (the risk unit per trade);
+ * reward levels are drawn at R multiples beyond the entry. Invalid input
+ * is dropped, never thrown — same contract as setOverlays/setScenario.
+ *
+ *   { entry: 64500, stop: 63800,        // stop < entry ⇒ long; else short
+ *     multiples: [1, 2, 3],             // R-multiple levels (default [1,2,3])
+ *     targets: [65900, 67300],          // alternative: explicit prices → kR
+ *     label: 'breakout plan' }          // ≤ 40 chars
+ *
+ * Explicit `targets` are converted to their (signed) R multiple; levels on
+ * the wrong side of the entry (negative or ~zero R) are dropped. `multiples`
+ * win when both are given. At most 8 levels, each ≤ 20R.
+ *
+ * @param {any} spec
+ * @returns {null|{entry: number, stop: number, risk: number,
+ *            direction: 'long'|'short', levels: {k: number, price: number}[],
+ *            maxK: number, label: string}}
+ */
+export function normalizeRiskPlan(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  const entry = +spec.entry;
+  const stop = +spec.stop;
+  if (
+    !Number.isFinite(entry) || !Number.isFinite(stop) ||
+    entry <= 0 || stop <= 0 || entry === stop
+  ) return null;
+  const risk = Math.abs(entry - stop);
+  const sign = stop < entry ? 1 : -1;
+  let ks = null;
+  if (Array.isArray(spec.multiples)) {
+    ks = spec.multiples.map((k) => +k).filter((k) => Number.isFinite(k) && k > 0 && k <= 20);
+  } else if (Array.isArray(spec.targets)) {
+    ks = [];
+    for (const t of spec.targets) {
+      const p = +t;
+      if (!Number.isFinite(p) || p <= 0) continue;
+      const k = ((p - entry) / risk) * sign;
+      if (k > 0.005) ks.push(Math.round(k * 100) / 100);
+    }
+  }
+  if (!ks || !ks.length) ks = [1, 2, 3];
+  const levels = [...new Set(ks)]
+    .sort((a, b) => a - b)
+    .slice(0, 8)
+    .map((k) => ({ k, price: entry + sign * k * risk }));
+  return {
+    entry,
+    stop,
+    risk,
+    direction: sign > 0 ? 'long' : 'short',
+    levels,
+    maxK: levels.length ? levels[levels.length - 1].k : 0,
+    label: spec.label != null ? String(spec.label).slice(0, 40) : '',
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * AI-ready window summary
  * ------------------------------------------------------------------ */
 

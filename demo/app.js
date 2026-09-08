@@ -685,6 +685,26 @@ document.getElementById('btn-clear-trade').addEventListener('click', () => {
   chart.clearAlerts();
 });
 
+/* Risk plan demo — R-multiple grid: entry at the last close, stop 1R below
+ * (the lower of −1.8% and the recent 20-bar low), dashed 1R/2R/3R rewards. */
+let riskOn = false;
+document.getElementById('btn-risk').addEventListener('click', (e) => {
+  riskOn = !riskOn;
+  if (riskOn) {
+    const d = chart.data;
+    if (d.length) {
+      const entry = d[d.length - 1].close;
+      const recent = d.slice(-20).map((b) => b.low);
+      const stop = Math.min(entry * 0.982, Math.min(...recent));
+      chart.setRiskPlan({ entry, stop, multiples: [1, 2, 3], label: 'demo plan' });
+      toast(`Risk plan set — 1R = ${(entry - stop).toFixed(2)} · targets +1R/+2R/+3R`);
+    }
+  } else {
+    chart.clearRiskPlan();
+  }
+  e.currentTarget.setAttribute('aria-pressed', String(riskOn));
+});
+
 chart.addEventListener('wick:alert', (e) => {
   if (e.detail.when) {
     toast(`Expr alert ${e.detail.id} fired — close ${e.detail.price.toFixed(2)} · ${e.detail.when}`);

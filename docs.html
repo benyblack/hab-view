@@ -197,6 +197,7 @@
         <li><a href="#volshading">Volatility shading</a></li>
         <li><a href="#overlays">Server-side overlays<span class="new-pill">NEW</span></a></li>
         <li><a href="#scenario">Scenario mode<span class="new-pill">NEW</span></a></li>
+        <li><a href="#riskplan">Risk planner<span class="new-pill">NEW</span></a></li>
         <li><a href="#trading">Positions &amp; alerts</a></li>
         <li><a href="#analysis">Stats, profile &amp; annotations</a></li>
         <li><a href="#ai">AI-ready data window</a></li>
@@ -479,6 +480,32 @@ chart.<span class="attr">scenario</span>;                          <span class="
           <wick-feed for="ex-sc" demo="BTC" tf="1h" limit="300"></wick-feed>
           <wick-chart id="ex-sc" label="BTC · 1h · scenario"></wick-chart>
           <div class="foot" id="sc-foot"></div>
+        </div>
+      </section>
+
+      <section id="riskplan">
+        <h2>Risk planner <a class="anchor" href="#riskplan">#</a> <span class="pill new">NEW</span></h2>
+        <p>Plan the trade on the chart: <b>entry + stop define 1R</b> — the risk unit — and reward lines are drawn at kR beyond the entry, with the risk zone shaded red and the reward zone green. Sizing, take-profits and R-multiples read straight off the picture; no mental math, no Pro plan.</p>
+        <div class="codewrap"><pre class="code">chart.<span class="attr">setRiskPlan</span>({
+  <span class="attr">entry</span>: 64500,
+  <span class="attr">stop</span>: 63800,             <span class="cmt">// stop &lt; entry ⇒ long (else short)</span>
+  <span class="attr">multiples</span>: [1, 2, 3],       <span class="cmt">// dashed lines at +1R / +2R / +3R</span>
+  <span class="attr">label</span>: <span class="str">'breakout plan'</span>,
+});
+
+chart.<span class="attr">setRiskPlan</span>({ entry: 64500, stop: 63800, <span class="attr">targets</span>: [65900, 67300] }); <span class="cmt">// prices → kR</span>
+chart.<span class="attr">clearRiskPlan</span>();
+chart.<span class="attr">riskPlan</span>;                      <span class="cmt">// getter → { entry, stop, risk, direction, levels }</span></pre></div>
+        <p>Direction is derived from the stop side. Explicit <code>targets</code> convert to their R multiple (wrong-side prices are dropped); <code>multiples</code> win when both are given. At most 8 levels, each ≤ 20R; invalid specs clear the plan (replace semantics), never throw. Like overlays and scenarios, plans are app state — excluded from <code>getState()</code>.</p>
+
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live playground</span><span class="spacer"></span>
+            <span class="seg" id="rp-seg"></span>
+          </div>
+          <wick-feed for="ex-rp" demo="BTC" tf="1h" limit="300"></wick-feed>
+          <wick-chart id="ex-rp" label="BTC · 1h · risk plan"></wick-chart>
+          <div class="foot" id="rp-foot">no plan — pick a preset</div>
         </div>
       </section>
 
@@ -974,6 +1001,37 @@ location.hash = encodeStateQuery(chart.getState());   <span class="cmt">// → U
         if (mode !== 'off') apply();
       });
       foot.textContent = 'no scenario — pick one';
+    }
+
+    /* ---------- risk plan playground ---------- */
+    {
+      const c = $('ex-rp'), foot = $('rp-foot');
+      const fmt = (v) => (v >= 1000 ? v.toFixed(0) : v.toFixed(2));
+      let mode = 'off';
+      const apply = () => {
+        const d = c.data;
+        if (!d || !d.length) { foot.textContent = 'waiting for data…'; return; }
+        if (mode === 'off') {
+          c.clearRiskPlan();
+          foot.textContent = 'no plan — pick a preset';
+          return;
+        }
+        const last = d[d.length - 1].close;
+        let spec = null;
+        if (mode === 'scalp') spec = { entry: last, stop: last * 0.99, multiples: [1, 2, 3], label: 'scalp 1:3' };
+        if (mode === 'swing') {
+          const lo = Math.min(...d.slice(-30).map((b) => b.low));
+          spec = { entry: last, stop: lo, targets: [last + 2 * (last - lo), last + 3 * (last - lo)], label: 'swing long' };
+        }
+        if (mode === 'short') spec = { entry: last, stop: last * 1.012, multiples: [1, 1.5, 2], label: 'fade 1:2' };
+        const p = c.setRiskPlan(spec);
+        foot.textContent = p
+          ? `${p.direction} · 1R = ${fmt(p.risk)} (${((p.risk / p.entry) * 100).toFixed(2)}%) · ${p.levels.length} levels to +${p.levels[p.levels.length - 1].k}R`
+          : 'plan rejected';
+      };
+      seg($('rp-seg'), [['off', 'off'], ['scalp', 'scalp 1%'], ['swing', 'swing'], ['short', 'short']], 'off', (v) => { mode = v; apply(); });
+      const kick = () => (c.data && c.data.length ? apply() : setTimeout(kick, 400));
+      setTimeout(kick, 500);
     }
 
     /* ---------- trading ---------- */
