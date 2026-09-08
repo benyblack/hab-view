@@ -604,6 +604,31 @@ document.getElementById('btn-zones').addEventListener('click', (e) => {
   e.currentTarget.setAttribute('aria-pressed', String(zonesOn));
 });
 
+/* Scenario projection — bull ghost path + ±1σ/±2σ vol cone into future space. */
+let scenarioOn = false;
+function demoScenario() {
+  const d = chart.data;
+  if (!d || !d.length) return null;
+  const H = 48;
+  let p = d[d.length - 1].close;
+  const path = [];
+  for (let i = 1; i <= H; i++) {
+    p *= 1 + 0.004 + Math.sin(i / 3.2) * 0.0014;
+    path.push(p);
+  }
+  return { path, cone: true, levels: [1, 2], color: 'up', label: 'bull case' };
+}
+document.getElementById('btn-scenario').addEventListener('click', (e) => {
+  scenarioOn = !scenarioOn;
+  if (scenarioOn) {
+    const spec = demoScenario();
+    if (spec) chart.setScenario(spec);
+  } else {
+    chart.clearScenario();
+  }
+  e.currentTarget.setAttribute('aria-pressed', String(scenarioOn));
+});
+
 document.getElementById('btn-theme').addEventListener('click', () => {
   state.theme = state.theme === 'dark' ? 'light' : 'dark';
   applyTheme();

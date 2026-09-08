@@ -38,6 +38,7 @@ test('every public method is documented', () => {
     'addPosition', 'removePosition', 'clearPositions',
     'addAlert', 'removeAlert', 'clearAlerts',
     'setOverlays', 'addOverlay', 'removeOverlay', 'clearOverlays',
+    'setScenario', 'clearScenario',
     'registerIndicator', 'onloadmore',
     'aiTools', 'aiPrompt', 'aiContext', 'applyAI', 'ask',
   ];
