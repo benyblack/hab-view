@@ -633,6 +633,37 @@ WickChart.registerIndicator('vwap', {
 chart.indicators = 'vwap';
 ```
 
+### Plugin layers — extend without forking
+
+`addLayer()` is the whole extension surface: an external draw hook that paints
+into the render pipeline (above chart content, under the crosshair) and can
+claim pointer gestures so drags reach your code instead of panning the chart.
+Four public coordinate transforms — `timeToX`/`xToTime` (extrapolating past
+the last bar into future space) and `priceToY`/`yToPrice` — anchor your
+content in data space so it rides along with zoom and pan:
+
+```js
+chart.addLayer({
+  id: 'flags',
+  draw(api) {
+    const x = api.timeToX(t), y = api.priceToY(p); // anchors, not pixels
+    api.ctx.fillStyle = api.palette.accent;
+    // …paint in CSS pixels
+  },
+  onPointer(ev) {
+    if (ev.type === 'down' && hitsMyContent(ev)) return true; // claim the drag
+  },
+});
+chart.requestDraw();        // repaint hook for interactive layers
+chart.removeLayer('flags'); // detach by handle or id
+```
+
+A claimed gesture delivers `move`/`up` (and `cancel` on Escape) to the layer
+while the chart suppresses pan/brush/measure. Markers, watermarks, signal
+badges — or a whole drawing toolkit — plug in without the core growing a
+single tool. The main entry is covered by a CI gzip budget (64 KB) so it
+stays that way.
+
 ## Methods
 
 | Method                          | Description                                      |
@@ -647,6 +678,10 @@ chart.indicators = 'vwap';
 | `getDataWindow()`               | → AI-ready summary of the visible window (see below) |
 | `getState()`                    | → serializable snapshot (type, indicators, view, positions, alerts) |
 | `setState(state)`               | Apply a snapshot; a pending view applies after the next `setData()` |
+| `addLayer(layer)` / `removeLayer(idOrHandle)` | Register/detach a plugin layer (draw hook + optional pointer claim) |
+| `requestDraw()`                 | Repaint on the next frame (interactive layers)     |
+| `timeToX(t)` / `xToTime(x)`     | Bar time ⇄ x-pixel; extrapolates into future space |
+| `priceToY(p)` / `yToPrice(y)`   | Price ⇄ y-pixel in the main pane (log-aware)       |
 
 ### Infinite history (`loadMore`)
 

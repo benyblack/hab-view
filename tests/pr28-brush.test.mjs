@@ -98,13 +98,13 @@ test('brush is wired into the chart: attribute, pointer flow, escape, draw', () 
   assert.match(src, /'brush', 'sonify'\]/, 'brush is an observed attribute');
   const attr = src.slice(src.indexOf("case 'brush':"), src.indexOf("case 'brush':") + 200);
   assert.match(attr, /val !== 'false'/, 'brush="false" disables the mode');
-  const pd = src.slice(src.indexOf('_pointerDown(e) {'), src.indexOf('_pointerDown(e) {') + 1200);
+  const pd = src.slice(src.indexOf('_pointerDown(e) {'), src.indexOf('_pointerDown(e) {') + 2200);
   assert.match(pd, /this\._brush && !e\.shiftKey/, 'plain drag brushes; shift still measures');
   assert.match(pd, /this\._brushDrag = \{ i0: idx, i1: idx \}/, 'drag starts a selection');
   assert.match(pd, /this\._brushDrag = null;/, 'pinch cancels a live brush');
   const pm = src.slice(src.indexOf('_pointerMove(e) {'), src.indexOf('_pointerUp(e) {'));
   assert.match(pm, /this\._brushDrag\.i1 = idx/, 'move extends the selection');
-  const up = src.slice(src.indexOf('_pointerUp(e) {'), src.indexOf('_pointerUp(e) {') + 400);
+  const up = src.slice(src.indexOf('_pointerUp(e) {'), src.indexOf('_pointerUp(e) {') + 900);
   assert.match(up, /_brushFinish\(/, 'release commits via _brushFinish');
   const kd = src.slice(src.indexOf('_keydown(e) {'), src.indexOf('_keydown(e) {') + 400);
   assert.match(kd, /Escape/, 'Escape clears the selection');

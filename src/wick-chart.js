@@ -235,6 +235,11 @@ class WickChart extends HTMLElementBase {
       this._pan = null;
       this._pinch = null;
 
+      // plugin layers: external draw hooks + pointer claims (see addLayer)
+      this._layers = [];
+      this._layerClaim = null; // { layer, pointerId } while a layer owns a drag
+      this._layerSeq = 0;
+
       // history backfill state (onloadmore declared as a class field above)
       this._loadingMore = false;
       this._noMore = false;
@@ -303,6 +308,7 @@ class WickChart extends HTMLElementBase {
       this._connected = false;
       this.stopWalk(true);
       this.stopStory(true);
+      this._layerClaim = null;
       if (this._coviewCh) {
         this._coviewSend({ type: 'bye' });
         try {
@@ -2532,6 +2538,9 @@ class WickChart extends HTMLElementBase {
         );
       }
 
+      /* plugin layers — above chart content, under the pointer-following UI */
+      if (this._layers.length) this._drawLayers(ctx, pal, ly, d);
+
       /* crosshair */
       if (this._hover && this._hover.index < d.length) {
         const h = this._hover;
@@ -2913,6 +2922,207 @@ class WickChart extends HTMLElementBase {
     }
 
     /* ------------------------------------------------------------ *
+     * Plugin layers — external draw hooks + pointer claims
+     * ------------------------------------------------------------ */
+
+    /**
+     * Register a plugin layer. `layer.draw(api)` runs on every render, above
+     * chart content and under the crosshair; `layer.onPointer(pev)` is asked
+     * first on pointerdown and claims the gesture by returning true — the
+     * layer then receives that pointer's move/up/cancel events (plus a
+     * 'cancel' on Escape) and the chart suppresses its own pan/measure/brush
+     * for the duration.
+     * @param {{id?: string, draw: Function, onPointer?: Function}} layer
+     * @returns {object|null} the normalized layer handle (with `id`), or null
+     *   if the layer was rejected (no draw fn, or 16 layers already added)
+     */
+    addLayer(layer) {
+      if (!layer || typeof layer !== 'object' || typeof layer.draw !== 'function') return null;
+      if (this._layers.length >= 16) return null;
+      const id =
+        layer.id != null && String(layer.id).trim()
+          ? String(layer.id).slice(0, 64)
+          : 'layer-' + ++this._layerSeq;
+      const entry = {
+        id,
+        draw: layer.draw,
+        onPointer: typeof layer.onPointer === 'function' ? layer.onPointer : null,
+      };
+      const at = this._layers.findIndex((l) => l.id === id);
+      if (at >= 0) this._layers[at] = entry; // same id replaces
+      else this._layers.push(entry);
+      this._invalidate();
+      return entry;
+    }
+
+    /**
+     * Remove a layer added via addLayer (pass the returned handle or its id).
+     * @param {object|string} idOrLayer
+     * @returns {boolean} true if a layer was removed
+     */
+    removeLayer(idOrLayer) {
+      const id = idOrLayer != null && typeof idOrLayer === 'object' ? idOrLayer.id : idOrLayer;
+      if (id == null) return false;
+      const at = this._layers.findIndex((l) => l.id === String(id));
+      if (at < 0) return false;
+      const [gone] = this._layers.splice(at, 1);
+      if (this._layerClaim && this._layerClaim.layer === gone) this._layerClaim = null;
+      this._invalidate();
+      return true;
+    }
+
+    /** Ask for a repaint on the next frame (interactive layers call this). */
+    requestDraw() {
+      this._invalidate();
+    }
+
+    /** Paint every registered layer. Called from _render with live state. */
+    _drawLayers(ctx, pal, ly, d) {
+      for (const layer of this._layers) {
+        try {
+          layer.draw({
+            ctx, // 2D context, already DPR-scaled — draw in CSS pixels
+            layout: ly,
+            palette: pal,
+            data: d,
+            view: this._view,
+            timeToX: (t) => this.timeToX(t),
+            xToTime: (x) => this.xToTime(x),
+            priceToY: (p) => this.priceToY(p),
+            yToPrice: (y) => this.yToPrice(y),
+          });
+        } catch (err) {
+          console.warn('wick-chart: layer "' + layer.id + '" threw in draw', err);
+        }
+      }
+    }
+
+    /** Ask layers, in order, whether one claims this pointerdown. */
+    _layerHit(e, pt) {
+      for (const layer of this._layers) {
+        if (!layer.onPointer) continue;
+        let claimed = false;
+        try {
+          claimed = layer.onPointer(this._layerPointerEvent(e, pt, 'down')) === true;
+        } catch (err) {
+          console.warn('wick-chart: layer "' + layer.id + '" threw in onPointer', err);
+        }
+        if (claimed) return layer;
+      }
+      return null;
+    }
+
+    /** Deliver a pointer event to a claiming layer; never throws outward. */
+    _routeLayer(layer, e, pt, type) {
+      const ev = pt
+        ? this._layerPointerEvent(e, pt, type)
+        : {
+            type,
+            x: null,
+            y: null,
+            pointerId: e.pointerId == null ? 0 : e.pointerId,
+            button: 0,
+            shiftKey: !!e.shiftKey,
+            ctrlKey: !!e.ctrlKey,
+            altKey: !!e.altKey,
+            metaKey: !!e.metaKey,
+          };
+      try {
+        if (layer.onPointer) layer.onPointer(ev);
+      } catch (err) {
+        console.warn('wick-chart: layer "' + layer.id + '" threw in onPointer', err);
+      }
+    }
+
+    _layerPointerEvent(e, pt, type) {
+      return {
+        type,
+        x: pt.x,
+        y: pt.y,
+        pointerId: e.pointerId,
+        button: e.button == null ? 0 : e.button,
+        shiftKey: !!e.shiftKey,
+        ctrlKey: !!e.ctrlKey,
+        altKey: !!e.altKey,
+        metaKey: !!e.metaKey,
+      };
+    }
+
+    /**
+     * x-pixel for a bar time (ms or s, auto-detected). Extrapolates past the
+     * last bar into future space using the median bar interval, so layers can
+     * anchor trendlines to tomorrow, not just to history.
+     * @param {number} time
+     * @returns {number|null}
+     */
+    timeToX(time) {
+      const ly = this._ly;
+      const d = this._data;
+      if (!ly || !d.length || !isNum(time)) return null;
+      const t = time < 1e12 ? time * 1000 : time;
+      const last = d.length - 1;
+      if (t >= d[last].time) {
+        return this._xFor(last + (t - d[last].time) / (this._dt || HOUR));
+      }
+      const i = WickChart._indexForTime(d, t);
+      if (i === 0 && t < d[0].time) {
+        return this._xFor((t - d[0].time) / (this._dt || HOUR));
+      }
+      if (i > 0 && t < d[i].time) {
+        // between two bars: fractional index
+        const a = d[i - 1];
+        const b = d[i];
+        return this._xFor(i - 1 + (t - a.time) / (b.time - a.time || 1));
+      }
+      return this._xFor(i);
+    }
+
+    /**
+     * Bar time (ms) at an x-pixel — the inverse of timeToX, interpolating
+     * between bars and extrapolating beyond both data edges.
+     * @param {number} x
+     * @returns {number|null}
+     */
+    xToTime(x) {
+      const ly = this._ly;
+      const d = this._data;
+      if (!ly || !d.length || !isNum(x)) return null;
+      const idx = this._indexForX(x);
+      const last = d.length - 1;
+      if (idx >= last) return d[last].time + (idx - last) * (this._dt || HOUR);
+      if (idx <= 0) return d[0].time + idx * (this._dt || HOUR);
+      const i0 = Math.floor(idx);
+      const a = d[i0];
+      const b = d[Math.min(i0 + 1, last)];
+      return a.time + (b.time - a.time) * (idx - i0);
+    }
+
+    /**
+     * y-pixel for a price in the main pane (current scale; log-aware).
+     * Unclamped — values off-screen still map, layers decide how to clip.
+     * @param {number} price
+     * @returns {number|null}
+     */
+    priceToY(price) {
+      const ly = this._ly;
+      const scale = this._lastScale;
+      if (!ly || !scale || !isNum(price)) return null;
+      const { min, max, useLog } = scale;
+      const v = useLog ? Math.log10(Math.max(price, 1e-12)) : price;
+      return ly.main.y0 + ((max - v) / (max - min)) * ly.main.h;
+    }
+
+    /**
+     * Price at a y-pixel in the main pane — the inverse of priceToY.
+     * @param {number} y
+     * @returns {number|null}
+     */
+    yToPrice(y) {
+      if (!isNum(y)) return null;
+      return this._yToPrice(y);
+    }
+
+    /* ------------------------------------------------------------ *
      * Interaction
      * ------------------------------------------------------------ */
 
@@ -2927,6 +3137,19 @@ class WickChart extends HTMLElementBase {
       this._canvas.setPointerCapture(e.pointerId);
       const pt = this._localPoint(e);
       this._pointers.set(e.pointerId, pt);
+      if (this._layerClaim) return; // a layer owns a gesture: extra pointers are inert
+      if (this._layers.length) {
+        // layers get first claim on the pointer (hit-test their content);
+        // a claim suppresses pinch/measure/brush/pan for this gesture
+        const layer = this._layerHit(e, pt);
+        if (layer) {
+          this._pan = null;
+          this._measuring = false;
+          this._brushDrag = null;
+          this._layerClaim = { layer, pointerId: e.pointerId };
+          return;
+        }
+      }
       if (this._pointers.size === 2) {
         const [a, b] = [...this._pointers.values()];
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -2967,6 +3190,12 @@ class WickChart extends HTMLElementBase {
     }
 
     _pointerMove(e) {
+      if (this._layerClaim) {
+        if (this._layerClaim.pointerId === e.pointerId) {
+          this._routeLayer(this._layerClaim.layer, e, this._localPoint(e), 'move');
+        }
+        return; // inert while a layer owns the gesture
+      }
       const pt = this._localPoint(e);
       if (this._pointers.has(e.pointerId)) this._pointers.set(e.pointerId, pt);
       const ly = this._ly;
@@ -3026,6 +3255,14 @@ class WickChart extends HTMLElementBase {
     }
 
     _pointerUp(e) {
+      const claim = this._layerClaim;
+      if (claim && claim.pointerId === e.pointerId) {
+        this._layerClaim = null;
+        this._pointers.delete(e.pointerId);
+        this._canvas.classList.remove('grabbing');
+        this._routeLayer(claim.layer, e, this._localPoint(e), e.type === 'pointercancel' ? 'cancel' : 'up');
+        return;
+      }
       const had = this._pointers.delete(e.pointerId);
       if (this._pointers.size < 2) this._pinch = null;
       if (this._pointers.size === 0) {
@@ -3113,6 +3350,13 @@ class WickChart extends HTMLElementBase {
       const ly = this._ly;
       if (!ly || !this._data.length) return;
       this._stopPlayback();
+      if (e.key === 'Escape' && this._layerClaim) {
+        const claim = this._layerClaim;
+        this._layerClaim = null;
+        this._routeLayer(claim.layer, { pointerId: claim.pointerId }, null, 'cancel');
+        this._invalidate();
+        return;
+      }
       if (e.key === 'Escape' && (this._brushSel || this._brushDrag)) {
         this.clearBrush();
         return;
