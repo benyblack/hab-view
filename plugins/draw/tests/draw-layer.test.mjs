@@ -400,6 +400,108 @@ test('detach closes a live editor', () => {
   assert.equal(d._editing, null);
 });
 
+/* ------------------------- shared drawings (BroadcastChannel) ------------------------- */
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('setShare: true resolves the chart co-view room; junk rooms are rejected', () => {
+  const { d } = fresh();
+  assert.equal(d.share, null, 'no sharing by default');
+  d.setShare(true);
+  assert.equal(d.share, null, 'chart without co-view → no room');
+  d._chart.setAttribute = () => {};
+  d._chart.getAttribute = () => 'wick-demo';
+  d.setShare(true);
+  assert.equal(d.share, 'wick-demo');
+  d.setShare('team-btc');
+  assert.equal(d.share, 'team-btc');
+  d.setShare(null);
+  assert.equal(d.share, null);
+});
+
+test('local changes sync to peers; remote applies skip the undo stack', async () => {
+  const a = fresh();
+  const b = fresh();
+  a.d.setShare('t-sync');
+  b.d.setShare('t-sync');
+  await wait(80);
+
+  a.d.setDrawings([{ type: 'hline', points: [{ t: T0, p: 150 }] }]);
+  await wait(80);
+  assert.equal(b.d.getDrawings().length, 1, 'peer received the list');
+  assert.equal(b.d.getDrawings()[0].type, 'hline');
+  assert.equal(b.d._undo.length, 0, 'remote applies do not pollute local undo');
+  assert.equal(b.d.undo(), false, 'nothing to undo from a remote change');
+
+  // delete on A propagates; both end empty
+  a.d.clear();
+  await wait(80);
+  assert.equal(b.d.getDrawings().length, 0);
+  a.d.detach();
+  b.d.detach();
+});
+
+test('a late joiner receives existing drawings via the hello/sync handshake', async () => {
+  const a = fresh();
+  a.d.setShare('t-hello');
+  a.d.setDrawings([
+    { type: 'trendline', points: [{ t: T0 + 10 * DT, p: 150 }, { t: T0 + 30 * DT, p: 170 }] },
+  ]);
+  await wait(50);
+  const b = fresh(); // joins after A already has drawings
+  b.d.setShare('t-hello');
+  await wait(120);
+  assert.equal(b.d.getDrawings().length, 1, 'joiner got the list via hello → sync');
+  assert.equal(b.d.getDrawings()[0].type, 'trendline');
+  a.d.detach();
+  b.d.detach();
+});
+
+test('undo propagates to peers; teardown stops sync; own/garbage messages ignored', async () => {
+  const a = fresh();
+  const b = fresh();
+  a.d.setShare('t-undo');
+  b.d.setShare('t-undo');
+  await wait(60);
+
+  a.d.setDrawings([{ type: 'text', text: 'note', points: [{ t: T0, p: 150 }] }]);
+  await wait(80);
+  a.d.undo(); // back to empty
+  await wait(80);
+  assert.equal(b.d.getDrawings().length, 0, 'peer sees the undo');
+
+  b.d._onShareMsg(null);
+  b.d._onShareMsg({ v: 1, type: 'draw-sync', src: b.d._peer, drawings: [{ type: 'hline', points: [{ t: 1, p: 1 }] }] });
+  b.d._onShareMsg({ v: 0, type: 'draw-sync', src: 'x', drawings: [] });
+  b.d._onShareMsg({ v: 1, type: 'junk', src: 'x' });
+  assert.equal(b.d.getDrawings().length, 0, 'own-src and junk messages ignored');
+
+  a.d.setShare(null);
+  a.d.setDrawings([{ type: 'hline', points: [{ t: T0, p: 111 }] }]);
+  await wait(80);
+  assert.equal(b.d.getDrawings().length, 0, 'after teardown nothing is broadcast');
+  a.d.detach();
+  b.d.detach();
+});
+
+test('locally created ids are peer-unique — two tabs drafting never collide', () => {
+  const a = fresh();
+  const b = fresh();
+  for (const { d } of [a, b]) {
+    d.setTool('trendline');
+    d._layer.onPointer(ev('down', 100, 50));
+    d._layer.onPointer(ev('move', 300, 30));
+    d._layer.onPointer(ev('up', 300, 30));
+  }
+  const idA = a.d.getDrawings()[0].id;
+  const idB = b.d.getDrawings()[0].id;
+  assert.notEqual(idA, idB, 'different peers mint different ids');
+  assert.match(idA, /-1$/); // <peer>-<seq>
+  assert.ok(idA.length > 3, 'peer prefix is non-empty');
+  // merging both lists keeps both drawings (no silent id collision)
+  assert.equal(a.d._drawing(idB), null);
+});
+
 /* ------------------------- render / hit targets ------------------------- */
 
 test('render builds hit targets per type and clips to the main pane', () => {

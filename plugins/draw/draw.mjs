@@ -13,6 +13,7 @@
  *   draw.getDrawings();          // JSON-serializable array
  *   draw.setDrawings(saved);
  *   draw.undo(); draw.clear();
+ *   draw.setShare(true);         // share drawings across tabs (co-view room)
  *
  * Events on the chart element:
  *   wick:drawings  { detail: { drawings, action } }  after every change
@@ -61,6 +62,14 @@ export class DrawLayer {
     this._undo = [];
     this._hits = []; // hit targets cached by the last render pass
     this._editing = null; // { id, input } while a text note is being edited
+    this._shareRoom = null; // BroadcastChannel room name, or null = local only
+    this._shareWanted = null; // last requested share target (survives teardown)
+    this._shareCh = null;
+    this._localSeq = 0; // drawing id counter (namespaced by _peer)
+    this._peer =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID().slice(0, 8)
+        : 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     this._layer = {
       id: 'wick-draw',
       draw: (api) => this._render(api),
@@ -69,7 +78,13 @@ export class DrawLayer {
     chart.addLayer(this._layer);
     this._onKey = (e) => this._keydown(e);
     if (typeof document !== 'undefined') document.addEventListener('keydown', this._onKey);
-    this._ro = null;
+    this._onHide = () => this._onPageHide();
+    this._onShow = () => this._onPageShow();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', this._onHide);
+      window.addEventListener('pageshow', this._onShow);
+    }
+    if (opts.share) this.setShare(opts.share);
   }
 
   /* ---------------- public API ---------------- */
@@ -94,6 +109,91 @@ export class DrawLayer {
 
   get magnet() {
     return this._magnet;
+  }
+
+  /**
+   * Share drawings across tabs/windows over a BroadcastChannel room.
+   * `true` reuses the chart's `co-view` room; a string names an explicit
+   * room; `null`/`false` stops sharing. Every local change broadcasts the
+   * full list (last writer wins); remote updates apply without touching
+   * the local undo stack and fire `wick:drawings` with action `'remote'`.
+   * @param {boolean|string|null} share
+   */
+  setShare(share) {
+    this._teardownShare();
+    let room = null;
+    if (share === true) {
+      const attr = this._chart && this._chart.getAttribute ? this._chart.getAttribute('co-view') : null;
+      room = attr && attr !== 'false' ? attr : null;
+    } else if (typeof share === 'string' && share) {
+      room = share;
+    }
+    this._shareWanted = room ? share : null;
+    if (!room || typeof BroadcastChannel === 'undefined') return this;
+    this._shareRoom = room;
+    try {
+      const ch = new BroadcastChannel('wick-draw:' + room);
+      ch.onmessage = (e) => this._onShareMsg(e.data);
+      this._shareCh = ch;
+      // announce so peers with existing drawings send us their list
+      ch.postMessage({ v: 1, type: 'draw-hello', src: this._peer });
+    } catch (_) {
+      this._shareCh = null;
+      this._shareRoom = null;
+    }
+    return this;
+  }
+
+  /**
+   * A page parked in back/forward cache keeps its channel open and would
+   * answer hellos with stale drawings — close on hide, rejoin on show.
+   */
+  _onPageHide() {
+    if (this._shareCh) {
+      try {
+        this._shareCh.close();
+      } catch (_) {}
+      this._shareCh = null;
+    }
+  }
+
+  _onPageShow() {
+    if (!this._shareCh && this._shareWanted != null && this._shareWanted !== false) {
+      this.setShare(this._shareWanted);
+    }
+  }
+
+  /** Active share room name, or null when drawings are local-only. */
+  get share() {
+    return this._shareRoom;
+  }
+
+  _teardownShare() {
+    if (this._shareCh) {
+      try {
+        this._shareCh.close();
+      } catch (_) {}
+    }
+    this._shareCh = null;
+    this._shareRoom = null;
+  }
+
+  _onShareMsg(m) {
+    if (!m || m.v !== 1 || m.src === this._peer) return;
+    if (m.type === 'draw-hello') {
+      if (this._shareCh && this._drawings.length) {
+        this._shareCh.postMessage({ v: 1, type: 'draw-sync', src: this._peer, drawings: this.getDrawings() });
+      }
+      return;
+    }
+    if (m.type === 'draw-sync' && Array.isArray(m.drawings)) {
+      this._drawings = normalizeDrawings(m.drawings);
+      if (this._sel && !this._drawings.some((d) => d.id === this._sel)) this._select(null);
+      this._chart.requestDraw();
+      this._chart.dispatchEvent(
+        new CustomEvent('wick:drawings', { detail: { drawings: this.getDrawings(), action: 'remote' } })
+      );
+    }
   }
 
   get selectedId() {
@@ -146,6 +246,12 @@ export class DrawLayer {
 
   detach() {
     this._closeEditor();
+    this._teardownShare();
+    this._shareWanted = null;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('pagehide', this._onHide);
+      window.removeEventListener('pageshow', this._onShow);
+    }
     if (typeof document !== 'undefined') document.removeEventListener('keydown', this._onKey);
     try {
       this._chart.removeLayer('wick-draw');
@@ -160,6 +266,9 @@ export class DrawLayer {
     this._chart.dispatchEvent(
       new CustomEvent('wick:drawings', { detail: { drawings: this.getDrawings(), action } })
     );
+    if (this._shareCh) {
+      this._shareCh.postMessage({ v: 1, type: 'draw-sync', src: this._peer, drawings: this.getDrawings() });
+    }
   }
 
   _select(id) {
@@ -481,8 +590,12 @@ export class DrawLayer {
   _newDrawing(a) {
     const t = this._tool;
     const two = ['trendline', 'ray', 'rect', 'fib'].includes(t);
+    // peer-prefixed ids: two tabs drafting at the same moment must never mint
+    // the same id — a collision would silently merge drawings once synced
+    const id = this._peer + '-' + ++this._localSeq;
     return normalizeDrawings([
       {
+        id,
         type: t === 'ray' ? 'trendline' : t,
         points: two ? [a, { ...a }] : [a],
         extend: t === 'ray' ? 'right' : 'none',

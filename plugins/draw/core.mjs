@@ -49,6 +49,7 @@ const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 export function normalizeDrawings(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
+  const seen = new Set();
   for (const raw of list) {
     if (!raw || typeof raw !== 'object') continue;
     if (out.length >= 100) break;
@@ -74,8 +75,12 @@ export function normalizeDrawings(list) {
       if (!text) continue; // a text drawing without text is nothing
     }
 
+    const id = raw.id != null && String(raw.id).slice(0, 64) ? String(raw.id).slice(0, 64) : 'd-' + ++seq;
+    if (seen.has(id)) continue; // duplicate ids (e.g. colliding peers) — first wins
+    seen.add(id);
+
     out.push({
-      id: raw.id != null && String(raw.id).slice(0, 64) ? String(raw.id).slice(0, 64) : 'd-' + ++seq,
+      id,
       type,
       points,
       color:

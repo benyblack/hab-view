@@ -526,13 +526,15 @@ document.getElementById('btn-coview').addEventListener('click', (e) => {
   if (on) {
     chartEl.setAttribute('co-view-name', 'tab-' + Math.random().toString(36).slice(2, 5));
     chartEl.setAttribute('co-view', 'wick-demo');
+    draw.setShare(true);
   } else {
     chartEl.removeAttribute('co-view');
     chartEl.removeAttribute('co-view-name');
+    draw.setShare(null);
   }
   toast(
     on
-      ? 'Co-view on — open this page in a second tab: crosshairs sync, and each tab shows the other\u2019s viewport as a colored band.'
+      ? 'Co-view on — open this page in a second tab: crosshairs sync, viewports show as bands, and drawings appear on both charts.'
       : 'Co-view off.'
   );
 });
