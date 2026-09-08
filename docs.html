@@ -200,6 +200,7 @@
         <li><a href="#riskplan">Risk planner<span class="new-pill">NEW</span></a></li>
         <li><a href="#trading">Positions &amp; alerts</a></li>
         <li><a href="#analysis">Stats, profile &amp; annotations</a></li>
+        <li><a href="#narrate">Bar-walk narrator<span class="new-pill">NEW</span></a></li>
         <li><a href="#ai">AI-ready data window</a></li>
         <li><a href="#agent">AI agent interface</a></li>
         <li><a href="#feeds">Feeds (&lt;wick-feed&gt;)</a></li>
@@ -553,6 +554,31 @@ chart.<span class="attr">addEventListener</span>('wick:alert', (e) =&gt; console
           </div>
           <wick-feed for="ex-an" demo="BTC" tf="1h" limit="400"></wick-feed>
           <wick-chart id="ex-an" label="BTC · 1h" indicators="sma:20 rsi:14" annotations stats></wick-chart>
+        </div>
+      </section>
+
+      <section id="narrate">
+        <h2>Bar-walk narrator <a class="anchor" href="#narrate">#</a> <span class="pill new">NEW</span></h2>
+        <p>Two pieces that turn history into a story. <code>narrate()</code> is the <b>timeline</b>: pivot highs/lows, volume spikes, gaps, RSI divergences plus derived <b>legs</b> — the move between opposite pivots ("+12.4% over 38 bars"). <code>walk()</code> is the <b>player</b>: the viewport slides through history while <code>wick:walk</code> events announce each step and the events as they're crossed. Wire the event to a caption bar and your chart tells itself.</p>
+        <div class="codewrap"><pre class="code">chart.<span class="attr">narrate</span>();                     <span class="cmt">// timeline for the visible range</span>
+chart.<span class="attr">narrate</span>({ from, to });         <span class="cmt">// …or any time window (ms or s)</span>
+<span class="cmt">// → [{ i, time, type, side, note, legPct?, legBars? }] — sorted, capped at 60</span>
+
+chart.<span class="attr">walk</span>({ from: 0, to: 500, speed: 120, step: 10 });
+chart.addEventListener(<span class="str">'wick:walk'</span>, (e) =&gt; {
+  <span class="cmt">// { phase: 'step' | 'end' | 'stop', index, events: [...], from, to }</span>
+});
+chart.<span class="attr">stopWalk</span>();                      <span class="cmt">// any pointer/wheel/key input stops it too</span></pre></div>
+        <div class="note">The walk is a local replay of real history (not a projection — see <a href="#scenario">scenario mode</a> for what-ifs). During a walk the chart also broadcasts its moving viewport over co-view, so peers watch the tour with you.</div>
+
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live playground</span><span class="spacer"></span>
+            <span class="seg" id="nw-seg"></span>
+          </div>
+          <wick-feed for="ex-nw" demo="BTC" tf="1h" limit="400"></wick-feed>
+          <wick-chart id="ex-nw" label="BTC · 1h · narrated walk"></wick-chart>
+          <div class="foot" id="nw-foot">pick a speed and press play</div>
         </div>
       </section>
 
@@ -1067,6 +1093,33 @@ chart.addEventListener(<span class="str">'wick:peers'</span>, (e) =&gt; {
       };
       a.addEventListener('wick:peers', () => upd(a));
       b.addEventListener('wick:peers', () => upd(b));
+    }
+
+    /* ---------- bar-walk narrator playground ---------- */
+    {
+      const c = $('ex-nw'), foot = $('nw-foot');
+      let speed = 120;
+      const fmtT = (t) => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' });
+      c.addEventListener('wick:walk', (e) => {
+        const { phase, index, events, from, to } = e.detail;
+        if (phase === 'end') { foot.textContent = 'walk finished — press play again'; return; }
+        if (phase === 'stop') { foot.textContent = 'walk interrupted — press play again'; return; }
+        const notes = events.map((ev) => `${fmtT(ev.time)} · ${ev.note}`);
+        foot.textContent =
+          `bar ${index - from}/${to - from}` + (notes.length ? ` — ${notes.join(' · ')}` : ' …');
+      });
+      seg($('nw-seg'), [['120', '1×'], ['60', '2×'], ['30', '4×']], '120', (v) => { speed = +v; });
+      const play = document.createElement('button');
+      play.type = 'button';
+      play.textContent = '▶ play walk';
+      play.className = 'primary';
+      $('nw-seg').after(play);
+      play.addEventListener('click', () => {
+        const d = c.data;
+        if (!d || !d.length) { foot.textContent = 'waiting for data…'; return; }
+        c.walk({ from: 0, to: d.length - 1, speed });
+        foot.textContent = 'walking…';
+      });
     }
 
     /* ---------- trading ---------- */

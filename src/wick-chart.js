@@ -32,6 +32,7 @@ import {
   compileScript, predicateTrueSeries, scriptAlertStep,
   AI_TOOLS, aiPromptText, applyChartOps,
   calcVolCone, normalizeScenario, normalizeRiskPlan, PresenceTracker,
+  narrateWindow,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -218,6 +219,8 @@ class WickChart extends HTMLElementBase {
       this._playToken = 0;
       this._measure = null; // { iA, pA, iB, pB, done }
       this._measuring = false;
+      // bar-walk narrator state
+      this._walkTimer = 0;
       this._ind = { overlays: [], panes: [], volume: true };
 
       this._pointers = new Map();
@@ -253,7 +256,10 @@ class WickChart extends HTMLElementBase {
         }
       };
       this._onWheel = (e) => this._wheel(e);
-      this._onDbl = () => this.fit();
+      this._onDbl = () => {
+        this.stopWalk();
+        this.fit();
+      };
       this._onKey = (e) => this._keydown(e);
     }
 
@@ -287,6 +293,7 @@ class WickChart extends HTMLElementBase {
 
     disconnectedCallback() {
       this._connected = false;
+      this.stopWalk(true);
       if (this._coviewCh) {
         this._coviewSend({ type: 'bye' });
         try {
@@ -2855,6 +2862,7 @@ class WickChart extends HTMLElementBase {
 
     _pointerDown(e) {
       if (e.button !== 0) return;
+      if (this._walkTimer) this.stopWalk(); // any touch interrupts the story
       this._canvas.setPointerCapture(e.pointerId);
       const pt = this._localPoint(e);
       this._pointers.set(e.pointerId, pt);
@@ -2989,6 +2997,7 @@ class WickChart extends HTMLElementBase {
     _wheel(e) {
       const ly = this._ly;
       if (!ly || !this._data.length) return;
+      if (this._walkTimer) this.stopWalk();
       e.preventDefault();
       const pt = this._localPoint(e);
       const dx = e.deltaX;
@@ -3022,6 +3031,7 @@ class WickChart extends HTMLElementBase {
     _keydown(e) {
       const ly = this._ly;
       if (!ly || !this._data.length) return;
+      if (this._walkTimer) this.stopWalk();
       const d = this._data;
       const key = e.key;
       const step = e.shiftKey ? 10 : 1;
@@ -3328,6 +3338,100 @@ class WickChart extends HTMLElementBase {
      */
     getPeers() {
       return this._presence ? this._presence.list() : [];
+    }
+
+    /**
+     * Narrated timeline for a window (default: the visible range) — pivot
+     * highs/lows, volume spikes, gaps, RSI divergences plus derived legs
+     * ("+12.4% over 38 bars"), sorted by index. Pure data, perfect for
+     * caption UIs or the walk player.
+     *   chart.narrate();                        // visible range
+     *   chart.narrate({ from, to });            // times in ms (s accepted)
+     * @param {{from?: number, to?: number}} [range]
+     * @returns {{i: number, time: number, type: string, side: string, note: string,
+     *            legPct?: number, legBars?: number}[]}
+     */
+    narrate(range) {
+      const d = this._data;
+      if (!d.length) return [];
+      let i0 = 0;
+      let i1 = d.length - 1;
+      if (range && isNum(range.from) && isNum(range.to)) {
+        i0 = WickChart._indexForTime(d, WickChart._timeToMs(range.from));
+        i1 = WickChart._indexForTime(d, WickChart._timeToMs(range.to));
+        if (i0 > i1) [i0, i1] = [i1, i0];
+      }
+      return narrateWindow(d, i0, i1);
+    }
+
+    /**
+     * Walk the chart through history like a story: the viewport slides
+     * from `from` to `to` while `wick:walk` events announce every step and
+     * the narrator's events (spikes, gaps, pivots, legs) as they're crossed.
+     * Any user interaction — pointer, wheel, keys, double-click — stops it.
+     *   chart.walk({ from: 0, to: 500, speed: 120, step: 10 });
+     *   chart.addEventListener('wick:walk', (e) => showCaption(e.detail));
+     *   // detail: { phase: 'step'|'end'|'stop', index, events: [...], from, to }
+     * @param {{from?: number, to?: number, speed?: number, step?: number}} [opts]
+     *        from/to are bar indices (default: last ~500 bars → the end)
+     * @returns {boolean} true when the walk started
+     */
+    walk(opts = {}) {
+      this.stopWalk(true);
+      const d = this._data;
+      if (!d.length || !this._connected) return false;
+      const to = clamp(Math.round(+opts.to || d.length - 1), 0, d.length - 1);
+      const from = clamp(Math.round(opts.from != null ? +opts.from : Math.max(0, to - 500)), 0, to);
+      const span = to - from + 1;
+      // window width: the current viewport, but never more than ~⅓ of the
+      // span (a fully zoomed-out chart would otherwise start at `to`)
+      const widthBars = clamp(
+        Math.min(
+          this._ly ? Math.round(this._ly.plotRight / this._view.spacing) : 120,
+          Math.max(10, Math.ceil(span / 3))
+        ),
+        10,
+        span
+      );
+      const events = narrateWindow(d, from, to, { pivot: 8 });
+      const speed = clamp(Math.round(+opts.speed || 120), 16, 2000);
+      const step = clamp(Math.round(+opts.step || Math.max(1, Math.round(widthBars / 12))), 1, 500);
+      let cursor = Math.min(from + widthBars - 1, to);
+      let ev = 0;
+      let ended = false;
+      const tick = () => {
+        if (ended) return;
+        this._auto = false;
+        this._view.rightIndex = cursor;
+        this._clampView();
+        this._invalidate();
+        this._emitRange();
+        const hits = [];
+        while (ev < events.length && events[ev].i <= cursor) hits.push(events[ev++]);
+        this._fire('walk', { phase: 'step', index: cursor, events: hits, from, to });
+        if (cursor >= to) {
+          ended = true;
+          clearInterval(this._walkTimer);
+          this._walkTimer = 0;
+          this._fire('walk', { phase: 'end', index: cursor, events: [], from, to });
+        } else {
+          cursor = Math.min(cursor + step, to);
+        }
+      };
+      this._walkTimer = setInterval(tick, speed);
+      tick(); // first step lands immediately
+      return true;
+    }
+
+    /**
+     * Stop the running walk (if any). Fires a final `wick:walk`
+     * { phase: 'stop' } unless called internally.
+     */
+    stopWalk(silent) {
+      if (!this._walkTimer) return;
+      clearInterval(this._walkTimer);
+      this._walkTimer = 0;
+      if (!silent) this._fire('walk', { phase: 'stop' });
     }
 
     _emitRange() {

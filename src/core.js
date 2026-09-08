@@ -1869,6 +1869,61 @@ export function normalizeRiskPlan(spec) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Bar-walk narrator — a timeline of what happened
+ * ------------------------------------------------------------------ */
+
+/**
+ * Turn a bar window into an ordered story: the annotation events (pivot
+ * highs/lows, volume spikes, gaps, RSI divergences) plus derived **legs** —
+ * the move between consecutive opposite pivots ("+12.4% over 38 bars").
+ * The timeline drives the bar-walk player and any caption UI.
+ *
+ * @param {Bar[]} bars full dataset
+ * @param {number} i0 first index of the window
+ * @param {number} i1 last index of the window
+ * @param {{pivot?: number, volMult?: number, gapMult?: number, rsiPeriod?: number}} [opts]
+ *        pivot window defaults to 8 (denser than the annotations overlay's 20)
+ * @returns {{i: number, time: number, type: string, side: string, note: string,
+ *            legPct?: number, legBars?: number}[]} sorted by index, capped at 60
+ */
+export function narrateWindow(bars, i0, i1, opts = {}) {
+  if (!bars.length || i0 < 0 || i1 < i0 || i1 >= bars.length) return [];
+  const rsi = calcRSI(bars.map((b) => b.close), Math.min(50, Math.max(2, +opts.rsiPeriod || 14)));
+  const ann = detectAnnotations(bars, i0, i1, rsi, {
+    pivot: opts.pivot ?? 8,
+    volMult: opts.volMult,
+    gapMult: opts.gapMult,
+  });
+  // legs: the move between consecutive opposite pivots, stamped at the
+  // ending pivot so a walk player can speak it as it arrives
+  const pivots = ann
+    .filter((a) => a.type === 'pivothigh' || a.type === 'pivotlow')
+    .sort((a, b) => a.i - b.i);
+  const legs = [];
+  for (let k = 1; k < pivots.length; k++) {
+    const a = pivots[k - 1];
+    const b = pivots[k];
+    if (a.type === b.type) continue;
+    const pa = a.type === 'pivothigh' ? bars[a.i].high : bars[a.i].low;
+    const pb = b.type === 'pivothigh' ? bars[b.i].high : bars[b.i].low;
+    if (!(pa > 0) || !Number.isFinite(pb)) continue;
+    const pct = ((pb - pa) / pa) * 100;
+    legs.push({
+      type: 'leg',
+      side: pct >= 0 ? 'high' : 'low',
+      i: b.i,
+      note: `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% over ${b.i - a.i} bars`,
+      legPct: Math.round(pct * 100) / 100,
+      legBars: b.i - a.i,
+    });
+  }
+  return [...ann, ...legs]
+    .sort((a, b) => a.i - b.i)
+    .slice(0, 60)
+    .map((e) => ({ ...e, time: bars[e.i].time }));
+}
+
+/* ------------------------------------------------------------------ *
  * Co-view presence — peer viewport tracking with TTL expiry
  * ------------------------------------------------------------------ */
 

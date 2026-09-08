@@ -189,6 +189,14 @@
           </svg>
           <span>Scenario</span>
         </button>
+        <button type="button" class="icon-btn" id="btn-walk" aria-pressed="false" aria-label="Walk" title="Bar-walk narrator — replay history while captions describe spikes, gaps, pivots and legs">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 4v14"/>
+            <path d="M5 18l3-2.5M5 18l-3-2.5" opacity=".6"/>
+            <path d="M10 8h9M10 12h6M10 16h9" opacity=".9"/>
+          </svg>
+          <span>Walk</span>
+        </button>
       </div>
 
       <div class="cluster cluster-trade" aria-label="Trade">
@@ -229,6 +237,7 @@
   <footer class="statusbar">
     <span class="status"><span class="dot" id="status-dot"></span><span id="status-text">starting…</span></span>
     <span class="range mono" id="range-text"></span>
+    <span class="hint" id="walk-caption" hidden></span>
     <span class="hint">scroll to zoom · drag to pan · shift-drag to measure · double-click to reset</span>
   </footer>
 
