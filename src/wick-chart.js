@@ -31,7 +31,7 @@ import {
   windowSummary, normalizeOverlays, barIndexForTime, resolveOverlayColor,
   compileScript, predicateTrueSeries, scriptAlertStep,
   AI_TOOLS, aiPromptText, applyChartOps,
-  calcVolCone, normalizeScenario, normalizeRiskPlan,
+  calcVolCone, normalizeScenario, normalizeRiskPlan, PresenceTracker,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -48,7 +48,7 @@ const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class
 
 class WickChart extends HTMLElementBase {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'sonify'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'co-view-name', 'sonify'];
     }
 
     constructor() {
@@ -205,6 +205,11 @@ class WickChart extends HTMLElementBase {
       this._coviewLast = 0;
       this._ghost = null;
       this._ghostTimer = 0;
+      // presence: peer viewports (who is looking where)
+      this._coviewLabel = null; // display name from the co-view-name attribute
+      this._presence = new PresenceTracker();
+      this._coviewBeat = 0;
+      this._coviewViewLast = 0;
 
       // sonification state
       this._sonify = false;
@@ -283,10 +288,18 @@ class WickChart extends HTMLElementBase {
     disconnectedCallback() {
       this._connected = false;
       if (this._coviewCh) {
+        this._coviewSend({ type: 'bye' });
         try {
           this._coviewCh.close();
         } catch (_) {}
         this._coviewCh = null;
+      }
+      clearInterval(this._coviewBeat);
+      this._coviewBeat = 0;
+      if (this._presence && this._presence.peers.size) {
+        const left = this._presence.list();
+        this._presence = new PresenceTracker();
+        this._fire('peers', { peers: [], joined: [], left });
       }
       clearTimeout(this._ghostTimer);
       if (this._ro) this._ro.disconnect();
@@ -356,6 +369,10 @@ class WickChart extends HTMLElementBase {
         case 'co-view':
           this._coviewName = val || null;
           this._setupCoView();
+          break;
+        case 'co-view-name':
+          // display name travels with every presence message; no re-render
+          this._coviewLabel = val || null;
           break;
         case 'sonify':
           this._sonify = val != null && val !== 'false';
@@ -2556,6 +2573,34 @@ class WickChart extends HTMLElementBase {
         );
       }
 
+      /* co-view presence: peer viewport bands along the top of the plot */
+      if (this._presence && this._presence.peers.size && d.length) {
+        const peers = this._presence.list().slice(0, 4);
+        ctx.save();
+        ctx.font = pillFont();
+        for (let row = 0; row < peers.length; row++) {
+          const p = peers[row];
+          if (!p.range) continue;
+          const cols = pal.overlay || [];
+          const col = cols[(row + 1) % Math.max(cols.length, 1)] || pal.accent;
+          const i0 = WickChart._indexForTime(this._data, p.range.from);
+          const i1 = WickChart._indexForTime(this._data, p.range.to);
+          const x0 = clamp(this._xFor(i0), 0, plotRight);
+          const x1 = clamp(this._xFor(i1), 0, plotRight);
+          const y = main.y0 + 2 + row * 5;
+          ctx.globalAlpha = 0.8;
+          ctx.fillStyle = col;
+          ctx.fillRect(x0, y, Math.max(x1 - x0, 3), 3);
+          if (x1 - x0 > 44) {
+            ctx.globalAlpha = 0.95;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(p.name || p.id, x0 + 3, y + 4);
+          }
+        }
+        ctx.restore();
+      }
+
       /* co-view ghost crosshair (peer pointer from another tab/chart) */
       if (this._ghost) {
         const g = this._ghost;
@@ -3165,10 +3210,17 @@ class WickChart extends HTMLElementBase {
         } catch (_) {}
         this._coviewCh = null;
       }
+      clearInterval(this._coviewBeat);
+      this._coviewBeat = 0;
       clearTimeout(this._ghostTimer);
       if (this._ghost) {
         this._ghost = null;
         this._invalidate();
+      }
+      if (this._presence && this._presence.peers.size) {
+        const left = this._presence.list();
+        this._presence = new PresenceTracker();
+        this._fire('peers', { peers: [], joined: [], left });
       }
       const name = this._coviewName;
       if (!name || !this._connected || typeof BroadcastChannel === 'undefined') return;
@@ -3178,6 +3230,33 @@ class WickChart extends HTMLElementBase {
         ch.onmessage = (ev) => this._onCoMessage(ev.data);
         this._coviewCh = ch;
       } catch (_) {}
+      // presence: announce immediately, then heartbeat so idle peers stay
+      // warm (and stale ones sweep) without waiting for a pan/zoom
+      this._coviewSendView(true);
+      this._coviewBeat = setInterval(() => {
+        this._coviewSendView(true);
+        const left = this._presence.sweep();
+        if (left.length) {
+          this._fire('peers', { peers: this._presence.list(), joined: [], left });
+          this._invalidate();
+        }
+      }, 4000);
+    }
+
+    /** Broadcast our visible range for presence; throttled unless forced. */
+    _coviewSendView(force) {
+      if (!this._coviewCh) return;
+      const r = this.getVisibleRange();
+      if (!r) return;
+      const now = performance.now();
+      if (!force && now - this._coviewViewLast < 120) return;
+      this._coviewViewLast = now;
+      this._coviewSend({
+        type: 'view',
+        from: r.from,
+        to: r.to,
+        name: this._coviewLabel || null,
+      });
     }
 
     _coviewSend(msg) {
@@ -3188,7 +3267,30 @@ class WickChart extends HTMLElementBase {
     }
 
     _onCoMessage(m) {
-      if (!m || m.v !== 1 || m.peer === this._coviewPeer || m.type !== 'cross') return;
+      if (!m || m.v !== 1 || m.peer === this._coviewPeer) return;
+      if (m.type === 'view') {
+        const joined = this._presence.track(m.peer, {
+          range: { from: m.from, to: m.to },
+          name: m.name,
+        });
+        this._invalidate();
+        if (joined) {
+          const p = this._presence.peers.get(m.peer);
+          this._fire('peers', {
+            peers: this._presence.list(),
+            joined: [p ? { ...p, range: p.range && { ...p.range } } : { id: m.peer }],
+            left: [],
+          });
+        }
+        return;
+      }
+      if (m.type === 'bye') {
+        const left = this._presence.drop(m.peer);
+        if (left) this._fire('peers', { peers: this._presence.list(), joined: [], left: [left] });
+        this._invalidate();
+        return;
+      }
+      if (m.type !== 'cross') return;
       if (m.time == null) {
         if (this._ghost) {
           this._ghost = null;
@@ -3218,10 +3320,21 @@ class WickChart extends HTMLElementBase {
       this.dispatchEvent(new CustomEvent('hab:' + name, { detail }));
     }
 
+    /**
+     * Live co-view peers: who else is in the room and the time window each
+     * one is looking at — [{ id, name, range: {from, to}, at }], oldest
+     * sighting first. Peers fade out ~12 s after their last sighting.
+     * @returns {object[]}
+     */
+    getPeers() {
+      return this._presence ? this._presence.list() : [];
+    }
+
     _emitRange() {
       const r = this.getVisibleRange();
       if (!r) return;
       this._fire('range', r);
+      if (this._coviewCh) this._coviewSendView();
     }
   }
 

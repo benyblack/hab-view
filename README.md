@@ -501,13 +501,13 @@ range as a ~4-second pitch sequence, riding the crosshair along for sighted
 users. Audio starts lazily within the enabling user gesture (autoplay-policy
 safe).
 
-### Cross-tab co-view
+### Cross-tab co-view & presence
 
 Tag charts with the same channel and they share pointers — across browser
 tabs, or between multiple charts on one page:
 
 ```html
-<wick-chart co-view="btc-room"></wick-chart>
+<wick-chart co-view="btc-room" co-view-name="ben"></wick-chart>
 ```
 
 Hovering in one tab draws a ghost crosshair (accent, dotted, with the time
@@ -515,6 +515,20 @@ pill) in every peer. Positions are synced by bar **time**, so peers with
 different history depths still line up. Ghosts fade ~2.5 s after the peer
 stops moving. Same-origin only (BroadcastChannel); the connection follows the
 `co-view` attribute and closes with the element.
+
+Peers also see **where everyone is looking**: each peer's viewport renders
+as a colored band (with name) along the top of the plot, updated live as
+they pan or zoom and swept away ~12 s after they go quiet.
+
+```js
+chart.getPeers(); // [{ id, name, range: { from, to }, at }]
+chart.addEventListener('wick:peers', (e) => {
+  // { peers, joined, left } — membership changes only
+});
+```
+
+`PresenceTracker` (the TTL bookkeeping) is exported from `wickchart/core`
+for apps that sync presence over their own transport instead.
 
 ### Smart annotations
 
