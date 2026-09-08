@@ -126,13 +126,16 @@ test('narrator is wired into the chart: narrate(), walk(), stopWalk(), interrupt
   assert.match(src, /_fire\('walk', \{ phase: 'step'/);
   assert.match(src, /_fire\('walk', \{ phase: 'end'/);
   assert.match(src, /_fire\('walk', \{ phase: 'stop'/);
-  // every interaction entry point interrupts the walk
-  const pd = src.slice(src.indexOf('_pointerDown(e) {'), src.indexOf('_pointerDown(e) {') + 200);
-  assert.match(pd, /stopWalk\(\)/, 'pointerdown interrupts');
-  const wh = src.slice(src.indexOf('_wheel(e) {'), src.indexOf('_wheel(e) {') + 200);
-  assert.match(wh, /stopWalk\(\)/, 'wheel interrupts');
-  const kd = src.slice(src.indexOf('_keydown(e) {'), src.indexOf('_keydown(e) {') + 200);
-  assert.match(kd, /stopWalk\(\)/, 'keys interrupt');
+  // every interaction entry point interrupts playback (walk + story)
+  const pd = src.slice(src.indexOf('_pointerDown(e) {'), src.indexOf('_pointerDown(e) {') + 260);
+  assert.match(pd, /_stopPlayback\(\)/, 'pointerdown interrupts');
+  const wh = src.slice(src.indexOf('_wheel(e) {'), src.indexOf('_wheel(e) {') + 260);
+  assert.match(wh, /_stopPlayback\(\)/, 'wheel interrupts');
+  const kd = src.slice(src.indexOf('_keydown(e) {'), src.indexOf('_keydown(e) {') + 260);
+  assert.match(kd, /_stopPlayback\(\)/, 'keys interrupt');
+  const sp = src.slice(src.indexOf('_stopPlayback() {'), src.indexOf('_stopPlayback() {') + 160);
+  assert.match(sp, /stopWalk\(\)/, 'playback stop includes the walk');
+  assert.match(sp, /stopStory\(\)/, 'playback stop includes the story');
   const dc = src.slice(src.indexOf('disconnectedCallback() {'), src.indexOf('disconnectedCallback() {') + 400);
   assert.match(dc, /this\.stopWalk\(true\)/, 'disconnect cleans the timer');
 });

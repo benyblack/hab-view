@@ -585,6 +585,68 @@ chart.addEventListener('wick:brush', (e) => {
   toast(`Brush ${s.bars} bars: ${sign}${s.deltaPct.toFixed(2)}% (H ${s.high.toFixed(2)} · L ${s.low.toFixed(2)} · Σvol ${Math.round(s.volume)})`);
 });
 
+/* Story mode — a guided tour built from the data itself. */
+function demoStory() {
+  const d = chart.data;
+  if (!d || d.length < 60) return null;
+  const last = d.length - 1;
+  const T = (i) => d[Math.max(0, Math.min(last, i))].time;
+  const events = chart.narrate({ from: d[0].time, to: d[last].time });
+  const spike = events.find((ev) => ev.type === 'volspike');
+  const scenes = [
+    { title: 'Act I — the full picture', note: `${d.length} bars. See the shape before the details.`, range: { from: d[0].time, to: d[last].time } },
+  ];
+  if (spike) {
+    scenes.push({
+      title: 'Act II — the volume spike',
+      note: spike.note,
+      range: { from: T(spike.i - 40), to: T(spike.i + 20) },
+      indicators: 'volume',
+    });
+  }
+  scenes.push({
+    title: 'Act III — the recent trend',
+    note: 'SMA 20 and RSI 14 join for the last 120 bars.',
+    range: { from: T(last - 120), to: d[last].time },
+    indicators: 'sma:20 rsi:14',
+  });
+  const entry = d[last].close;
+  const recent = d.slice(-20).map((b) => b.low);
+  scenes.push({
+    title: 'Act IV — the plan',
+    note: 'A bull scenario into future space plus a 1R/2R/3R grid.',
+    range: { from: T(last - 80), to: d[last].time },
+    indicators: 'sma:20',
+    scenario: demoScenario(),
+    riskPlan: { entry, stop: Math.min(entry * 0.982, Math.min(...recent)), multiples: [1, 2, 3], label: 'demo plan' },
+  });
+  return scenes;
+}
+
+let storyRunning = false;
+document.getElementById('btn-story').addEventListener('click', () => {
+  if (storyRunning) {
+    chart.stopStory();
+    return;
+  }
+  const story = demoStory();
+  if (story) chart.playStory(story, { dwell: 2400 });
+});
+chart.addEventListener('wick:story', (e) => {
+  const { phase, title, note, index, total } = e.detail;
+  if (phase === 'scene') {
+    storyRunning = true;
+    document.getElementById('btn-story').setAttribute('aria-pressed', 'true');
+    walkCaption.hidden = false;
+    walkCaption.textContent = `story ${index + 1}/${total} — ${title}: ${note}`;
+  } else {
+    storyRunning = false;
+    document.getElementById('btn-story').setAttribute('aria-pressed', 'false');
+    walkCaption.hidden = true;
+    if (phase === 'end') toast('Story finished.');
+  }
+});
+
 document.getElementById('btn-annotations').setAttribute('aria-pressed', String(state.annotations));
 if (state.annotations) chart.setAttribute('annotations', 'true');
 document.getElementById('btn-annotations').addEventListener('click', (e) => {

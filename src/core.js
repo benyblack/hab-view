@@ -1969,6 +1969,84 @@ export function brushStats(bars, i0, i1) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Story mode — guided tours of chart state
+ * ------------------------------------------------------------------ */
+
+/** Smoothest cheap easing for viewport pans: slow in, slow out. */
+export function easeInOutCubic(t) {
+  const x = clamp(+t || 0, 0, 1);
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+/**
+ * Validate one story scene. Every field is optional except that a scene
+ * must be an object; omitted fields simply don't change that aspect of
+ * the chart when played. `scenario`/`riskPlan` use a 'clear' sentinel for
+ * explicit "remove it" (null input means clear too when the KEY is present).
+ *
+ *   { title: 'The breakout', note: 'What happened…',
+ *     range: { from, to },          // times (s or ms) — the camera pans there
+ *     indicators: 'sma:20 rsi:14',  // optional indicator string
+ *     type: 'candles',              // optional series type
+ *     overlays: [...],              // optional zones/levels (normalizeOverlays)
+ *     scenario: {...} | null,       // set / clear a scenario
+ *     riskPlan: {...} | null,       // set / clear a risk plan
+ *     dwell: 2200 }                 // ms to hold after the pan (500–30000)
+ *
+ * @returns {object|null} normalized scene, or null for non-objects
+ */
+export function normalizeScene(scene) {
+  if (!scene || typeof scene !== 'object') return null;
+  const out = {
+    title: scene.title != null ? String(scene.title).slice(0, 60) : '',
+    note: scene.note != null ? String(scene.note).slice(0, 200) : '',
+    dwell: clamp(Math.round(+scene.dwell || 2200), 500, 30000),
+  };
+  if (scene.range && Number.isFinite(+scene.range.from) && Number.isFinite(+scene.range.to)) {
+    out.range = { from: +scene.range.from, to: +scene.range.to };
+  }
+  if (scene.indicators != null) {
+    const s = String(scene.indicators).trim();
+    if (s) out.indicators = s.slice(0, 200);
+  }
+  if (scene.type != null && SERIES_TYPES.includes(scene.type)) out.type = scene.type;
+  if (scene.overlays != null) {
+    const ovs = normalizeOverlays(scene.overlays);
+    if (ovs.length) out.overlays = ovs;
+  }
+  if ('scenario' in scene) {
+    if (scene.scenario == null) out.scenario = 'clear';
+    else {
+      const sc = normalizeScenario(scene.scenario);
+      if (sc) out.scenario = sc;
+    }
+  }
+  if ('riskPlan' in scene) {
+    if (scene.riskPlan == null) out.riskPlan = 'clear';
+    else {
+      const rp = normalizeRiskPlan(scene.riskPlan);
+      if (rp) out.riskPlan = rp;
+    }
+  }
+  return out;
+}
+
+/**
+ * Validate a whole story: normalize each scene, drop junk, cap at 20.
+ * @returns {object[]} possibly empty
+ */
+export function sceneList(story) {
+  if (!Array.isArray(story)) return [];
+  const out = [];
+  for (const s of story) {
+    const n = normalizeScene(s);
+    if (n) out.push(n);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
  * Co-view presence — peer viewport tracking with TTL expiry
  * ------------------------------------------------------------------ */
 
