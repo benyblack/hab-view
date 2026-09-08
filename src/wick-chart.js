@@ -31,6 +31,7 @@ import {
   windowSummary, normalizeOverlays, barIndexForTime, resolveOverlayColor,
   compileScript, predicateTrueSeries, scriptAlertStep,
   AI_TOOLS, aiPromptText, applyChartOps,
+  calcVolCone, normalizeScenario,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -229,6 +230,9 @@ class WickChart extends HTMLElementBase {
 
       // server-side overlays (zones & levels)
       this._overlays = [];
+
+      // scenario projection (ghost path + vol cone)
+      this._scenario = null;
 
       this._onResize = () => this._invalidate();
       this._onPointerDown = (e) => this._pointerDown(e);
@@ -873,6 +877,62 @@ class WickChart extends HTMLElementBase {
       this._invalidate();
     }
 
+    /**
+     * Scenario projection into future space: a ghost path of future prices
+     * plus optional σ-bands (vol cone) from realized volatility.
+     *
+     *   chart.setScenario({ path: [64000, 65500, 68000], label: 'bull case' });
+     *   chart.setScenario({ horizon: 48, cone: true });   // cone-only
+     *
+     * The path is an array of prices (or {price} objects) for future bars
+     * 1..N; horizon defaults to the path length (1–500). `cone` (default
+     * true) draws ±levels·σ bands widening with √h from the current realized
+     * vol; `color` accepts up|down|accent or safe CSS colors. Setting a
+     * scenario reserves future space on the right; analysis data — excluded
+     * from getState/setState.
+     * @param {object} spec
+     * @returns {object|null} the normalized scenario, or null when invalid
+     */
+    setScenario(spec) {
+      this._scenario = normalizeScenario(spec);
+      this._invalidate();
+      return this._scenario;
+    }
+
+    clearScenario() {
+      this._scenario = null;
+      this._invalidate();
+    }
+
+    /** @returns {object|null} a copy of the active scenario */
+    get scenario() {
+      if (!this._scenario) return null;
+      return { ...this._scenario, path: this._scenario.path.map((p) => ({ ...p })) };
+    }
+
+    /** σ-cone for the active scenario, cached per data version. */
+    _scenarioConeCache() {
+      if (!this._scenario || !this._data.length) return null;
+      if (this._cache.v !== this._version) {
+        this._cache = { v: this._version, map: {} };
+      }
+      if (!this._cache.map.__scenario) {
+        const d = this._data;
+        const vol = calcRealizedVol(d.map((b) => b.close), 20);
+        let v = NaN;
+        for (let i = vol.length - 1; i >= 0; i--) {
+          if (Number.isFinite(vol[i])) { v = vol[i]; break; }
+        }
+        this._cache.map.__scenario = calcVolCone(
+          d[d.length - 1].close,
+          v,
+          this._scenario.horizon,
+          this._scenario.levels
+        );
+      }
+      return this._cache.map.__scenario;
+    }
+
     /* ------------------------------------------------------------ *
      * AI agent interface — the chart as a tool surface
      * ------------------------------------------------------------ */
@@ -1214,7 +1274,9 @@ class WickChart extends HTMLElementBase {
     _rightMargin() {
       const ly = this._ly;
       const w = ly ? ly.plotRight : 600;
-      return Math.max(3, (w / this._view.spacing) * 0.06);
+      const base = Math.max(3, (w / this._view.spacing) * 0.06);
+      // a scenario projection reserves future space so the cone stays visible
+      return this._scenario ? Math.max(base, this._scenario.horizon + 3) : base;
     }
 
     _applyFit() {
@@ -1645,6 +1707,81 @@ class WickChart extends HTMLElementBase {
             ctx.restore();
           }
         }
+      }
+
+      /* scenario projection: ghost path + σ-cone in future space (clipped to
+       * the main plot so out-of-range bands never bleed into the axis) */
+      if (this._scenario && d.length) {
+        const sc = this._scenario;
+        const col = resolveOverlayColor(sc.color, pal);
+        const baseIdx = d.length - 1;
+        const xAt = (h) => this._xFor(baseIdx + h);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, main.y0, plotRight, main.h);
+        ctx.clip();
+        if (sc.cone) {
+          const cone = this._scenarioConeCache();
+          if (cone) {
+            for (let li = cone.levels.length - 1; li >= 0; li--) {
+              const b = cone.bands[cone.levels[li]];
+              ctx.globalAlpha = li === 0 ? 0.1 : 0.05;
+              ctx.fillStyle = col;
+              ctx.beginPath();
+              ctx.moveTo(xAt(0), yOf(b.up[0]));
+              for (let h = 1; h <= cone.horizon; h++) ctx.lineTo(xAt(h), yOf(b.up[h]));
+              for (let h = cone.horizon; h >= 0; h--) ctx.lineTo(xAt(h), yOf(b.down[h]));
+              ctx.closePath();
+              ctx.fill();
+            }
+            const inner = cone.bands[cone.levels[0]];
+            ctx.globalAlpha = 0.4;
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            for (const arr of [inner.up, inner.down]) {
+              ctx.beginPath();
+              ctx.moveTo(xAt(0), yOf(arr[0]));
+              for (let h = 1; h <= cone.horizon; h++) ctx.lineTo(xAt(h), yOf(arr[h]));
+              ctx.stroke();
+            }
+            ctx.setLineDash([]);
+          }
+        }
+        if (sc.path.length) {
+          ctx.globalAlpha = 0.9;
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(xAt(0), yOf(d[baseIdx].close));
+          for (const p of sc.path) ctx.lineTo(xAt(p.h), yOf(p.price));
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = col;
+          for (const p of sc.path) {
+            const y = yOf(p.price);
+            if (y >= main.y0 && y <= main.y1) {
+              ctx.beginPath();
+              ctx.arc(xAt(p.h), y, 2.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          if (sc.label) {
+            const p = sc.path[sc.path.length - 1];
+            ctx.font = pillFont();
+            ctx.globalAlpha = 0.95;
+            ctx.fillStyle = col;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              sc.label,
+              Math.min(xAt(p.h) + 8, plotRight - 4),
+              clamp(yOf(p.price), main.y0 + 8, main.y1 - 8)
+            );
+          }
+        }
+        ctx.restore();
       }
 
       /* position zones (under series) */

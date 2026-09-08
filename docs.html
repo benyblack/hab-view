@@ -196,6 +196,7 @@
         <li><a href="#wickscript">WickScript expressions</a></li>
         <li><a href="#volshading">Volatility shading</a></li>
         <li><a href="#overlays">Server-side overlays<span class="new-pill">NEW</span></a></li>
+        <li><a href="#scenario">Scenario mode<span class="new-pill">NEW</span></a></li>
         <li><a href="#trading">Positions &amp; alerts</a></li>
         <li><a href="#analysis">Stats, profile &amp; annotations</a></li>
         <li><a href="#ai">AI-ready data window</a></li>
@@ -451,6 +452,33 @@ chart.<span class="attr">overlays</span>;               <span class="cmt">// get
           <wick-feed for="ex-ov" demo="BTC" tf="1h" limit="400"></wick-feed>
           <wick-chart id="ex-ov" label="BTC · 1h · supply/demand overlay"></wick-chart>
           <div class="foot"><span class="err" id="ov-error"></span></div>
+        </div>
+      </section>
+
+      <section id="scenario">
+        <h2>Scenario mode <a class="anchor" href="#scenario">#</a> <span class="pill new">NEW</span></h2>
+        <p>Project <b>what-if</b> into future space: a ghost path of hypothetical prices plus a <b>volatility cone</b> (±1σ/±2σ bands widening with √h from the current realized vol). "What if I'm right? What if we just chop?" — instant, fully local.</p>
+        <div class="codewrap"><pre class="code">chart.<span class="attr">setScenario</span>({
+  <span class="attr">path</span>: [64000, 65500, 66800, 68000],  <span class="cmt">// prices for future bars 1..N (or {price} objects)</span>
+  <span class="attr">cone</span>: <span class="tag">true</span>,                        <span class="cmt">// σ-bands from realized vol (default true)</span>
+  <span class="attr">label</span>: <span class="str">'bull case'</span>,
+  <span class="attr">color</span>: <span class="str">'up'</span>,                        <span class="cmt">// up | down | accent or safe CSS colors</span>
+});
+
+chart.<span class="attr">setScenario</span>({ <span class="attr">horizon</span>: 48 });            <span class="cmt">// cone-only projection</span>
+chart.<span class="attr">clearScenario</span>();
+chart.<span class="attr">scenario</span>;                          <span class="cmt">// getter</span></pre></div>
+        <p>The horizon defaults to the path length (1–500); setting a scenario reserves future space on the right so the cone stays visible. Levels are σ multipliers (default <code>[1, 2]</code>). Like overlays, scenarios are analysis data — excluded from shareable chart state, and the same shape a server-side model could push.</p>
+
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live playground</span><span class="spacer"></span>
+            <span class="seg" id="sc-seg"></span>
+            <span class="seg" id="sc-hseg"></span>
+          </div>
+          <wick-feed for="ex-sc" demo="BTC" tf="1h" limit="300"></wick-feed>
+          <wick-chart id="ex-sc" label="BTC · 1h · scenario"></wick-chart>
+          <div class="foot" id="sc-foot"></div>
         </div>
       </section>
 
@@ -901,6 +929,51 @@ location.hash = encodeStateQuery(chart.getState());   <span class="cmt">// → U
         $('ov-status').textContent = 'cleared';
         $('ov-error').textContent = '';
       });
+    }
+
+    /* ---------- scenario playground ---------- */
+    {
+      const c = $('ex-sc'), foot = $('sc-foot');
+      let mode = 'off';
+      let horizon = 48;
+      const buildPath = (drift) => {
+        const d = c.data;
+        if (!d || !d.length) return [];
+        const last = d[d.length - 1].close;
+        const path = [];
+        let p = last;
+        for (let i = 1; i <= horizon; i++) {
+          const wiggle = Math.sin(i / 3.2) * Math.abs(drift) * 0.35;
+          p = p * (1 + drift + wiggle * 0.4);
+          path.push(p);
+        }
+        return path;
+      };
+      const apply = () => {
+        if (mode === 'off') {
+          c.clearScenario();
+          foot.textContent = 'no scenario — pick one';
+          return;
+        }
+        const spec = { horizon, cone: true, levels: [1, 2] };
+        if (mode === 'bull') { spec.path = buildPath(0.004); spec.label = 'bull case'; spec.color = 'up'; }
+        if (mode === 'bear') { spec.path = buildPath(-0.004); spec.label = 'bear case'; spec.color = 'down'; }
+        if (mode === 'chop') { spec.path = buildPath(0); spec.label = 'range'; spec.color = 'accent'; }
+        if (mode === 'cone') { spec.label = '±1σ / ±2σ'; spec.color = 'accent'; }
+        c.setScenario(spec);
+        const s = c.scenario;
+        foot.textContent = s
+          ? `${s.label} · ${s.path.length}-bar ghost path · cone ±${s.levels.join('σ/±')}σ over ${s.horizon} bars`
+          : 'scenario rejected';
+      };
+      seg($('sc-seg'), [
+        ['off', 'off'], ['bull', 'bull'], ['bear', 'bear'], ['chop', 'range'], ['cone', 'cone only'],
+      ], 'off', (v) => { mode = v; apply(); });
+      seg($('sc-hseg'), [['24', '24 bars'], ['48', '48 bars'], ['96', '96 bars']], '48', (v) => {
+        horizon = +v;
+        if (mode !== 'off') apply();
+      });
+      foot.textContent = 'no scenario — pick one';
     }
 
     /* ---------- trading ---------- */

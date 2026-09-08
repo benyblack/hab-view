@@ -394,6 +394,28 @@ The React binding takes `overlays` as a prop (fresh array → re-apply), and
 `normalizeOverlays` / `barIndexForTime` / `resolveOverlayColor` are exported
 from `wickchart/core`.
 
+### Scenario mode — ghost paths & volatility cones
+
+Project what-if into future space: a ghost path of hypothetical prices plus
+a volatility cone (±1σ/±2σ bands widening with √h from realized vol).
+
+```js
+chart.setScenario({
+  path: [64000, 65500, 66800, 68000], // prices for future bars 1..N
+  cone: true,                         // σ-bands from realized vol (default)
+  label: 'bull case',
+  color: 'up',                        // up | down | accent or safe colors
+});
+chart.setScenario({ horizon: 48 });   // cone-only projection
+chart.clearScenario();
+```
+
+Setting a scenario reserves future space on the right so the cone stays
+visible; the horizon defaults to the path length (1–500) and `levels` are σ
+multipliers (default `[1, 2]`). Like overlays, scenarios are analysis data —
+excluded from shareable state, and the same shape a server-side model could
+push. `calcVolCone` / `normalizeScenario` are exported from `wickchart/core`.
+
 ### AI-ready data window — `getDataWindow()`
 
 One call turns whatever is on screen into a compact, LLM-pasteable summary.

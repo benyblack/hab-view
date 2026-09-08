@@ -1713,6 +1713,101 @@ export function resolveOverlayColor(raw, pal) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Scenario mode — ghost paths + volatility cones
+ * ------------------------------------------------------------------ */
+
+/**
+ * σ-cone projection from realized per-bar volatility: price bands widening
+ * with √h (GBM-style, exp(±z·σ·√h)) over `horizon` future bars.
+ * @param {number} lastClose anchor price (bar 0)
+ * @param {number} volPerBar per-bar stddev of log returns (from calcRealizedVol)
+ * @param {number} horizon future bars (clamped 1–500, default 48)
+ * @param {number[]} [levels] σ multipliers, e.g. [1, 2] (each clamped to 0–5)
+ * @returns {{horizon: number, levels: number[], bands: Record<string, {up: number[], down: number[]}>}}
+ *          bands[z].up/.down are arrays indexed by h = 0…horizon ([0] === lastClose)
+ */
+export function calcVolCone(lastClose, volPerBar, horizon, levels) {
+  const zs = (Array.isArray(levels) && levels.length ? levels : [1, 2])
+    .map((z) => +z)
+    .filter((z) => Number.isFinite(z) && z > 0 && z <= 5)
+    .sort((a, b) => a - b);
+  const lv = zs.length ? zs : [1];
+  const H = Math.max(1, Math.min(500, Math.round(+horizon || 48)));
+  const c = +lastClose;
+  const v = +volPerBar;
+  const bands = {};
+  const flat = !Number.isFinite(c) || c <= 0 || !Number.isFinite(v) || v < 0;
+  for (const z of lv) {
+    const up = new Array(H + 1);
+    const down = new Array(H + 1);
+    for (let h = 0; h <= H; h++) {
+      if (flat) {
+        up[h] = c || 0;
+        down[h] = c || 0;
+      } else {
+        const k = Math.exp(z * v * Math.sqrt(h));
+        up[h] = c * k;
+        down[h] = c / k;
+      }
+    }
+    bands[z] = { up, down };
+  }
+  return { horizon: H, levels: lv, bands };
+}
+
+/**
+ * Validate a scenario spec: a ghost path of future prices (bars or API data)
+ * plus optional cone settings. Invalid entries are dropped, never thrown.
+ *
+ *   { path: [64000, 65500, {price: 68000}],  // future bars 1..N
+ *     horizon: 48,          // alternative/additional: cone-only projection
+ *     cone: true,           // σ-bands from realized vol (default true)
+ *     levels: [1, 2],       // σ multipliers (default [1, 2])
+ *     color?, label? }      // palette keys up|down|accent or safe CSS colors
+ *
+ * @param {any} spec
+ * @returns {null|{path: {h:number, price:number}[], horizon: number,
+ *            cone: boolean, levels: number[], color: string|null, label: string}}
+ */
+export function normalizeScenario(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  const rawPath = Array.isArray(spec.path) ? spec.path : null;
+  const path = [];
+  if (rawPath) {
+    for (let i = 0; i < rawPath.length && path.length < 250; i++) {
+      const p = rawPath[i];
+      const price = p && typeof p === 'object' ? +p.price : +p;
+      if (Number.isFinite(price) && price > 0) path.push({ h: path.length + 1, price });
+    }
+  }
+  const hasHorizon = isNum(spec.horizon) && spec.horizon > 0;
+  if (!path.length && !hasHorizon) return null;
+  const horizon = Math.round(
+    clamp(path.length ? (hasHorizon ? Math.max(path.length, spec.horizon) : path.length) : spec.horizon, 1, 500)
+  );
+  let levels = [1, 2];
+  if (Array.isArray(spec.levels)) {
+    const zs = spec.levels
+      .map((z) => +z)
+      .filter((z) => Number.isFinite(z) && z > 0 && z <= 5)
+      .sort((a, b) => a - b);
+    if (zs.length) levels = zs;
+  }
+  const rawColor = spec.color != null ? String(spec.color).trim() : '';
+  const color = /^(up|down|accent)$/i.test(rawColor)
+    ? rawColor.toLowerCase()
+    : safeColor(rawColor) || null;
+  return {
+    path,
+    horizon,
+    cone: spec.cone !== false,
+    levels,
+    color,
+    label: spec.label != null ? String(spec.label).slice(0, 40) : '',
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * AI-ready window summary
  * ------------------------------------------------------------------ */
 
