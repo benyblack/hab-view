@@ -33,6 +33,7 @@ import {
   AI_TOOLS, aiPromptText, applyChartOps,
   calcVolCone, normalizeScenario, normalizeRiskPlan, PresenceTracker,
   narrateWindow, brushStats,
+  easeInOutCubic, sceneList,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -221,6 +222,9 @@ class WickChart extends HTMLElementBase {
       this._measuring = false;
       // bar-walk narrator state
       this._walkTimer = 0;
+      // story mode state: token cancels stale async runs
+      this._storyToken = 0;
+      this._story = null;
       // delta brush state: mode flag + current/finished selection
       this._brush = false;
       this._brushSel = null; // { i0, i1, stats } — the committed selection
@@ -261,7 +265,7 @@ class WickChart extends HTMLElementBase {
       };
       this._onWheel = (e) => this._wheel(e);
       this._onDbl = () => {
-        this.stopWalk();
+        this._stopPlayback();
         this.fit();
       };
       this._onKey = (e) => this._keydown(e);
@@ -298,6 +302,7 @@ class WickChart extends HTMLElementBase {
     disconnectedCallback() {
       this._connected = false;
       this.stopWalk(true);
+      this.stopStory(true);
       if (this._coviewCh) {
         this._coviewSend({ type: 'bye' });
         try {
@@ -2918,7 +2923,7 @@ class WickChart extends HTMLElementBase {
 
     _pointerDown(e) {
       if (e.button !== 0) return;
-      if (this._walkTimer) this.stopWalk(); // any touch interrupts the story
+      this._stopPlayback(); // any touch interrupts the story
       this._canvas.setPointerCapture(e.pointerId);
       const pt = this._localPoint(e);
       this._pointers.set(e.pointerId, pt);
@@ -3073,7 +3078,7 @@ class WickChart extends HTMLElementBase {
     _wheel(e) {
       const ly = this._ly;
       if (!ly || !this._data.length) return;
-      if (this._walkTimer) this.stopWalk();
+      this._stopPlayback();
       e.preventDefault();
       const pt = this._localPoint(e);
       const dx = e.deltaX;
@@ -3107,7 +3112,7 @@ class WickChart extends HTMLElementBase {
     _keydown(e) {
       const ly = this._ly;
       if (!ly || !this._data.length) return;
-      if (this._walkTimer) this.stopWalk();
+      this._stopPlayback();
       if (e.key === 'Escape' && (this._brushSel || this._brushDrag)) {
         this.clearBrush();
         return;
@@ -3547,6 +3552,153 @@ class WickChart extends HTMLElementBase {
       if (!this._brushSel) return null;
       const { i0, i1, stats } = this._brushSel;
       return { i0, i1, stats: { ...stats, from: { ...stats.from }, to: { ...stats.to } } };
+    }
+
+    /**
+     * Capture the current chart state as a story scene: view, series type,
+     * indicators, overlays, scenario and risk plan, plus a title/note.
+     * Build guided tours by capturing several and playing them back.
+     *   const story = [
+     *     chart.captureScene('Overview', 'The full picture'),
+     *     { title: 'The breakout', range: { from, to }, indicators: 'sma:20' },
+     *   ];
+     *   chart.playStory(story);
+     * @param {string} [title]
+     * @param {string} [note]
+     * @returns {object} scene (plain data — snapshot of the moment)
+     */
+    captureScene(title, note) {
+      const scene = {
+        title: title != null ? String(title).slice(0, 60) : '',
+        note: note != null ? String(note).slice(0, 200) : '',
+        range: this.getVisibleRange() || undefined,
+        type: this.getAttribute('type') || 'candles',
+        indicators: this.getAttribute('indicators') || null,
+      };
+      const ovs = this.overlays;
+      if (ovs.length) scene.overlays = ovs;
+      const sc = this.scenario;
+      if (sc) scene.scenario = sc;
+      const rp = this.riskPlan;
+      if (rp) scene.riskPlan = rp;
+      return scene;
+    }
+
+    /** @returns {object[]|null} a copy of the last played story */
+    getStory() {
+      return this._story ? this._story.map((s) => ({ ...s })) : null;
+    }
+
+    /**
+     * Play a story: each scene applies its state (type / indicators /
+     * overlays / scenario / risk plan — set or clear), the camera eases
+     * to its range, then holds for its dwell. `wick:story` events narrate:
+     *   { phase: 'scene' | 'end' | 'stop', index, total, scene, title, note }
+     * Any user interaction — pointer, wheel, keys, double-click — stops it.
+     * @param {object[]} story scenes (invalid entries dropped, max 20)
+     * @param {{dwell?: number, panMs?: number, loop?: boolean}} [opts]
+     *        panMs clamps 100–5000 (default 900); loop replays forever
+     * @returns {boolean} true when playback started
+     */
+    playStory(story, opts = {}) {
+      this.stopStory(true);
+      const scenes = sceneList(story);
+      if (!scenes.length || !this._data.length || !this._connected) return false;
+      const token = ++this._storyToken;
+      this._story = scenes;
+      const panMs = clamp(Math.round(+opts.panMs || 900), 100, 5000);
+      const loop = opts.loop === true;
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const run = async () => {
+        let idx = 0;
+        while (token === this._storyToken) {
+          const sc = scenes[idx];
+          this._fire('story', {
+            phase: 'scene', index: idx, total: scenes.length,
+            scene: sc, title: sc.title, note: sc.note,
+          });
+          this._applyScene(sc);
+          const target = this._sceneTarget(sc);
+          if (target) await this._storyTween(target, panMs, token);
+          if (token !== this._storyToken) return;
+          await wait(sc.dwell);
+          if (token !== this._storyToken) return;
+          idx++;
+          if (idx >= scenes.length) {
+            if (loop) idx = 0;
+            else {
+              this._fire('story', { phase: 'end', index: idx - 1, total: scenes.length });
+              return;
+            }
+          }
+        }
+      };
+      run();
+      return true;
+    }
+
+    /**
+     * Stop story playback (if running). Fires a final `wick:story`
+     * { phase: 'stop' } unless called internally.
+     */
+    stopStory(silent) {
+      if (!this._storyToken) return;
+      this._storyToken = 0;
+      if (!silent) this._fire('story', { phase: 'stop' });
+    }
+
+    /** Apply a scene's state (only the fields it carries). */
+    _applyScene(sc) {
+      if (sc.type) this.setAttribute('type', sc.type);
+      if (sc.indicators != null) this.setAttribute('indicators', sc.indicators);
+      if (sc.overlays) this.setOverlays(sc.overlays);
+      if (sc.scenario === 'clear') this.clearScenario();
+      else if (sc.scenario) this.setScenario(sc.scenario);
+      if (sc.riskPlan === 'clear') this.clearRiskPlan();
+      else if (sc.riskPlan) this.setRiskPlan(sc.riskPlan);
+    }
+
+    /** Map a scene's time range to bar indices (null when not applicable). */
+    _sceneTarget(sc) {
+      if (!sc.range || !this._data.length) return null;
+      let i0 = WickChart._indexForTime(this._data, WickChart._timeToMs(sc.range.from));
+      let i1 = WickChart._indexForTime(this._data, WickChart._timeToMs(sc.range.to));
+      if (i0 > i1) [i0, i1] = [i1, i0];
+      return i1 - i0 >= 2 ? { i0, i1 } : null;
+    }
+
+    /** Ease the viewport to { i0, i1 } over `ms`; resolves early if the
+     *  token changes (superseded or stopped). rAF when available. */
+    _storyTween(target, ms, token) {
+      const ly = this._ly;
+      const d = this._data;
+      if (!ly || !d.length) return Promise.resolve();
+      const sp1 = clamp(ly.plotRight / (target.i1 - target.i0), this._minSpacing(), WickChart._MAX_SP);
+      const from = { right: this._view.rightIndex, sp: this._view.spacing };
+      const to = { right: target.i1, sp: sp1 };
+      const t0 = performance.now();
+      this._auto = false;
+      return new Promise((resolve) => {
+        const step = () => {
+          if (token !== this._storyToken) return resolve();
+          const e = easeInOutCubic(Math.min(1, (performance.now() - t0) / ms));
+          this._view.rightIndex = from.right + (to.right - from.right) * e;
+          this._view.spacing = from.sp + (to.sp - from.sp) * e;
+          this._clampView();
+          this._invalidate();
+          this._emitRange();
+          if (e >= 1) resolve();
+          else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(step);
+          else setTimeout(step, 16);
+        };
+        step();
+      });
+    }
+
+    /** Interrupt narrated playback (walk / story) on user input. */
+    _stopPlayback() {
+      if (this._walkTimer) this.stopWalk();
+      if (this._storyToken) this.stopStory();
     }
 
     _emitRange() {

@@ -202,6 +202,7 @@
         <li><a href="#analysis">Stats, profile &amp; annotations</a></li>
         <li><a href="#narrate">Bar-walk narrator<span class="new-pill">NEW</span></a></li>
         <li><a href="#brush">Delta brush<span class="new-pill">NEW</span></a></li>
+        <li><a href="#story">Story mode<span class="new-pill">NEW</span></a></li>
         <li><a href="#ai">AI-ready data window</a></li>
         <li><a href="#agent">AI agent interface</a></li>
         <li><a href="#feeds">Feeds (&lt;wick-feed&gt;)</a></li>
@@ -604,6 +605,40 @@ chart.<span class="attr">clearBrush</span>();        <span class="cmt">// Esc do
           <wick-feed for="ex-br" demo="BTC" tf="1h" limit="400"></wick-feed>
           <wick-chart id="ex-br" label="BTC · 1h · delta brush" brush></wick-chart>
           <div class="foot" id="br-foot">drag across the candles — release to commit · Esc clears</div>
+        </div>
+      </section>
+
+      <section id="story">
+        <h2>Story mode <a class="anchor" href="#story">#</a> <span class="pill new">NEW</span></h2>
+        <p>Guided tours of chart state: a <b>story</b> is an array of <b>scenes</b>, and each scene is a snapshot — view range, series type, indicators, overlays, scenario, risk plan, plus a title and note. <code>playStory()</code> applies each scene, eases the camera to its range, holds for its <code>dwell</code>, then moves on, narrating through <code>wick:story</code> events. Record one with <code>captureScene()</code> while you set the chart up, or build scenes programmatically.</p>
+        <div class="codewrap"><pre class="code"><span class="cmt">// record while you arrange the chart…</span>
+<span class="tag">const</span> story = [ chart.<span class="attr">captureScene</span>(<span class="str">'Overview'</span>, <span class="str">'the full picture'</span>) ];
+chart.setAttribute(<span class="str">'indicators'</span>, <span class="str">'sma:20 rsi:14'</span>);
+story.push(chart.<span class="attr">captureScene</span>(<span class="str">'With indicators'</span>, <span class="str">'trend + momentum'</span>));
+<span class="cmt">// …or write scenes by hand (every field optional)</span>
+story.push({
+  <span class="attr">title</span>: <span class="str">'The plan'</span>, <span class="attr">note</span>: <span class="str">'bull scenario + 1R grid'</span>,
+  <span class="attr">range</span>: { from, to },            <span class="cmt">// the camera eases there</span>
+  <span class="attr">indicators</span>: <span class="str">'sma:20'</span>, <span class="attr">type</span>: <span class="str">'candles'</span>,
+  <span class="attr">scenario</span>: bullPath, <span class="attr">riskPlan</span>: grid,  <span class="cmt">// or null to clear each</span>
+  <span class="attr">dwell</span>: 2400,
+});
+
+chart.<span class="attr">playStory</span>(story, { dwell: 2200, panMs: 900, loop: <span class="tag">false</span> });
+chart.addEventListener(<span class="str">'wick:story'</span>, (e) =&gt; {
+  <span class="cmt">// { phase: 'scene' | 'end' | 'stop', index, total, scene, title, note }</span>
+});
+chart.<span class="attr">stopStory</span>();  chart.<span class="attr">getStory</span>();   <span class="cmt">// stop · last played story</span></pre></div>
+        <div class="note">Any user interaction — pointer, wheel, keys, double-click — stops the tour (fires <code>phase: 'stop'</code>). Scenes are plain data: serialize them, share them, or generate them from an analysis — invalid entries drop silently, max 20 scenes, dwell clamps to 500–30000 ms.</div>
+
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live playground — a tour generated from the data</span><span class="spacer"></span>
+            <span class="seg" id="st-seg"></span>
+          </div>
+          <wick-feed for="ex-st" demo="BTC" tf="1h" limit="400"></wick-feed>
+          <wick-chart id="ex-st" label="BTC · 1h · story"></wick-chart>
+          <div class="foot" id="st-foot">build & play — the tour narrates below</div>
         </div>
       </section>
 
@@ -1164,6 +1199,44 @@ chart.addEventListener(<span class="str">'wick:peers'</span>, (e) =&gt; {
           c.removeAttribute('brush');
           foot.textContent = 'brush off — plain drag pans again';
         }
+      });
+    }
+
+    /* ---------- story mode playground ---------- */
+    {
+      const c = $('ex-st'), foot = $('st-foot');
+      c.addEventListener('wick:story', (e) => {
+        const { phase, title, note, index, total } = e.detail;
+        if (phase === 'scene') foot.textContent = `scene ${index + 1}/${total} — ${title}: ${note}`;
+        else if (phase === 'end') foot.textContent = 'story finished — build & play again';
+        else foot.textContent = 'story interrupted — build & play again';
+      });
+      const build = () => {
+        const d = c.data;
+        if (!d || !d.length) return null;
+        const last = d.length - 1;
+        const T = (i) => d[Math.max(0, Math.min(last, i))].time;
+        const spike = c.narrate({ from: d[0].time, to: d[last].time }).find((ev) => ev.type === 'volspike');
+        const scenes = [
+          { title: 'Act I — the full picture', note: `${d.length} bars`, range: { from: d[0].time, to: d[last].time } },
+        ];
+        if (spike) scenes.push({ title: 'Act II — the volume spike', note: spike.note, range: { from: T(spike.i - 40), to: T(spike.i + 20) }, indicators: 'volume' });
+        scenes.push({ title: 'Act III — the recent trend', note: 'SMA 20 + RSI 14', range: { from: T(last - 120), to: d[last].time }, indicators: 'sma:20 rsi:14' });
+        scenes.push({ title: 'Act IV — the close', note: 'back to the last 60 bars, clean', range: { from: T(last - 60), to: d[last].time }, indicators: null, scenario: null });
+        return scenes;
+      };
+      let panMs = 900;
+      seg($('st-seg'), [['900', 'slow pan'], ['400', 'fast pan']], '900', (v) => { panMs = +v; });
+      const play = document.createElement('button');
+      play.type = 'button';
+      play.textContent = '▶ build & play';
+      play.className = 'primary';
+      $('st-seg').after(play);
+      play.addEventListener('click', () => {
+        const story = build();
+        if (!story) { foot.textContent = 'waiting for data…'; return; }
+        foot.textContent = `playing ${story.length} scenes…`;
+        c.playStory(story, { dwell: 1800, panMs });
       });
     }
 

@@ -19,6 +19,7 @@ function makeChart() {
     _emitRange() {},
     _localPoint() { return { x: 400, y: 200 }; },
     _indexForX() { return 40; },
+    _stopPlayback() {},
   };
 }
 

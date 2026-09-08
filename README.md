@@ -476,6 +476,28 @@ Brush mode replaces plain-drag panning (shift-drag still measures);
 replacing the dataset clears a committed selection. `brushStats` is
 exported from `wickchart/core`.
 
+### Story mode — guided tours of chart state
+
+A **story** is an array of **scenes** (view range, type, indicators,
+overlays, scenario, risk plan + title/note). `playStory()` applies each
+scene, eases the camera to its range, holds for `dwell`, and narrates
+through `wick:story`. Record scenes with `captureScene()` while you
+arrange the chart, or generate them from an analysis.
+
+```js
+const story = [chart.captureScene('Overview', 'the full picture')];
+story.push({ title: 'The breakout', range: { from, to }, indicators: 'sma:20' });
+chart.playStory(story, { dwell: 2200, panMs: 900, loop: false });
+chart.addEventListener('wick:story', (e) => {
+  // { phase: 'scene' | 'end' | 'stop', index, total, scene, title, note }
+});
+chart.stopStory(); chart.getStory();
+```
+
+Any user interaction stops the tour. Scenes are plain data — serialize
+or share them. `normalizeScene` / `sceneList` / `easeInOutCubic` are
+exported from `wickchart/core`.
+
 ### AI-ready data window — `getDataWindow()`
 
 One call turns whatever is on screen into a compact, LLM-pasteable summary.
