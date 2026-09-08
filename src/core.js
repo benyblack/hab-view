@@ -1924,6 +1924,51 @@ export function narrateWindow(bars, i0, i1, opts = {}) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Delta brush — selection statistics
+ * ------------------------------------------------------------------ */
+
+/**
+ * Stats for a brushed bar range: net move (open of the first bar → close
+ * of the last), extremes, and summed volume. Powers the brush-selection
+ * overlay and its `wick:brush` event.
+ *
+ * @param {Bar[]} bars full dataset
+ * @param {number} i0 first selected index
+ * @param {number} i1 last selected index
+ * @returns {null|{bars: number, from: {index: number, time: number},
+ *          to: {index: number, time: number}, firstOpen: number,
+ *          lastClose: number, delta: number, deltaPct: number,
+ *          high: number, low: number, volume: number}}
+ */
+export function brushStats(bars, i0, i1) {
+  if (!bars.length || i0 < 0 || i1 < i0 || i1 >= bars.length) return null;
+  const first = bars[i0];
+  const last = bars[i1];
+  let high = -Infinity;
+  let low = Infinity;
+  let vol = 0;
+  for (let i = i0; i <= i1; i++) {
+    const b = bars[i];
+    if (b.high > high) high = b.high;
+    if (b.low < low) low = b.low;
+    vol += b.volume || 0;
+  }
+  const delta = last.close - first.open;
+  return {
+    bars: i1 - i0 + 1,
+    from: { index: i0, time: first.time },
+    to: { index: i1, time: last.time },
+    firstOpen: first.open,
+    lastClose: last.close,
+    delta,
+    deltaPct: first.open ? (delta / first.open) * 100 : 0,
+    high,
+    low,
+    volume: vol,
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * Co-view presence — peer viewport tracking with TTL expiry
  * ------------------------------------------------------------------ */
 

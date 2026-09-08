@@ -65,6 +65,7 @@ is suggested priority.
 | ~~Risk planner (R-multiple grid)~~ ✅ shipped | `setRiskPlan({ entry, stop, multiples \| targets })` — entry/stop define 1R; dashed kR reward lines + shaded risk/reward zones with labeled pills. Position sizing reads straight off the chart. | S–M |
 | ~~Co-view presence~~ ✅ shipped | Peer viewports as colored bands + names on the chart, `getPeers()` / `wick:peers`, TTL sweep via `PresenceTracker` — extends the BroadcastChannel co-view protocol without shipping network code. | S–M |
 | ~~Bar-walk narrator~~ ✅ shipped | `narrate()` timeline (pivots, spikes, gaps, divergences + derived legs) and `walk()` — a viewport replay with `wick:walk` captions; any user input interrupts. `narrateWindow` in core. | S–M |
+| ~~Delta brush~~ ✅ shipped | `<wick-chart brush>` — plain drag selects bars with a live Δ% band + chip; `wick:brush` carries range stats (delta, extremes, Σvol). `brushStats` in core. | S |
 | ~~Volatility-regime shading~~ ✅ shipped | Background tint by realized-vol percentile — market state at a glance. `<hab-chart volshading="30/70">`, legend shows hovered regime + percentile. | S–M |
 | ~~**HabScript mini-language**~~ ✅ shipped | `indicators="expr:{close - sma(close,20)}"` / `pexpr:{…}` — hand-written tokenizer + recursive-descent parser (no `eval`) over builtins, URL-safe, live demo input. | L |
 | ~~Cross-tab co-view~~ ✅ shipped | BroadcastChannel syncs crosshair/markings between two open tabs. Great demo flex, tiny code. | S–M |

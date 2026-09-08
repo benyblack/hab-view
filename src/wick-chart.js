@@ -32,7 +32,7 @@ import {
   compileScript, predicateTrueSeries, scriptAlertStep,
   AI_TOOLS, aiPromptText, applyChartOps,
   calcVolCone, normalizeScenario, normalizeRiskPlan, PresenceTracker,
-  narrateWindow,
+  narrateWindow, brushStats,
 } from './core.js';
 
 /* ------------------------------------------------------------------ *
@@ -49,7 +49,7 @@ const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class
 
 class WickChart extends HTMLElementBase {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'co-view-name', 'sonify'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'co-view-name', 'brush', 'sonify'];
     }
 
     constructor() {
@@ -221,6 +221,10 @@ class WickChart extends HTMLElementBase {
       this._measuring = false;
       // bar-walk narrator state
       this._walkTimer = 0;
+      // delta brush state: mode flag + current/finished selection
+      this._brush = false;
+      this._brushSel = null; // { i0, i1, stats } — the committed selection
+      this._brushDrag = null; // { i0, i1 } — while the pointer is down
       this._ind = { overlays: [], panes: [], volume: true };
 
       this._pointers = new Map();
@@ -381,6 +385,12 @@ class WickChart extends HTMLElementBase {
           // display name travels with every presence message; no re-render
           this._coviewLabel = val || null;
           break;
+        case 'brush':
+          this._brush = val != null && val !== 'false';
+          this._brushSel = null;
+          this._brushDrag = null;
+          this._invalidate();
+          break;
         case 'sonify':
           this._sonify = val != null && val !== 'false';
           this._lastToneIdx = -1;
@@ -450,6 +460,8 @@ class WickChart extends HTMLElementBase {
         this.clearData();
         return;
       }
+      // selection indices are data-bound; a replacement invalidates them
+      if (this._brushSel || this._brushDrag) this.clearBrush();
       const norm = [];
       for (const b of bars) {
         const nb = WickChart._normBar(b);
@@ -2694,6 +2706,50 @@ class WickChart extends HTMLElementBase {
         );
       }
 
+      /* delta brush selection: band + live delta chip */
+      {
+        const sel = this._brushDrag || this._brushSel;
+        if (sel && d.length) {
+          const bi0 = Math.min(sel.i0, sel.i1);
+          const bi1 = Math.max(sel.i0, sel.i1);
+          const xa = this._xFor(bi0) - this._view.spacing / 2;
+          const xb = this._xFor(bi1) + this._view.spacing / 2;
+          const bx0 = clamp(Math.min(xa, xb), 0, plotRight);
+          const bx1 = clamp(Math.max(xa, xb), 0, plotRight);
+          if (bx1 - bx0 > 1) {
+            const live = this._brushDrag ? brushStats(this._data, bi0, bi1) : sel.stats;
+            ctx.save();
+            ctx.fillStyle = hexToRgba(pal.accent, this._brushDrag ? 0.13 : 0.08);
+            ctx.fillRect(bx0, main.y0, bx1 - bx0, main.h);
+            ctx.globalAlpha = 0.55;
+            ctx.strokeStyle = pal.accent;
+            ctx.lineWidth = 1;
+            if (!this._brushDrag) ctx.setLineDash([4, 3]);
+            ctx.strokeRect(bx0 + 0.5, main.y0 + 0.5, bx1 - bx0 - 1, main.h - 1);
+            ctx.setLineDash([]);
+            ctx.restore();
+            if (live) {
+              const fP = numberFmt(this._prec(Math.abs(live.lastClose) || 1));
+              const sign = live.delta >= 0 ? '+' : '';
+              const txt =
+                `${sign}${live.deltaPct.toFixed(2)}% · ${live.bars} bars · ` +
+                `H ${fP.format(live.high)} · L ${fP.format(live.low)} · Σvol ${fmtCompact(live.volume)}`;
+              ctx.font = pillFont();
+              const tw = ctx.measureText(txt).width + 12;
+              this._pill(
+                clamp((bx0 + bx1) / 2 - tw / 2, 2, plotRight - tw - 2),
+                main.y0 + 11,
+                txt,
+                live.delta >= 0 ? pal.up : pal.down,
+                pal.pillText,
+                'left',
+                tw
+              );
+            }
+          }
+        }
+      }
+
       /* visible-range stats chip */
       if (this._stats) {
         const st = computeStats(d, i0, i1, this._dt);
@@ -2877,6 +2933,15 @@ class WickChart extends HTMLElementBase {
         };
         this._pan = null;
         this._measuring = false;
+        this._brushDrag = null;
+      } else if (this._brush && !e.shiftKey && this._data.length) {
+        // brush mode: plain drag selects a bar range (shift still measures)
+        const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
+        this._brushDrag = { i0: idx, i1: idx };
+        this._brushSel = null;
+        this._measuring = false;
+        this._pan = null;
+        this._invalidate();
       } else if (e.shiftKey && this._data.length) {
         // shift+drag → measure tool
         this._measuring = true;
@@ -2928,6 +2993,13 @@ class WickChart extends HTMLElementBase {
         return;
       }
 
+      if (this._brushDrag && this._pointers.has(e.pointerId) && this._data.length) {
+        const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
+        this._brushDrag.i1 = idx;
+        this._invalidate();
+        return;
+      }
+
       if (this._pan && this._pointers.has(e.pointerId) && ly) {
         const dx = pt.x - this._pan.x;
         if (Math.abs(dx) > 3) this._pan.moved = true;
@@ -2953,7 +3025,11 @@ class WickChart extends HTMLElementBase {
       if (this._pointers.size < 2) this._pinch = null;
       if (this._pointers.size === 0) {
         this._canvas.classList.remove('grabbing');
-        if (this._measuring) {
+        if (this._brushDrag && had) {
+          const b = this._brushDrag;
+          this._brushDrag = null;
+          this._brushFinish(Math.min(b.i0, b.i1), Math.max(b.i0, b.i1));
+        } else if (this._measuring) {
           this._measuring = false;
           if (this._measure) {
             this._measure.done = true;
@@ -3032,6 +3108,10 @@ class WickChart extends HTMLElementBase {
       const ly = this._ly;
       if (!ly || !this._data.length) return;
       if (this._walkTimer) this.stopWalk();
+      if (e.key === 'Escape' && (this._brushSel || this._brushDrag)) {
+        this.clearBrush();
+        return;
+      }
       const d = this._data;
       const key = e.key;
       const step = e.shiftKey ? 10 : 1;
@@ -3432,6 +3512,41 @@ class WickChart extends HTMLElementBase {
       clearInterval(this._walkTimer);
       this._walkTimer = 0;
       if (!silent) this._fire('walk', { phase: 'stop' });
+    }
+
+    /**
+     * Commit a brush selection over [i0, i1]: stores it (draws the band
+     * and delta chip) and fires `wick:brush` with the range statistics.
+     * @param {number} i0 first index
+     * @param {number} i1 last index
+     */
+    _brushFinish(i0, i1) {
+      if (!this._data.length) return;
+      const stats = brushStats(this._data, i0, i1);
+      if (!stats) {
+        this._brushSel = null;
+        this._invalidate();
+        return;
+      }
+      this._brushSel = { i0, i1, stats };
+      this._invalidate();
+      this._fire('brush', stats);
+    }
+
+    /** Clear the committed brush selection (if any). Escape does the same. */
+    clearBrush() {
+      if (this._brushSel || this._brushDrag) {
+        this._brushSel = null;
+        this._brushDrag = null;
+        this._invalidate();
+      }
+    }
+
+    /** @returns {object|null} the committed selection { i0, i1, stats } */
+    get brushSelection() {
+      if (!this._brushSel) return null;
+      const { i0, i1, stats } = this._brushSel;
+      return { i0, i1, stats: { ...stats, from: { ...stats.from }, to: { ...stats.to } } };
     }
 
     _emitRange() {

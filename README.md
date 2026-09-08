@@ -452,6 +452,30 @@ chart.stopWalk();                // any pointer/wheel/key input stops it too
 
 `narrateWindow` (the analyzer) is exported from `wickchart/core`.
 
+### Delta brush — drag-select with stats
+
+`<wick-chart brush>` makes a plain drag **select bars** instead of panning:
+a live band follows the pointer with a delta chip (Δ% · bars · high · low ·
+Σvol); on release the selection commits and fires `wick:brush` with the
+range statistics. Esc (or `clearBrush()`) clears it.
+
+```html
+<wick-chart brush></wick-chart>
+```
+
+```js
+chart.addEventListener('wick:brush', (e) => {
+  // { bars, from: {index, time}, to: {index, time}, delta, deltaPct,
+  //   firstOpen, lastClose, high, low, volume }
+});
+chart.brushSelection; // { i0, i1, stats } | null
+chart.clearBrush();
+```
+
+Brush mode replaces plain-drag panning (shift-drag still measures);
+replacing the dataset clears a committed selection. `brushStats` is
+exported from `wickchart/core`.
+
 ### AI-ready data window — `getDataWindow()`
 
 One call turns whatever is on screen into a compact, LLM-pasteable summary.
