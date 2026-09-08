@@ -4,7 +4,9 @@ Drawing tools for [wickchart](https://github.com/benyblack/wickchart), as an
 opt-in plugin layer — the core stays drawing-free. Zero dependencies.
 
 Tools: **trendline / ray / infinite line**, **horizontal level**, **rectangle**,
-**fibonacci retracement** (0–1 grid), **text note**. Drawings are plain
+**fibonacci retracement** (0–1 grid), **text note** (inline editing: the editor
+opens when you place a note and reopens when you click a selected note again —
+`Enter` commits, `Esc` cancels, an empty commit deletes). Drawings are plain
 `{ time, price }` data: they ride zoom & pan, survive data reloads, and
 serialize to JSON. Anchors magnet-snap to bar times and OHLC prices.
 

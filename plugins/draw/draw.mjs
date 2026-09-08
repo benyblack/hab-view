@@ -60,6 +60,7 @@ export class DrawLayer {
     this._drag = null;
     this._undo = [];
     this._hits = []; // hit targets cached by the last render pass
+    this._editing = null; // { id, input } while a text note is being edited
     this._layer = {
       id: 'wick-draw',
       draw: (api) => this._render(api),
@@ -144,6 +145,7 @@ export class DrawLayer {
   }
 
   detach() {
+    this._closeEditor();
     if (typeof document !== 'undefined') document.removeEventListener('keydown', this._onKey);
     try {
       this._chart.removeLayer('wick-draw');
@@ -209,6 +211,12 @@ export class DrawLayer {
   }
 
   _down(ev) {
+    if (this._editing) {
+      // a click while the note editor is open commits it; this one gesture
+      // only closes the editor (the next click moves the note)
+      this._commitEditor();
+      return false;
+    }
     const anchor = this._anchor(ev);
     if (!anchor) return false; // no data / outside the plot → chart handles it
 
@@ -248,6 +256,11 @@ export class DrawLayer {
     if (body) {
       const d = this._drawing(body.id);
       if (d) {
+        // clicking an already-selected text note edits it (select → click again)
+        if (d.type === 'text' && d.id === this._sel) {
+          this._openTextEditor(d);
+          return true;
+        }
         this._select(d.id);
         if (!d.locked) {
           this._mode = 'move';
@@ -314,6 +327,7 @@ export class DrawLayer {
         this._drawings.push(d);
         this._select(d.id);
         this._changed('add');
+        if (d.type === 'text') this._openTextEditor(d); // type right after placing
       } else {
         this._chart.requestDraw();
       }
@@ -332,6 +346,108 @@ export class DrawLayer {
       return true;
     }
     return false;
+  }
+
+  /* ---------------- text editor ---------------- */
+
+  /**
+   * Open an inline editor over a text note. In non-DOM environments (tests)
+   * only the editing state is set — commit/cancel logic stays testable.
+   */
+  _openTextEditor(d) {
+    this._closeEditor(false);
+    this._editing = { id: d.id, input: null };
+    if (typeof document === 'undefined') return;
+    const c = this._chart;
+    const x = c.timeToX(d.points[0].t);
+    const y = c.priceToY(d.points[0].p);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return void (this._editing = null);
+    const rect = c.getBoundingClientRect();
+    const cs = getComputedStyle(c);
+    const accent = cs.getPropertyValue('--wick-accent').trim() || '#4c8dff';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = d.text;
+    input.setAttribute('aria-label', 'Edit note');
+    Object.assign(input.style, {
+      position: 'fixed',
+      zIndex: 1000,
+      left: Math.max(4, Math.min(rect.left + x, rect.right - 150)) + 'px',
+      top: Math.max(4, rect.top + y - 12) + 'px',
+      width: '142px',
+      font: '600 11.5px ui-sans-serif, system-ui, sans-serif',
+      padding: '3px 7px',
+      borderRadius: '5px',
+      border: '1px solid ' + accent,
+      outline: 'none',
+      background: 'rgba(17, 20, 28, 0.96)',
+      color: cs.getPropertyValue('--wick-text-strong').trim() || '#e6edf3',
+      boxShadow: '0 2px 10px rgba(0,0,0,.4)',
+    });
+    const commit = (e) => {
+      e && e.stopPropagation();
+      this._commitEditor();
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this._commitEditor();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this._closeEditor(false);
+      }
+    });
+    input.addEventListener('blur', () => this._commitEditor());
+    document.body.appendChild(input);
+    this._editing = { id: d.id, input };
+    // focus a tick later: the opening click's default mousedown would blur
+    // the input immediately (non-focusable canvas), committing the editor
+    // before the user ever typed
+    setTimeout(() => {
+      if (this._editing && this._editing.input === input && input.isConnected) {
+        input.focus();
+        input.select();
+      }
+    }, 0);
+  }
+
+  /** Commit the open editor: apply the text (empty → delete the note). */
+  _commitEditor() {
+    const ed = this._editing;
+    if (!ed) return;
+    const d = this._drawing(ed.id);
+    this._closeEditor(false);
+    // without a DOM input (tests) there is nothing new to apply — drive
+    // _setText directly there
+    if (d && ed.input && ed.input.value !== d.text) {
+      this._setText(d, ed.input.value);
+    }
+  }
+
+  /** Remove the editor input without touching the drawing. */
+  _closeEditor() {
+    const ed = this._editing;
+    this._editing = null;
+    // the blur handler checks _editing, so tearing down after nulling it
+    // cannot re-enter
+    if (ed && ed.input && ed.input.isConnected) ed.input.remove();
+  }
+
+  _setText(d, value) {
+    // resolve the live object — callers may hold a getDrawings() copy
+    const live = this._drawing(d && d.id) || null;
+    if (!live) return;
+    const text = String(value ?? '').slice(0, 160).trim();
+    this._pushUndo();
+    if (!text) {
+      this._drawings = this._drawings.filter((x) => x.id !== live.id);
+      if (this._sel === live.id) this._select(null);
+      this._changed('delete');
+      return;
+    }
+    live.text = text;
+    this._changed('edit');
   }
 
   _pushUndoBefore(before) {
@@ -381,7 +497,12 @@ export class DrawLayer {
 
   _hitDetail(x, px, py) {
     if (x.kind === 'box') {
-      return px >= x.minX && px <= x.maxX && py >= x.minY && py <= x.maxY;
+      // same slack as lines: magnet can place the anchor ~10px from where
+      // the user aimed, so an 18px text box needs breathing room
+      return (
+        px >= x.minX - HIT_LINE && px <= x.maxX + HIT_LINE &&
+        py >= x.minY - HIT_LINE && py <= x.maxY + HIT_LINE
+      );
     }
     if (x.kind === 'seg') {
       return distToSegment(px, py, x.ax, x.ay, x.bx, x.by) <= HIT_LINE;
