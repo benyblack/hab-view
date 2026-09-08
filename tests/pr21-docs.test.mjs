@@ -41,6 +41,7 @@ test('every public method is documented', () => {
     'setScenario', 'clearScenario',
     'setRiskPlan', 'clearRiskPlan',
     'getPeers', 'narrate', 'walk', 'stopWalk',
+    'clearBrush', 'brushSelection',
     'registerIndicator', 'onloadmore',
     'aiTools', 'aiPrompt', 'aiContext', 'applyAI', 'ask',
   ];

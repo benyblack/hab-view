@@ -201,6 +201,7 @@
         <li><a href="#trading">Positions &amp; alerts</a></li>
         <li><a href="#analysis">Stats, profile &amp; annotations</a></li>
         <li><a href="#narrate">Bar-walk narrator<span class="new-pill">NEW</span></a></li>
+        <li><a href="#brush">Delta brush<span class="new-pill">NEW</span></a></li>
         <li><a href="#ai">AI-ready data window</a></li>
         <li><a href="#agent">AI agent interface</a></li>
         <li><a href="#feeds">Feeds (&lt;wick-feed&gt;)</a></li>
@@ -579,6 +580,30 @@ chart.<span class="attr">stopWalk</span>();                      <span class="cm
           <wick-feed for="ex-nw" demo="BTC" tf="1h" limit="400"></wick-feed>
           <wick-chart id="ex-nw" label="BTC · 1h · narrated walk"></wick-chart>
           <div class="foot" id="nw-foot">pick a speed and press play</div>
+        </div>
+      </section>
+
+      <section id="brush">
+        <h2>Delta brush <a class="anchor" href="#brush">#</a> <span class="pill new">NEW</span></h2>
+        <p>Turn on <code>brush</code> and a plain drag <b>selects bars</b> instead of panning: a live band follows the pointer with a delta chip (Δ% · bars · high · low · Σvol), and on release the selection stays with the stats committed. The measure tool still works with shift-drag.</p>
+        <div class="codewrap"><pre class="code">&lt;wick-chart <span class="attr">brush</span>&gt;&lt;/wick-chart&gt;
+
+chart.addEventListener(<span class="str">'wick:brush'</span>, (e) =&gt; {
+  <span class="cmt">// e.detail = { bars, from: {index, time}, to: {index, time},</span>
+  <span class="cmt">//   delta, deltaPct, firstOpen, lastClose, high, low, volume }</span>
+});
+chart.<span class="attr">brushSelection</span>;   <span class="cmt">// getter — { i0, i1, stats } or null</span>
+chart.<span class="attr">clearBrush</span>();        <span class="cmt">// Esc does the same</span></pre></div>
+        <div class="note">Brush mode replaces plain-drag panning (and plain clicks select a 1-bar range instead of firing <code>wick:select</code>); wheel/keyboard still pan and zoom. Replacing the dataset clears a committed selection — indices are data-bound.</div>
+
+        <div class="demo-card">
+          <div class="demo-head">
+            <span class="t">Live playground</span><span class="spacer"></span>
+            <span class="seg" id="br-seg"></span>
+          </div>
+          <wick-feed for="ex-br" demo="BTC" tf="1h" limit="400"></wick-feed>
+          <wick-chart id="ex-br" label="BTC · 1h · delta brush" brush></wick-chart>
+          <div class="foot" id="br-foot">drag across the candles — release to commit · Esc clears</div>
         </div>
       </section>
 
@@ -1119,6 +1144,26 @@ chart.addEventListener(<span class="str">'wick:peers'</span>, (e) =&gt; {
         if (!d || !d.length) { foot.textContent = 'waiting for data…'; return; }
         c.walk({ from: 0, to: d.length - 1, speed });
         foot.textContent = 'walking…';
+      });
+    }
+
+    /* ---------- delta brush playground ---------- */
+    {
+      const c = $('ex-br'), foot = $('br-foot');
+      const fmt = (v) => (v >= 1000 ? v.toFixed(0) : v.toFixed(2));
+      c.addEventListener('wick:brush', (e) => {
+        const s = e.detail;
+        const sign = s.delta >= 0 ? '+' : '';
+        foot.textContent =
+          `${s.bars} bars · ${sign}${s.deltaPct.toFixed(2)}% (${sign}${fmt(s.delta)}) · ` +
+          `H ${fmt(s.high)} · L ${fmt(s.low)} · Σvol ${Math.round(s.volume)}`;
+      });
+      seg($('br-seg'), [['on', 'brush on'], ['off', 'off']], 'on', (v) => {
+        if (v === 'on') c.setAttribute('brush', '');
+        else {
+          c.removeAttribute('brush');
+          foot.textContent = 'brush off — plain drag pans again';
+        }
       });
     }
 

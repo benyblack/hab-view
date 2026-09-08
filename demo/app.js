@@ -571,6 +571,20 @@ chart.addEventListener('wick:walk', (e) => {
     (parts.length ? parts.join(' · ') : '…');
 });
 
+/* Delta brush — drag-select a bar range for Δ%, extremes and summed volume. */
+document.getElementById('btn-brush').addEventListener('click', (e) => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', String(on));
+  if (on) chart.setAttribute('brush', '');
+  else chart.removeAttribute('brush');
+  toast(on ? 'Brush on — drag across bars to measure a range. Esc clears.' : 'Brush off.');
+});
+chart.addEventListener('wick:brush', (e) => {
+  const s = e.detail;
+  const sign = s.delta >= 0 ? '+' : '';
+  toast(`Brush ${s.bars} bars: ${sign}${s.deltaPct.toFixed(2)}% (H ${s.high.toFixed(2)} · L ${s.low.toFixed(2)} · Σvol ${Math.round(s.volume)})`);
+});
+
 document.getElementById('btn-annotations').setAttribute('aria-pressed', String(state.annotations));
 if (state.annotations) chart.setAttribute('annotations', 'true');
 document.getElementById('btn-annotations').addEventListener('click', (e) => {
