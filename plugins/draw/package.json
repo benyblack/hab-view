@@ -1,0 +1,37 @@
+{
+  "name": "wickchart-draw",
+  "version": "0.1.0",
+  "description": "Drawing tools for wickchart — trendlines, rays, levels, rectangles, fibonacci retracements and text as an opt-in plugin layer. Zero dependencies.",
+  "type": "module",
+  "main": "draw.mjs",
+  "module": "draw.mjs",
+  "exports": {
+    ".": "./draw.mjs",
+    "./core": "./core.mjs"
+  },
+  "files": [
+    "draw.mjs",
+    "core.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "drawing",
+    "trading",
+    "web-component",
+    "wickchart",
+    "canvas",
+    "trendline",
+    "fibonacci"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}
