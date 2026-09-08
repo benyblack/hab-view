@@ -1,6 +1,7 @@
 /* WickChart demo — data feeds & UI wiring around <wick-chart>. */
 import WickChart from '../src/wick-chart.js';
 import { encodeStateQuery, decodeStateQuery, splitIndicatorTokens, compileScript } from '../src/core.js';
+import { attachDrawings } from '../plugins/draw/draw.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -754,6 +755,35 @@ document.getElementById('btn-theme').addEventListener('click', () => {
 chart.addEventListener('wick:select', (e) => {
   console.log('wick:select', e.detail.bar.time, '@', e.detail.price?.toFixed(2));
 });
+
+/* ---------------- drawing tools (wickchart-draw plugin layer) ---------------- */
+
+const draw = attachDrawings(chart);
+
+const DRAW_TOOLS = [
+  ['btn-draw-select', null],
+  ['btn-draw-trend', 'trendline'],
+  ['btn-draw-ray', 'ray'],
+  ['btn-draw-level', 'hline'],
+  ['btn-draw-box', 'rect'],
+  ['btn-draw-fib', 'fib'],
+  ['btn-draw-text', 'text'],
+];
+for (const [id, tool] of DRAW_TOOLS) {
+  document.getElementById(id).addEventListener('click', () => {
+    draw.setTool(tool);
+    for (const [id2] of DRAW_TOOLS) {
+      document.getElementById(id2).classList.toggle('active', id2 === id);
+    }
+  });
+}
+document.getElementById('btn-draw-magnet').addEventListener('click', (e) => {
+  const on = !draw.magnet;
+  draw.setMagnet(on);
+  e.currentTarget.setAttribute('aria-pressed', String(on));
+});
+document.getElementById('btn-draw-undo').addEventListener('click', () => draw.undo());
+document.getElementById('btn-draw-clear').addEventListener('click', () => draw.clear());
 
 /* ---------------- trade demo: positions & alerts ---------------- */
 

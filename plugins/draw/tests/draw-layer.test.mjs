@@ -330,6 +330,76 @@ test('getDrawings returns deep copies; setDrawings normalizes and caps', () => {
   assert.equal(d.getDrawings().length, 1);
 });
 
+/* ------------------------- text editing ------------------------- */
+
+test('placing a text note opens the editor; commit-without-DOM just closes it', () => {
+  const { d } = fresh();
+  d.setTool('text');
+  d._layer.onPointer(ev('down', 200, 60));
+  d._layer.onPointer(ev('up', 200, 60));
+  const note = d.getDrawings()[0];
+  assert.equal(note.type, 'text');
+  assert.ok(d._editing && d._editing.id === note.id, 'editor auto-opens on placement');
+  assert.equal(d._editing.input, null, 'no DOM input in tests');
+  d._commitEditor();
+  assert.equal(d._editing, null, 'commit closes the editor');
+  assert.equal(d.getDrawings()[0].text, 'Note', 'no-input commit does not mutate');
+});
+
+test('_setText: value updates + fires edit; empty deletes; both undoable', () => {
+  const { c, d } = fresh();
+  d.setDrawings([{ type: 'text', text: 'Note', points: [{ t: T0 + 5 * DT, p: 150 }] }]);
+  const note = d.getDrawings()[0];
+  d._setText(note, 'buy the breakout');
+  assert.equal(d.getDrawings()[0].text, 'buy the breakout');
+  assert.equal(c.events.findLast((e) => e.type === 'wick:drawings').detail.action, 'edit');
+  d._setText(d.getDrawings()[0], '   '); // blank → delete
+  assert.equal(d.getDrawings().length, 0);
+  assert.equal(c.events.findLast((e) => e.type === 'wick:drawings').detail.action, 'delete');
+  assert.equal(d.undo(), true);
+  assert.equal(d.getDrawings()[0].text, 'buy the breakout', 'empty-commit delete is undoable');
+  assert.equal(d.undo(), true);
+  assert.equal(d.getDrawings()[0].text, 'Note', 'text edit is undoable');
+});
+
+test('clicking an already-selected note opens the editor; a down while editing only commits', () => {
+  const { d, api } = fresh();
+  d.setDrawings([{ type: 'text', text: 'hello note', points: [{ t: T0 + 20 * DT, p: 140 }] }]);
+  d._render(api);
+  const id = d.getDrawings()[0].id;
+  // first click selects (and starts a move that goes nowhere)
+  assert.equal(d._layer.onPointer(ev('down', 200, 60)), true);
+  assert.equal(d.selectedId, id);
+  d._layer.onPointer(ev('up', 200, 60));
+  d._render(api);
+  // second click on the note body (past its anchor handle) → editor, not a move
+  assert.equal(d._layer.onPointer(ev('down', 232, 60)), true);
+  assert.ok(d._editing && d._editing.id === id);
+  // any down while editing commits and releases the gesture
+  assert.equal(d._layer.onPointer(ev('down', 400, 80)), false);
+  assert.equal(d._editing, null);
+});
+
+test('text boxes hit with line-level slack (magnet offsets the anchor from the aim point)', () => {
+  const { d, api } = fresh();
+  // anchor sits 10px above where the user clicked (a typical magnet snap)
+  d.setDrawings([{ type: 'text', text: 'hello note', points: [{ t: T0 + 20 * DT, p: 150 }] }]);
+  d._render(api);
+  // box: anchor y = priceToY(150) = 50, so the box spans y 41..59; a click at
+  // y 62 (3px below the box edge) must still hit — lines already get ±6px
+  assert.equal(d._layer.onPointer(ev('down', 232, 62)), true);
+  assert.equal(d.selectedId, d.getDrawings()[0].id);
+});
+
+test('detach closes a live editor', () => {
+  const { c, d } = fresh();
+  d.setDrawings([{ type: 'text', text: 'x', points: [{ t: T0, p: 150 }] }]);
+  d._openTextEditor(d.getDrawings()[0]);
+  assert.ok(d._editing);
+  d.detach();
+  assert.equal(d._editing, null);
+});
+
 /* ------------------------- render / hit targets ------------------------- */
 
 test('render builds hit targets per type and clips to the main pane', () => {

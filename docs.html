@@ -883,6 +883,7 @@ chart.addEventListener(<span class="str">'wick:drawings'</span>, (e) =&gt; save(
         <table>
           <tr><th>Gesture</th><th>What happens</th></tr>
           <tr><td>tool armed + drag</td><td>Creates the drawing (anchors magnet-snap to bar times &amp; OHLC); click-only tools: level, text</td></tr>
+          <tr><td>text note</td><td>Placing a note opens an inline editor — type and hit <code>Enter</code> (<code>Esc</code> cancels, empty deletes); click a selected note again to re-edit</td></tr>
           <tr><td>select mode + click on a drawing</td><td>Selects it — handles appear, <code>Delete</code> removes it, <code>Esc</code> cancels a gesture</td></tr>
           <tr><td>drag body / handle</td><td>Moves the whole drawing / re-anchors one point (undoable)</td></tr>
           <tr><td>click empty space</td><td>Deselects — the gesture falls through to the chart (pan, brush, measure all keep working)</td></tr>
