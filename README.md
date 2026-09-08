@@ -229,7 +229,7 @@ chart.setData([
 | ------------- | ---------- | ------------------------------------------------------------------ |
 | `theme`       | `dark`     | `dark` or `light`                                                   |
 | `type`        | `candles`  | `candles`, `line`, `area`, `bars` (OHLC), `hollow` (hollow up-candles), `heikin` (Heikin-Ashi) |
-| `indicators`  | `volume`*  | Space/comma-separated: `sma:20`, `ema:50`, `bb:20`, `rsi:14`, `macd:12/26/9`, `volume`, or any registered indicator |
+| `indicators`  | `volume`*  | Space/comma-separated: `sma:20`, `ema:50`, `bb:20`, `vwap`, `supertrend:10/3`, `donchian:20`, `keltner:20/2`, `rsi:14`, `macd:12/26/9`, `stoch:14/3`, `atr:14`, `obv`, `cci:20`, `wr:14`, `volume`, or any registered indicator |
 | `label`       | –          | Text shown in the legend (e.g. `"BTC · 1h"`)                        |
 | `log`         | off        | Logarithmic price scale                                             |
 | `auto`        | on         | Keep the right edge pinned to the latest bar while streaming        |
@@ -250,8 +250,17 @@ chart.setData([
 | `sma` | overlay | `period` (20) | |
 | `ema` | overlay | `period` (50) | |
 | `bb` | overlay | `period`, `mult` (20, 2) | Bollinger bands (3 lines) |
+| `vwap` | overlay | – | hlc3 VWAP, resets each UTC day |
+| `supertrend` | overlay | `period`, `mult` (10, 3) | ATR trend line, breaks at flips |
+| `donchian` | overlay | `period` (20) | high/low channel + mid |
+| `keltner` | overlay | `period`, `mult` (20, 2) | EMA ± mult×ATR channel |
 | `rsi` | pane | `period` (14) | fixed 0–100 scale, 30/70 guides |
 | `macd` | pane | `fast/slow/signal` (12/26/9) | 2 lines + histogram |
+| `stoch` | pane | `period`, `smooth` (14, 3) | %K + %D, fixed 0–100, 20/80 guides |
+| `atr` | pane | `period` (14) | Wilder ATR |
+| `obv` | pane | – | on-balance volume |
+| `cci` | pane | `period` (20) | ±100 guides |
+| `wr` | pane | `period` (14) | Williams %R, fixed −100–0, −80/−20 guides |
 | `volume` | overlay | – | histogram at the bottom of the price pane |
 
 ### Custom indicators
@@ -260,9 +269,9 @@ Register your own — anything from a one-liner moving average to a multi-line
 pane:
 
 ```js
-WickChart.registerIndicator('vwap', {
+WickChart.registerIndicator('cvwap', {   // cumulative VWAP over the whole dataset
   kind: 'overlay',               // or 'pane'
-  params: { period: 20 },        // defaults; set via indicators="vwap:30"
+  params: { period: 20 },        // defaults; set via indicators="cvwap:30"
   compute(bars, params) {        // bars: normalized {time,open,high,low,close,volume}
     const out = new Array(bars.length).fill(null);
     let pv = 0, vv = 0;
@@ -273,9 +282,9 @@ WickChart.registerIndicator('vwap', {
     }
     return out;                  // single series — or { lines:[{name,values}], histogram }
   },
-  // pane-only extras: guides:[30,70], range:[0,100], fmt:'price'|'fixed1'
+  // pane-only extras: guides:[30,70], range:[0,100], fmt:'price'|'fixed1'|'compact'
 });
-chart.indicators = 'vwap:20';
+chart.indicators = 'cvwap';
 ```
 
 `import WickChart from 'wickchart'` gives you the class for
@@ -309,6 +318,7 @@ shareable URLs.
 | `prev(x[,k])` `change(x)` | shifted series / bar-to-bar delta |
 | `abs(x)` `sqrt(x)` `log(x)` `min(a,b)` `max(a,b)` | element-wise math |
 | `crossup(a,b)` `crossdown(a,b)` | 1 on a strict cross, else 0 |
+| `vwap()` `obv()` `atr(n)` | bar-level series — callable anywhere, e.g. `crossup(close, vwap())` in alerts |
 
 Operators are `+ - * / %` with usual precedence, unary `-`, and parentheses.
 Values before a window fills are `NaN` (not drawn), division by zero yields
@@ -664,7 +674,7 @@ chart.removeLayer('flags'); // detach by handle or id
 A claimed gesture delivers `move`/`up` (and `cancel` on Escape) to the layer
 while the chart suppresses pan/brush/measure. Markers, watermarks, signal
 badges — or a whole drawing toolkit — plug in without the core growing a
-single tool. The main entry is covered by a CI gzip budget (64 KB) so it
+single tool. The main entry is covered by a CI gzip budget (68 KB) so it
 stays that way.
 
 ### Drawings — the `wickchart-draw` plugin

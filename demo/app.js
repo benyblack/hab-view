@@ -11,33 +11,11 @@ import {
 } from '../src/feeds.js';
 
 /* ------------------------------------------------------------------ *
- * VWAP — a reference custom indicator built entirely through the
- * public registry API (same code as the README example).
+ * VWAP used to be the reference custom indicator here — it's a native
+ * built-in since the indicators batch (see BUILTIN_INDICATORS in core.js).
+ * The `WickChart.registerIndicator()` extension point it showcased is
+ * still available and documented in the docs (Indicators section).
  * ------------------------------------------------------------------ */
-WickChart.registerIndicator('vwap', {
-  kind: 'overlay',
-  params: {},
-  compute(bars) {
-    const out = new Array(bars.length).fill(null);
-    let pv = 0;
-    let vv = 0;
-    let day = -1;
-    for (let i = 0; i < bars.length; i++) {
-      const b = bars[i];
-      const d = new Date(b.time).setHours(0, 0, 0, 0);
-      if (d !== day) {
-        day = d;
-        pv = 0;
-        vv = 0;
-      }
-      const tp = (b.high + b.low + b.close) / 3;
-      pv += tp * b.volume;
-      vv += b.volume;
-      out[i] = vv ? pv / vv : null;
-    }
-    return out;
-  },
-});
 
 /* ------------------------------------------------------------------ *
  * Config
@@ -64,8 +42,12 @@ const INDICATORS = [
   { id: 'ema:50', label: 'EMA 50', color: '#38bdf8' },
   { id: 'bb:20', label: 'BB 20', color: '#e64980' },
   { id: 'vwap', label: 'VWAP', color: '#22d3ee' },
+  { id: 'supertrend:10/3', label: 'ST 10', color: '#fb7185' },
+  { id: 'donchian:20', label: 'DON 20', color: '#94a3b8' },
   { id: 'rsi:14', label: 'RSI 14', color: '#a78bfa' },
   { id: 'macd:12/26/9', label: 'MACD', color: '#34d399' },
+  { id: 'stoch:14/3', label: 'STOCH', color: '#fbbf24' },
+  { id: 'atr:14', label: 'ATR 14', color: '#4ade80' },
   { id: 'volume', label: 'Volume', color: '#7c8598' },
 ];
 

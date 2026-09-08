@@ -462,6 +462,259 @@ export function calcMACD(closes, fast = 12, slow = 26, signal = 9) {
   return { macd, signal: sig, hist };
 }
 
+/** True range: max(h−l, |h−prev close|, |l−prev close|); first bar is h−l.
+ * @param {Bar[]} bars
+ * @returns {Array<number|null>}
+ */
+export function calcTrueRange(bars) {
+  const out = new Array(bars.length).fill(null);
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    out[i] =
+      i === 0
+        ? b.high - b.low
+        : Math.max(b.high - b.low, Math.abs(b.high - bars[i - 1].close), Math.abs(b.low - bars[i - 1].close));
+  }
+  return out;
+}
+
+/**
+ * Average True Range (Wilder smoothing; seeded with the SMA of the first
+ * `period` true ranges).
+ * @param {Bar[]} bars
+ * @param {number} period
+ * @returns {Array<number|null>}
+ */
+export function calcATR(bars, period = 14) {
+  const out = new Array(bars.length).fill(null);
+  if (period < 1 || bars.length < period) return out;
+  const tr = calcTrueRange(bars);
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += tr[i];
+  let prev = sum / period;
+  out[period - 1] = prev;
+  for (let i = period; i < bars.length; i++) {
+    prev = (prev * (period - 1) + tr[i]) / period;
+    out[i] = prev;
+  }
+  return out;
+}
+
+/**
+ * Volume-weighted average price over the hlc3 typical price, anchored to
+ * each UTC day (resets at the session boundary).
+ * @param {Bar[]} bars
+ * @returns {Array<number|null>}
+ */
+export function calcVWAP(bars) {
+  const out = new Array(bars.length).fill(null);
+  let pv = 0;
+  let vv = 0;
+  let day = null;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    const ms = b.time < 1e12 ? b.time * 1000 : b.time;
+    const d = Math.floor(ms / DAY);
+    if (d !== day) {
+      day = d;
+      pv = 0;
+      vv = 0;
+    }
+    pv += ((b.high + b.low + b.close) / 3) * b.volume;
+    vv += b.volume;
+    out[i] = vv > 0 ? pv / vv : null;
+  }
+  return out;
+}
+
+/**
+ * On-balance volume: cumulative volume signed by close-to-close direction.
+ * @param {Bar[]} bars
+ * @returns {Array<number|null>}
+ */
+export function calcOBV(bars) {
+  const out = new Array(bars.length).fill(null);
+  let obv = 0;
+  for (let i = 0; i < bars.length; i++) {
+    if (i > 0) {
+      const d = bars[i].close - bars[i - 1].close;
+      obv += d > 0 ? bars[i].volume : d < 0 ? -bars[i].volume : 0;
+    }
+    out[i] = obv;
+  }
+  return out;
+}
+
+/** Highest-high / lowest-low window ending at `i` (shared by stoch/wr/donchian). */
+function winHL(bars, i, period) {
+  let hh = -Infinity;
+  let ll = Infinity;
+  for (let j = i - period + 1; j <= i; j++) {
+    if (bars[j].high > hh) hh = bars[j].high;
+    if (bars[j].low < ll) ll = bars[j].low;
+  }
+  return [hh, ll];
+}
+
+/** SMA that tolerates leading nulls (windows over sparse raw series). */
+function smaSparse(values, period) {
+  const out = new Array(values.length).fill(null);
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (isNum(v)) {
+      sum += v;
+      count++;
+    }
+    if (i >= period && isNum(values[i - period])) {
+      sum -= values[i - period];
+      count--;
+    }
+    if (count === period) out[i] = sum / period;
+  }
+  return out;
+}
+
+/**
+ * Stochastic oscillator (slow): raw %K over `period`, smoothed by `smooth`;
+ * %D is the SMA of %K.
+ * @param {Bar[]} bars
+ * @param {number} period
+ * @param {number} smooth
+ * @returns {{k:Array<number|null>, d:Array<number|null>}}
+ */
+export function calcStoch(bars, period = 14, smooth = 3) {
+  const n = bars.length;
+  const raw = new Array(n).fill(null);
+  for (let i = period - 1; i < n; i++) {
+    const [hh, ll] = winHL(bars, i, period);
+    const span = hh - ll;
+    raw[i] = span > 0 ? ((bars[i].close - ll) / span) * 100 : null;
+  }
+  const k = smooth > 1 ? smaSparse(raw, smooth) : raw;
+  const d = smooth > 1 ? smaSparse(k, smooth) : k;
+  return { k, d };
+}
+
+/**
+ * Commodity Channel Index: typical price vs its SMA, scaled by mean deviation.
+ * @param {Bar[]} bars
+ * @param {number} period
+ * @returns {Array<number|null>}
+ */
+export function calcCCI(bars, period = 20) {
+  const n = bars.length;
+  const out = new Array(n).fill(null);
+  if (period < 1 || n < period) return out;
+  const tp = bars.map((b) => (b.high + b.low + b.close) / 3);
+  const ma = calcSMA(tp, period);
+  for (let i = period - 1; i < n; i++) {
+    let md = 0;
+    for (let j = i - period + 1; j <= i; j++) md += Math.abs(tp[j] - ma[i]);
+    md /= period;
+    out[i] = md > 0 ? (tp[i] - ma[i]) / (0.015 * md) : 0;
+  }
+  return out;
+}
+
+/**
+ * Williams %R: −100 at the period low, 0 at the period high.
+ * @param {Bar[]} bars
+ * @param {number} period
+ * @returns {Array<number|null>}
+ */
+export function calcWilliamsR(bars, period = 14) {
+  const n = bars.length;
+  const out = new Array(n).fill(null);
+  for (let i = period - 1; i < n; i++) {
+    const [hh, ll] = winHL(bars, i, period);
+    const span = hh - ll;
+    if (span <= 0) continue;
+    const r = ((hh - bars[i].close) / span) * -100;
+    out[i] = r === 0 ? 0 : r; // avoid −0 on the axis
+  }
+  return out;
+}
+
+/**
+ * Donchian channels: highest high / lowest low over `period`, plus mid.
+ * @param {Bar[]} bars
+ * @param {number} period
+ * @returns {{upper:Array<number|null>, mid:Array<number|null>, lower:Array<number|null>}}
+ */
+export function calcDonchian(bars, period = 20) {
+  const n = bars.length;
+  const upper = new Array(n).fill(null);
+  const mid = new Array(n).fill(null);
+  const lower = new Array(n).fill(null);
+  for (let i = period - 1; i < n; i++) {
+    const [hh, ll] = winHL(bars, i, period);
+    upper[i] = hh;
+    lower[i] = ll;
+    mid[i] = (hh + ll) / 2;
+  }
+  return { upper, mid, lower };
+}
+
+/**
+ * Keltner channels: EMA mid ± mult × ATR.
+ * @param {Bar[]} bars
+ * @param {number} period
+ * @param {number} [mult]
+ * @returns {{upper:Array<number|null>, mid:Array<number|null>, lower:Array<number|null>}}
+ */
+export function calcKeltner(bars, period = 20, mult = 2) {
+  const mid = calcEMA(bars.map((b) => b.close), period);
+  const atr = calcATR(bars, period);
+  const band = (f) => mid.map((m, i) => (isNum(m) && isNum(atr[i]) ? f(m, atr[i]) : null));
+  return { upper: band((m, a) => m + mult * a), mid, lower: band((m, a) => m - mult * a) };
+}
+
+/**
+ * SuperTrend: ATR bands that flip with the trend. Returns the trend line
+ * (support in uptrends, resistance in downtrends) with a one-bar null gap
+ * at flips so the renderer breaks the line.
+ * @param {Bar[]} bars
+ * @param {number} period
+ * @param {number} [mult]
+ * @returns {Array<number|null>}
+ */
+export function calcSuperTrend(bars, period = 10, mult = 3) {
+  const n = bars.length;
+  const out = new Array(n).fill(null);
+  if (period < 1 || n < period) return out;
+  const atr = calcATR(bars, period);
+  let dir = 1;
+  let fUp = Infinity;
+  let fLo = -Infinity;
+  let started = false;
+  for (let i = 0; i < n; i++) {
+    if (!isNum(atr[i])) continue;
+    const b = bars[i];
+    const hl2 = (b.high + b.low) / 2;
+    const bUp = hl2 + mult * atr[i];
+    const bLo = hl2 - mult * atr[i];
+    if (!started) {
+      started = true;
+      fUp = bUp;
+      fLo = bLo;
+      dir = b.close >= hl2 ? 1 : -1;
+      out[i] = dir > 0 ? fLo : fUp;
+      continue;
+    }
+    const pc = bars[i - 1].close;
+    // carry a band forward unless it tightened, or the previous close broke it
+    fUp = bUp < fUp || pc > fUp ? bUp : fUp;
+    fLo = bLo > fLo || pc < fLo ? bLo : fLo;
+    const prevDir = dir;
+    if (b.close > fUp) dir = 1;
+    else if (b.close < fLo) dir = -1;
+    out[i] = dir === prevDir ? (dir > 0 ? fLo : fUp) : null;
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ *
  * Data merging & gaps
  * ------------------------------------------------------------------ */
@@ -823,6 +1076,44 @@ export const BUILTIN_INDICATORS = new Map(
       params: { period: 50 },
       compute: (bars, p) => calcEMA(closesOf(bars), p.period),
     },
+    vwap: {
+      kind: 'overlay',
+      params: {},
+      compute: (bars) => calcVWAP(bars),
+    },
+    supertrend: {
+      kind: 'overlay',
+      params: { period: 10, mult: 3 },
+      compute: (bars, p) => calcSuperTrend(bars, p.period, p.mult),
+    },
+    donchian: {
+      kind: 'overlay',
+      params: { period: 20 },
+      compute: (bars, p) => {
+        const c = calcDonchian(bars, p.period);
+        return {
+          lines: [
+            { name: 'upper', values: c.upper },
+            { name: 'mid', values: c.mid },
+            { name: 'lower', values: c.lower },
+          ],
+        };
+      },
+    },
+    keltner: {
+      kind: 'overlay',
+      params: { period: 20, mult: 2 },
+      compute: (bars, p) => {
+        const c = calcKeltner(bars, p.period, p.mult);
+        return {
+          lines: [
+            { name: 'upper', values: c.upper },
+            { name: 'mid', values: c.mid },
+            { name: 'lower', values: c.lower },
+          ],
+        };
+      },
+    },
     bb: {
       kind: 'overlay',
       params: { period: 20, mult: 2 },
@@ -861,6 +1152,49 @@ export const BUILTIN_INDICATORS = new Map(
           histogram: r.hist,
         };
       },
+    },
+    atr: {
+      kind: 'pane',
+      params: { period: 14 },
+      fmt: 'price',
+      compute: (bars, p) => calcATR(bars, p.period),
+    },
+    stoch: {
+      kind: 'pane',
+      params: { period: 14, smooth: 3 },
+      guides: [20, 80],
+      range: [0, 100],
+      fmt: 'fixed1',
+      compute: (bars, p) => {
+        const r = calcStoch(bars, p.period, p.smooth);
+        return {
+          lines: [
+            { name: 'k', values: r.k },
+            { name: 'd', values: r.d },
+          ],
+        };
+      },
+    },
+    obv: {
+      kind: 'pane',
+      params: {},
+      fmt: 'compact',
+      compute: (bars) => calcOBV(bars),
+    },
+    cci: {
+      kind: 'pane',
+      params: { period: 20 },
+      guides: [-100, 100],
+      fmt: 'fixed1',
+      compute: (bars, p) => calcCCI(bars, p.period),
+    },
+    wr: {
+      kind: 'pane',
+      params: { period: 14 },
+      guides: [-80, -20],
+      range: [-100, 0],
+      fmt: 'fixed1',
+      compute: (bars, p) => calcWilliamsR(bars, p.period),
     },
   })
 );
@@ -977,6 +1311,10 @@ const SCRIPT_FUNCS = {
   max: { min: 2, max: 2 },
   crossup: { min: 2, max: 2 },
   crossdown: { min: 2, max: 2 },
+  // bar-level functions — no leading series argument, they read OHLCV directly
+  vwap: { min: 0, max: 0 },
+  obv: { min: 0, max: 0 },
+  atr: { min: 1, max: 1, scalar: [0] },
 };
 
 const scriptErr = (msg) => new Error('script: ' + msg);
@@ -1219,20 +1557,20 @@ function binOp(op, a, b) {
   return NaN;
 }
 
-function evalScriptNode(node, vars, n) {
+function evalScriptNode(node, vars, n, bars) {
   switch (node.type) {
     case 'num':
       return node.v;
     case 'var':
       return vars[node.name];
     case 'neg': {
-      const e = evalScriptNode(node.e, vars, n);
+      const e = evalScriptNode(node.e, vars, n, bars);
       if (!Array.isArray(e)) return -e;
       return e.map((x) => (x == null ? NaN : -x));
     }
     case 'bin': {
-      const l = evalScriptNode(node.l, vars, n);
-      const r = evalScriptNode(node.r, vars, n);
+      const l = evalScriptNode(node.l, vars, n, bars);
+      const r = evalScriptNode(node.r, vars, n, bars);
       if (!Array.isArray(l) && !Array.isArray(r)) return binOp(node.op, l, r);
       const a = Array.isArray(l) ? l : new Array(n).fill(l);
       const b = Array.isArray(r) ? r : new Array(n).fill(r);
@@ -1241,14 +1579,18 @@ function evalScriptNode(node, vars, n) {
       return out;
     }
     case 'call':
-      return evalScriptCall(node, vars, n);
+      return evalScriptCall(node, vars, n, bars);
   }
   return NaN;
 }
 
-function evalScriptCall(node, vars, n) {
+function evalScriptCall(node, vars, n, bars) {
   const { name, args } = node;
-  const s0 = evalScriptNode(args[0], vars, n);
+  // bar-level functions read several series at once — no leading series argument
+  if (name === 'vwap') return calcVWAP(bars);
+  if (name === 'obv') return calcOBV(bars);
+  if (name === 'atr') return calcATR(bars, args[0].type === 'num' ? args[0].v : 1);
+  const s0 = evalScriptNode(args[0], vars, n, bars);
   const a = Array.isArray(s0) ? s0 : new Array(n).fill(s0);
   // window functions must not read leading nulls as 0 — NaN them so results stay honest
   const clean = a.map((x) => (x == null ? NaN : x));
@@ -1287,13 +1629,13 @@ function evalScriptCall(node, vars, n) {
     case 'log': return clean.map((x) => (x <= 0 ? NaN : Math.log(x)));
     case 'min':
     case 'max': {
-      const b0 = evalScriptNode(args[1], vars, n);
+      const b0 = evalScriptNode(args[1], vars, n, bars);
       const b = Array.isArray(b0) ? b0 : new Array(n).fill(b0);
       return a.map((x, i) => (name === 'min' ? Math.min(scriptNum(x), scriptNum(b[i])) : Math.max(scriptNum(x), scriptNum(b[i]))));
     }
     case 'crossup':
     case 'crossdown': {
-      const b0 = evalScriptNode(args[1], vars, n);
+      const b0 = evalScriptNode(args[1], vars, n, bars);
       const b = Array.isArray(b0) ? b0 : new Array(n).fill(b0);
       const out = new Array(n).fill(0);
       for (let i = 1; i < n; i++) {
@@ -1331,7 +1673,7 @@ export function evalScript(compiled, bars) {
     hlc3: bars.map((b) => (b.high + b.low + b.close) / 3),
     ohlc4: bars.map((b) => (b.open + b.high + b.low + b.close) / 4),
   };
-  const res = evalScriptNode(c.ast, vars, n);
+  const res = evalScriptNode(c.ast, vars, n, bars);
   const arr = Array.isArray(res) ? res : new Array(n).fill(res);
   for (let i = 0; i < n; i++) {
     const v = arr[i];
@@ -2395,7 +2737,7 @@ export const AI_TOOLS = [
   {
     tool: 'set_indicators',
     description:
-      'Replace the indicators. Tokens: sma:20 ema:50 bb:20 vwap rsi:14 macd:12/26/9 volume, @hexcolor suffixes, or WickScript expressions like expr:{close - sma(close,20)} / pexpr:{rsi(close,14)}. Empty string clears all.',
+      'Replace the indicators. Tokens: sma:20 ema:50 bb:20 vwap supertrend:10/3 donchian:20 keltner:20 rsi:14 macd:12/26/9 stoch:14/3 atr:14 obv cci:20 wr:14 volume, @hexcolor suffixes, or WickScript expressions like expr:{close - sma(close,20)} / pexpr:{rsi(close,14)}. Empty string clears all.',
     args: { indicators: 'string — space/comma-separated tokens' },
   },
   {

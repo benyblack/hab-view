@@ -193,15 +193,15 @@
 
     <section id="features">
       <h2>Everything a trader needs, nothing they don't</h2>
-      <p>Built as one Canvas-rendered element — ~100 KB unminified, no framework, no build step.</p>
+      <p>Built as one Canvas-rendered element — ~110 KB unminified, no framework, no build step.</p>
       <div class="grid">
         <div class="card">
           <h3><span class="ico">⌁</span>Zero-dependency streaming</h3>
           <p><code>&lt;wick-feed&gt;</code> streams Binance over WebSocket with REST backfill — degrading gracefully to polling, then a synthetic bridge. Or bring your own data with <code>setData()</code> / <code>update()</code>.</p>
         </div>
         <div class="card">
-          <h3><span class="ico">ƒ</span>WickScript indicators</h3>
-          <p>Write custom indicators inline: <code>expr:{(close - sma(close,20)) / sma(close,20) * 100}</code>. A hand-written parser — no <code>eval</code> — with sma/ema/rsi/hh/ll/crossings built in.</p>
+          <h3><span class="ico">ƒ</span>15 built-in indicators + WickScript</h3>
+          <p>SMA, EMA, Bollinger, VWAP, SuperTrend, Donchian, Keltner, RSI, MACD, Stochastic, ATR, OBV, CCI, Williams %R, volume. Need more? Write it inline — <code>expr:{(close - sma(close,20)) / sma(close,20) * 100}</code> — through a hand-written parser, no <code>eval</code>, with <code>vwap()</code>, <code>atr()</code> and friends callable inside expressions and alerts.</p>
         </div>
         <div class="card">
           <h3><span class="ico">✎</span>Drawings, as opt-in bytes</h3>
@@ -209,7 +209,7 @@
         </div>
         <div class="card">
           <h3><span class="ico">⌥</span>A real plugin API</h3>
-          <p><code>addLayer()</code> paints into the render pipeline and claims pointer gestures, with coordinate transforms that extrapolate into future space. The whole surface is ~2&nbsp;KB — and a CI size budget keeps the core under 64&nbsp;KB gzipped, so “small” is an invariant, not a promise.</p>
+          <p><code>addLayer()</code> paints into the render pipeline and claims pointer gestures, with coordinate transforms that extrapolate into future space. The whole surface is ~2&nbsp;KB — and a CI size budget keeps the core under 68&nbsp;KB gzipped, so “small” is an invariant, not a promise.</p>
         </div>
         <div class="card">
           <h3><span class="ico">◐</span>Volatility-regime shading</h3>

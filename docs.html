@@ -319,7 +319,7 @@ chart.<span class="attr">data</span>;             <span class="cmt">// getter �
           <tr><th>Attribute</th><th>Default</th><th>Description</th></tr>
           <tr><td><code>theme</code></td><td><code>dark</code></td><td><code>dark</code> or <code>light</code></td></tr>
           <tr><td><code>type</code></td><td><code>candles</code></td><td>Series type — see <a href="#types">Series types</a></td></tr>
-          <tr><td><code>indicators</code></td><td><code>volume</code>*</td><td>Space/comma list: <code>sma:20 ema:50 bb:20 rsi:14 macd:12/26/9 volume</code>, registered names, or <a href="#wickscript">WickScript</a> expressions. <code>""</code> disables all.</td></tr>
+          <tr><td><code>indicators</code></td><td><code>volume</code>*</td><td>Space/comma list: <code>sma:20 ema:50 bb:20 vwap supertrend:10/3 rsi:14 macd:12/26/9 stoch:14/3 atr:14 obv cci:20 wr:14 volume</code>, registered names, or <a href="#wickscript">WickScript</a> expressions. <code>""</code> disables all.</td></tr>
           <tr><td><code>label</code></td><td>–</td><td>Legend text (e.g. <code>"BTC · 1h"</code>)</td></tr>
           <tr><td><code>log</code></td><td>off</td><td>Logarithmic price scale</td></tr>
           <tr><td><code>auto</code></td><td>on</td><td>Follow the right edge while streaming</td></tr>
@@ -343,9 +343,17 @@ chart.<span class="attr">data</span>;             <span class="cmt">// getter �
           <tr><th>Name</th><th>Params</th><th>Draws</th></tr>
           <tr><td><code>sma</code> / <code>ema</code></td><td><code>:20</code> period</td><td>Overlay line</td></tr>
           <tr><td><code>bb</code></td><td><code>:20</code> period (±2σ fixed)</td><td>Bollinger band (3 lines)</td></tr>
-          <tr><td><code>vwap</code></td><td>–</td><td>Session-anchored VWAP (registered example)</td></tr>
+          <tr><td><code>vwap</code></td><td>–</td><td>VWAP overlay, resets each UTC day</td></tr>
+          <tr><td><code>supertrend</code></td><td><code>:10/3</code> period/mult</td><td>Trend line that flips with ATR bands</td></tr>
+          <tr><td><code>donchian</code></td><td><code>:20</code> period</td><td>High/low channel (3 lines)</td></tr>
+          <tr><td><code>keltner</code></td><td><code>:20/2</code> period/mult</td><td>EMA ± ATR channel (3 lines)</td></tr>
           <tr><td><code>rsi</code></td><td><code>:14</code></td><td>Own pane, 30/70 guides</td></tr>
           <tr><td><code>macd</code></td><td><code>:12/26/9</code></td><td>Own pane: histogram + 2 lines</td></tr>
+          <tr><td><code>stoch</code></td><td><code>:14/3</code> period/smooth</td><td>Own pane: %K + %D, 20/80 guides</td></tr>
+          <tr><td><code>atr</code></td><td><code>:14</code></td><td>Own pane: Wilder ATR</td></tr>
+          <tr><td><code>obv</code></td><td>–</td><td>Own pane: on-balance volume</td></tr>
+          <tr><td><code>cci</code></td><td><code>:20</code></td><td>Own pane, ±100 guides</td></tr>
+          <tr><td><code>wr</code></td><td><code>:14</code></td><td>Own pane: Williams %R, −80/−20 guides</td></tr>
           <tr><td><code>volume</code></td><td>–</td><td>Volume histogram pane</td></tr>
         </table>
         <div class="codewrap"><pre class="code"><span class="tag">&lt;wick-chart</span> <span class="attr">indicators</span>=<span class="str">"sma:20@#f0b429 ema:50 bb:20 rsi:14 volume"</span><span class="tag">&gt;&lt;/wick-chart&gt;</span></pre></div>
@@ -386,7 +394,7 @@ WickChart.<span class="attr">registerIndicator</span>('hlmid', {
         <ul>
           <li><code>expr:{…}</code> draws on the price chart; <code>pexpr:{…}</code> gets its own pane. Optional <code>@color</code> suffix.</li>
           <li><b>Series variables:</b> <code>open high low close volume hl2 hlc3 ohlc4</code></li>
-          <li><b>Functions:</b> <code>sma ema wma stddev rsi hh ll prev change abs sqrt log min max crossup crossdown</code> — e.g. <code>hh(high,20)</code>, <code>crossup(close, sma(close,50))</code></li>
+          <li><b>Functions:</b> <code>sma ema wma stddev rsi hh ll prev change abs sqrt log min max crossup crossdown vwap obv atr</code> — e.g. <code>hh(high,20)</code>, <code>crossup(close, vwap())</code>, <code>close - atr(14)*2</code></li>
           <li><b>Operators:</b> <code>+ - * / %</code>, comparisons <code>&gt; &lt; &gt;= &lt;= == !=</code> (1/0), parentheses, unary minus</li>
           <li><b>Caps:</b> 512 chars, 128 tokens, nesting depth 24; window periods must be whole-number literals</li>
         </ul>
@@ -536,6 +544,7 @@ chart.<span class="attr">removePosition</span>('p1');  chart.<span class="attr">
         <p>Price alerts are edge-triggered on streaming closes. <b>Scripted alerts</b> take a WickScript predicate instead of a price — evaluated locally on every bar, firing on its false→true edge:</p>
         <div class="codewrap"><pre class="code">chart.<span class="attr">addAlert</span>({ <span class="attr">id</span>: 'a1', <span class="attr">price</span>: 43900, <span class="attr">direction</span>: 'above' });  <span class="cmt">// 'above' | 'below' | 'cross'</span>
 chart.<span class="attr">addAlert</span>({ <span class="attr">when</span>: 'crossup(rsi(close,14), 30)' });        <span class="cmt">// scripted predicate</span>
+chart.<span class="attr">addAlert</span>({ <span class="attr">when</span>: 'crossup(close, vwap())' });            <span class="cmt">// bar-level funcs work too</span>
 chart.<span class="attr">addAlert</span>({ <span class="attr">when</span>: 'volume &gt; sma(volume,20) * 3', <span class="attr">once</span>: <span class="tag">false</span> });
 chart.<span class="attr">removeAlert</span>('a1');  chart.<span class="attr">clearAlerts</span>();
 chart.<span class="attr">addEventListener</span>('wick:alert', (e) =&gt; console.log(e.detail.id, e.detail.price));</pre></div>
@@ -1056,7 +1065,7 @@ chart.addEventListener(<span class="str">'wick:drawings'</span>, (e) =&gt; save(
 
     /* ---------- indicators ---------- */
     {
-      const presets = ['volume', 'sma:20 ema:50 volume', 'sma:20 bb:20 rsi:14 macd:12/26/9 volume', ''];
+      const presets = ['volume', 'sma:20 ema:50 volume', 'sma:20 bb:20 rsi:14 macd:12/26/9 volume', 'vwap supertrend:10/3 stoch:14/3 atr:14 volume', ''];
       seg($('ind-seg'), presets.map((p, i) => [i, p === '' ? 'none' : p]), 1,
         (i) => $('ex-ind').setAttribute('indicators', presets[i]));
     }
