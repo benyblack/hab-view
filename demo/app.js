@@ -7,6 +7,7 @@ import { attachReplay } from '../plugins/replay/replay.mjs';
 import { attachCompare } from '../plugins/compare/compare.mjs';
 import { attachNavigator } from '../plugins/navigator/navigator.mjs';
 import { attachAlertsPlus } from '../plugins/alerts-plus/alerts-plus.mjs';
+import { attachLayouts } from '../plugins/layouts/layouts.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -925,6 +926,28 @@ try {
 } catch (_) {}
 // ask for the notification permission on the first user gesture (policy-friendly)
 document.addEventListener('click', () => alertsPlus.requestNotify(), { once: true });
+
+/* ---------------- named layouts (wickchart-layouts plugin) ---------------- */
+
+const layouts = attachLayouts(chart, { drawings: draw, key: 'wick-demo-layouts' });
+let layoutIdx = 0;
+document.getElementById('btn-layout-save').addEventListener('click', () => {
+  const name = prompt('Save the current setup as:', layouts.list()[0]?.name || 'main');
+  if (name == null) return;
+  layouts.save(name);
+  toast(`Layout "${name}" saved — type, indicators, view, drawings, positions & alerts.`);
+});
+document.getElementById('btn-layout-load').addEventListener('click', () => {
+  const names = layouts.list().map((l) => l.name);
+  if (!names.length) {
+    toast('No saved layouts yet — hit "Save view" first.');
+    return;
+  }
+  const name = names[layoutIdx % names.length];
+  layoutIdx++;
+  layouts.load(name);
+  toast(`Loaded layout "${name}".`);
+});
 
 /* ---------------- trade demo: positions & alerts ---------------- */
 

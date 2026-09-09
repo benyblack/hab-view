@@ -40,6 +40,10 @@ const NAVIGATOR_FILES = ['plugins/navigator/core.mjs', 'plugins/navigator/naviga
 const ALERTS_PLUS_BUDGET_GZ = 4 * 1024;
 const ALERTS_PLUS_FILES = ['plugins/alerts-plus/alerts-plus.mjs'];
 
+// layouts: named workspace persistence, single file
+const LAYOUTS_BUDGET_GZ = 4 * 1024;
+const LAYOUTS_FILES = ['plugins/layouts/layouts.mjs'];
+
 const gz = (f) => gzipSync(readFileSync(f)).length;
 
 test('main entry stays under the gzip budget', () => {
@@ -138,5 +142,19 @@ test('wickchart-alerts-plus plugin stays under its (smaller) gzip budget', () =>
   assert.ok(
     total <= ALERTS_PLUS_BUDGET_GZ,
     `wickchart-alerts-plus is ${(total / 1024).toFixed(1)} KB gz, budget is ${ALERTS_PLUS_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
+  );
+});
+
+test('wickchart-layouts plugin stays under its (smaller) gzip budget', () => {
+  let total = 0;
+  const parts = [];
+  for (const f of LAYOUTS_FILES) {
+    const n = gz(f);
+    total += n;
+    parts.push(`${f}: ${(n / 1024).toFixed(1)} KB gz`);
+  }
+  assert.ok(
+    total <= LAYOUTS_BUDGET_GZ,
+    `wickchart-layouts is ${(total / 1024).toFixed(1)} KB gz, budget is ${LAYOUTS_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
   );
 });

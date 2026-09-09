@@ -1,0 +1,34 @@
+{
+  "name": "wickchart-layouts",
+  "version": "0.1.0",
+  "description": "Named workspace persistence for wickchart — save/restore whole chart setups (type, indicators, theme, view, drawings, positions, alerts) to localStorage. Opt-in plugin, zero dependencies.",
+  "type": "module",
+  "main": "layouts.mjs",
+  "module": "layouts.mjs",
+  "exports": {
+    ".": "./layouts.mjs"
+  },
+  "files": [
+    "layouts.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "layouts",
+    "workspace",
+    "persistence",
+    "trading",
+    "web-component",
+    "wickchart"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}
