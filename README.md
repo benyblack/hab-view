@@ -763,6 +763,35 @@ an external `update()`/`setData()` aborts replay instead of corrupting the
 chart (the demo pauses its feed automatically). Paper trading and an equity
 curve are the planned 0.2 follow-up. Peer dependency: wickchart ≥ 1.4.
 
+### Compare — the `wickchart-compare` plugin
+
+Normalized multi-asset overlays as opt-in bytes (~4 KB gz, own CI budget):
+percent-rebased compare lines (ETH against BTC, TradingView-style) plus
+derived **ratio** and **diff** lines (`BTC/ETH`, `BTC−ETH`), drawn over the
+main pane against their own invisible scale so the price axis is untouched.
+A legend chip row shows each series with its live value.
+
+```js
+npm install wickchart wickchart-compare   // compare is a separate opt-in package
+
+import { attachCompare } from 'wickchart-compare';
+
+const cmp = attachCompare(chart);
+cmp.setSeries([
+  { label: 'ETH', data: ethBars },                            // OHLC or {time, value}
+  { label: 'BTC/ETH', op: 'ratio', a: btcBars, b: ethBars },  // derived
+]);
+cmp.setRebase('visible');   // 0% at the window edge, re-normalized while
+                            // panning; 'first' or an epoch anchor also work
+cmp.clear(); cmp.detach();
+```
+
+Series are sampled onto the main chart's bar times, so timeframes can mix
+and gaps break the line instead of bridging. Rebased values share one
+invisible scale inset 8% from the pane edges; the price scale is never
+distorted. Validated, capped at 6 series, invalid entries dropped. Peer
+dependency: wickchart ≥ 1.4.
+
 ## Methods
 
 | Method                          | Description                                      |

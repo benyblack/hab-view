@@ -1,0 +1,39 @@
+{
+  "name": "wickchart-compare",
+  "version": "0.1.0",
+  "description": "Normalized multi-asset compare overlays for wickchart — percent-rebased series and derived ratio/diff lines (BTC/ETH-style) with a live legend. Opt-in plugin, zero dependencies.",
+  "type": "module",
+  "main": "compare.mjs",
+  "module": "compare.mjs",
+  "exports": {
+    ".": "./compare.mjs",
+    "./core": "./core.mjs"
+  },
+  "files": [
+    "compare.mjs",
+    "core.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "compare",
+    "overlay",
+    "spread",
+    "ratio",
+    "trading",
+    "web-component",
+    "wickchart",
+    "canvas",
+    "crypto"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}

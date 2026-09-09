@@ -4,6 +4,7 @@ import { encodeStateQuery, decodeStateQuery, splitIndicatorTokens, compileScript
 import { attachDrawings } from '../plugins/draw/draw.mjs';
 import { attachSessions } from '../plugins/sessions/sessions.mjs';
 import { attachReplay } from '../plugins/replay/replay.mjs';
+import { attachCompare } from '../plugins/compare/compare.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -846,6 +847,48 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'Escape') {
     exitReplay();
   }
+});
+
+/* ---------------- compare overlays (wickchart-compare plugin layer) ---------------- */
+
+const cmp = attachCompare(chart);
+const COMPARE_MODES = ['off', 'ETH', 'ETH+SOL'];
+let compareMode = 0;
+const compareCache = new Map();
+const btnCompare = document.getElementById('btn-compare');
+
+/** Klines for a compare symbol; falls back to the synthetic history offline. */
+async function compareSeries(sym) {
+  const key = sym + ':' + state.tf;
+  if (compareCache.has(key)) return compareCache.get(key);
+  let bars = null;
+  if (BINANCE[sym]) {
+    try {
+      bars = await fetchBinanceKlines(BINANCE[sym], state.tf, CHUNK);
+    } catch (_) {
+      /* offline — synthetic below */
+    }
+  }
+  if (!bars || !bars.length) bars = getHistory(sym, state.tf).slice(-CHUNK);
+  compareCache.set(key, bars);
+  return bars;
+}
+
+btnCompare.addEventListener('click', async () => {
+  compareMode = (compareMode + 1) % COMPARE_MODES.length;
+  const mode = COMPARE_MODES[compareMode];
+  if (mode === 'off') {
+    cmp.clear();
+    btnCompare.textContent = 'Compare: off';
+    return;
+  }
+  btnCompare.textContent = 'Compare: …';
+  const list = [];
+  for (const s of mode.split('+')) {
+    list.push({ label: s, data: await compareSeries(s) });
+  }
+  cmp.setSeries(list);
+  btnCompare.textContent = 'Compare: ' + mode;
 });
 
 /* ---------------- trade demo: positions & alerts ---------------- */

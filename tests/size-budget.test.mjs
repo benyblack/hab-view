@@ -28,6 +28,10 @@ const SESSIONS_FILES = ['plugins/sessions/core.mjs', 'plugins/sessions/sessions.
 const REPLAY_BUDGET_GZ = 5 * 1024;
 const REPLAY_FILES = ['plugins/replay/replay.mjs'];
 
+// compare overlays: normalization + alignment math + the drawing layer
+const COMPARE_BUDGET_GZ = 6 * 1024;
+const COMPARE_FILES = ['plugins/compare/core.mjs', 'plugins/compare/compare.mjs'];
+
 const gz = (f) => gzipSync(readFileSync(f)).length;
 
 test('main entry stays under the gzip budget', () => {
@@ -84,5 +88,19 @@ test('wickchart-replay plugin stays under its (smaller) gzip budget', () => {
   assert.ok(
     total <= REPLAY_BUDGET_GZ,
     `wickchart-replay is ${(total / 1024).toFixed(1)} KB gz, budget is ${REPLAY_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
+  );
+});
+
+test('wickchart-compare plugin stays under its (smaller) gzip budget', () => {
+  let total = 0;
+  const parts = [];
+  for (const f of COMPARE_FILES) {
+    const n = gz(f);
+    total += n;
+    parts.push(`${f}: ${(n / 1024).toFixed(1)} KB gz`);
+  }
+  assert.ok(
+    total <= COMPARE_BUDGET_GZ,
+    `wickchart-compare is ${(total / 1024).toFixed(1)} KB gz, budget is ${COMPARE_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
   );
 });
