@@ -6,6 +6,7 @@ import { attachSessions } from '../plugins/sessions/sessions.mjs';
 import { attachReplay } from '../plugins/replay/replay.mjs';
 import { attachCompare } from '../plugins/compare/compare.mjs';
 import { attachNavigator } from '../plugins/navigator/navigator.mjs';
+import { attachAlertsPlus } from '../plugins/alerts-plus/alerts-plus.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -915,6 +916,16 @@ btnNavigator.addEventListener('click', () => {
   }
 });
 
+/* ---------------- persistent alerts (wickchart-alerts-plus plugin) ---------------- */
+
+const alertsPlus = attachAlertsPlus(chart, { key: 'wick-demo-alerts', notify: true, sound: true });
+try {
+  const restored = JSON.parse(localStorage.getItem('wick-demo-alerts') || '[]').length;
+  if (restored) toast(`Restored ${restored} persisted alert${restored > 1 ? 's' : ''} — they survive reloads now.`);
+} catch (_) {}
+// ask for the notification permission on the first user gesture (policy-friendly)
+document.addEventListener('click', () => alertsPlus.requestNotify(), { once: true });
+
 /* ---------------- trade demo: positions & alerts ---------------- */
 
 let demoPosCount = 0;
@@ -941,6 +952,7 @@ document.getElementById('btn-alert').addEventListener('click', () => {
   const price = d[d.length - 1].close * 1.01;
   demoAlertCount += 1;
   const id = chart.addAlert({ id: 'demo-' + demoAlertCount, price, direction: 'above' });
+  alertsPlus.sync(); // demo alerts persist across reloads (wickchart-alerts-plus)
   toast(`Alert set at ${price.toFixed(2)} — fires when price crosses above.`);
   void id;
 });

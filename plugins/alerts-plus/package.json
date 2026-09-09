@@ -1,0 +1,35 @@
+{
+  "name": "wickchart-alerts-plus",
+  "version": "0.1.0",
+  "description": "Persistent alerts for wickchart — survives reloads via localStorage, desktop notifications + sound while the tab is hidden, optional webhook. Opt-in plugin, zero dependencies.",
+  "type": "module",
+  "main": "alerts-plus.mjs",
+  "module": "alerts-plus.mjs",
+  "exports": {
+    ".": "./alerts-plus.mjs"
+  },
+  "files": [
+    "alerts-plus.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "alerts",
+    "notifications",
+    "webhook",
+    "persistence",
+    "trading",
+    "web-component",
+    "wickchart"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}
