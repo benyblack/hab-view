@@ -843,6 +843,35 @@ on the chart are captured at the next save point; storage/fetch are
 injectable and every storage failure degrades to memory-only, never
 throwing. Peer dependency: wickchart ≥ 1.4.
 
+### Layouts — the `wickchart-layouts` plugin
+
+Named workspace persistence (~3 KB gz, own CI budget): save and restore
+whole chart setups by name — type, theme, log scale, toggles, indicators,
+view range, positions, alerts — plus the drawing list when wickchart-draw
+is attached. Everything rides the core's public `getState()`/`setState()`.
+
+```js
+npm install wickchart wickchart-layouts   // layouts is a separate opt-in package
+
+import { attachLayouts } from 'wickchart-layouts';
+const layouts = attachLayouts(chart, {
+  key: 'my-desk',      // storage key (default 'wickchart-layouts')
+  drawings: draw,      // optional wickchart-draw handle — include drawings
+});
+layouts.save('swing');    // capture the current setup under a name
+layouts.load('swing');    // apply it back
+layouts.list();           // → [{ name, at, drawingCount }] newest first
+layouts.export();         // → JSON string — share it, store it anywhere
+layouts.import(json);     // merge layouts back (replaces same names)
+chart.addEventListener('wick:layouts', (e) => console.log(e.detail.action, e.detail.name));
+```
+
+Entries are capped (oldest evicted), `storage` is injectable, storage
+failures degrade to an in-memory store for the session and never throw.
+Pair a `load` with `wickchart-alerts-plus`'s `sync()` if you also persist
+alerts, since a layout load replaces the chart's alert list. Peer
+dependency: wickchart ≥ 1.4.
+
 ## Methods
 
 | Method                          | Description                                      |
