@@ -1,0 +1,37 @@
+{
+  "name": "wickchart-navigator",
+  "version": "0.1.0",
+  "description": "Range-slider navigator for wickchart — a full-dataset silhouette docked below the chart with a draggable viewport window (drag to pan, edges to resize). Opt-in plugin, zero dependencies.",
+  "type": "module",
+  "main": "navigator.mjs",
+  "module": "navigator.mjs",
+  "exports": {
+    ".": "./navigator.mjs",
+    "./core": "./core.mjs"
+  },
+  "files": [
+    "navigator.mjs",
+    "core.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "navigator",
+    "range-slider",
+    "scrollbar",
+    "trading",
+    "web-component",
+    "wickchart",
+    "canvas"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.5.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}

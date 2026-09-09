@@ -81,6 +81,7 @@ function makeChart() {
     '_layerHit',
     '_routeLayer',
     '_layerPointerEvent',
+    '_dockInset',
     '_yToPrice',
     '_pointerDown',
     '_pointerMove',
@@ -110,6 +111,7 @@ test('addLayer: validates input, auto-ids, replaces same id, caps at 16', () => 
   const a = c.addLayer({ draw() {} });
   assert.ok(a && a.id === 'layer-1');
   assert.equal(a.onPointer, null, 'non-function onPointer is dropped');
+  assert.equal(a.insetBottom, 0, 'no dock space declared by default');
   assert.equal(c.addLayer({ id: 'x', draw() {} }).id, 'x');
   const repl = c.addLayer({ id: 'x', draw() {} });
   assert.equal(c._layers.length, 2, 'same id replaces, does not append');
@@ -118,6 +120,23 @@ test('addLayer: validates input, auto-ids, replaces same id, caps at 16', () => 
   assert.equal(c._layers.length, 16);
   assert.equal(c.addLayer({ draw() {} }), null, '17th layer rejected');
   assert.ok(c.invalidations >= 17, 'every successful addLayer invalidates');
+});
+
+test('insetBottom: clamped at addLayer time; dock inset = max across layers', () => {
+  const c = makeChart();
+  c.addLayer({ id: 'a', draw() {}, insetBottom: 46 });
+  c.addLayer({ id: 'b', draw() {}, insetBottom: 2000 });
+  c.addLayer({ id: 'c', draw() {}, insetBottom: -30 });
+  c.addLayer({ id: 'd', draw() {}, insetBottom: NaN });
+  c.addLayer({ id: 'e', draw() {}, insetBottom: 12.7 });
+  assert.equal(c._layers[0].insetBottom, 46);
+  assert.equal(c._layers[1].insetBottom, 160, 'clamped to the 160px cap');
+  assert.equal(c._layers[2].insetBottom, 0, 'negative → no dock space');
+  assert.equal(c._layers[3].insetBottom, 0, 'non-finite → no dock space');
+  assert.equal(c._layers[4].insetBottom, 13, 'rounded');
+  assert.equal(c._dockInset(), 160, 'the largest declared inset wins');
+  c.removeLayer('b');
+  assert.equal(c._dockInset(), 46, 'shrink recomputes after removal');
 });
 
 test('removeLayer: by handle or id; unknown → false; clears a live claim', () => {
