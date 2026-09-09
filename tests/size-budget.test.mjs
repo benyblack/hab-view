@@ -24,6 +24,10 @@ const DRAW_FILES = ['plugins/draw/core.mjs', 'plugins/draw/draw.mjs'];
 const SESSIONS_BUDGET_GZ = 7 * 1024;
 const SESSIONS_FILES = ['plugins/sessions/core.mjs', 'plugins/sessions/sessions.mjs'];
 
+// bar replay is a single-file plugin (state machine + badge layer), same rule
+const REPLAY_BUDGET_GZ = 5 * 1024;
+const REPLAY_FILES = ['plugins/replay/replay.mjs'];
+
 const gz = (f) => gzipSync(readFileSync(f)).length;
 
 test('main entry stays under the gzip budget', () => {
@@ -66,5 +70,19 @@ test('wickchart-sessions plugin stays under its (smaller) gzip budget', () => {
   assert.ok(
     total <= SESSIONS_BUDGET_GZ,
     `wickchart-sessions is ${(total / 1024).toFixed(1)} KB gz, budget is ${SESSIONS_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
+  );
+});
+
+test('wickchart-replay plugin stays under its (smaller) gzip budget', () => {
+  let total = 0;
+  const parts = [];
+  for (const f of REPLAY_FILES) {
+    const n = gz(f);
+    total += n;
+    parts.push(`${f}: ${(n / 1024).toFixed(1)} KB gz`);
+  }
+  assert.ok(
+    total <= REPLAY_BUDGET_GZ,
+    `wickchart-replay is ${(total / 1024).toFixed(1)} KB gz, budget is ${REPLAY_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
   );
 });

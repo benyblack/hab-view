@@ -248,6 +248,13 @@
         <button type="button" id="btn-sessions" title="Market session shading (wickchart-sessions plugin) — cycle: off → crypto → forex → NYSE → CME">Sessions: off</button>
       </div>
 
+      <div class="cluster" aria-label="Replay">
+        <button type="button" id="btn-replay-start" title="Bar replay (wickchart-replay plugin) — start at ~70% of the data; the future stays hidden. Pauses the live feed.">⏵ Replay</button>
+        <button type="button" id="btn-replay-play" disabled title="Play / pause the replay (Space)">▶</button>
+        <button type="button" id="btn-replay-step" disabled title="Reveal one bar (→)">⏭</button>
+        <button type="button" id="btn-replay-stop" disabled title="Exit replay and restore the full dataset (Esc)">✕</button>
+      </div>
+
       <div class="cluster cluster-trade" aria-label="Trade">
         <div class="seg" id="seg-trade" role="group" aria-label="Trading">
           <button type="button" id="btn-long" title="Add a demo long position (stop −2%, target +4%)">

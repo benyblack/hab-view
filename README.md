@@ -733,6 +733,36 @@ The hover bridge listens to the chart's own crosshair events, so shading
 never claims a pointer gesture — pan/zoom/measure work untouched. Peer
 dependency: wickchart ≥ 1.4.
 
+### Replay — the `wickchart-replay` plugin
+
+Bar replay as opt-in bytes (~3 KB gz, own CI budget): play history forward
+bar-by-bar or at speed while the future stays hidden. The whole engine runs
+on the public data API — a `setData` slice hides the future, `update()`
+appends one bar per step — so the core stays replay-free. A badge layer shows
+the mode and position at a glance.
+
+```js
+npm install wickchart wickchart-replay   // replay is a separate opt-in package
+
+import { attachReplay } from 'wickchart-replay';
+
+const replay = attachReplay(chart);
+replay.start();               // head at ~70% of the data (or pass a time/index)
+replay.play();                // 4 bars/sec — play(15) for faster, pause() stops
+replay.step();                // reveal one bar
+replay.seek('2026-03-06');    // jump the head
+replay.setLoop(true);         // wrap to the anchor at the end
+replay.stop();                // exit — the full dataset is restored
+chart.addEventListener('wick:replay', (e) => progress.textContent =
+  e.detail.active ? `${e.detail.index + 1}/${e.detail.total}` : '');
+```
+
+Anchors accept bar indices, timestamps (ms/s) or date strings; every change
+fires `wick:replay` with the full state. Pause live feeds while replaying —
+an external `update()`/`setData()` aborts replay instead of corrupting the
+chart (the demo pauses its feed automatically). Paper trading and an equity
+curve are the planned 0.2 follow-up. Peer dependency: wickchart ≥ 1.4.
+
 ## Methods
 
 | Method                          | Description                                      |

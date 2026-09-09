@@ -49,7 +49,7 @@ is suggested priority.
 | Price alerts | `addAlert({ price, direction })` → line + `hab:alert` event on cross; optional browser Notification. | S–M | Checked inside `update()`. |
 | Measure tool | Shift-drag A→B: Δprice, ±%, Δtime, bar count overlay. | S–M | |
 | **Stats panel** | Visible-range analytics: return %, annualized vol, max drawdown, up/down bars, avg volume. | S | Pure functions over visible slice; huge "useful" per line of code. |
-| **Replay mode** | `chart.replay(fromIndex)` + play/pause/speed — scrub history bar-by-bar for practice & demos. | S–M | Renderer is data-driven; slice + reuse auto-follow. |
+| ~~Replay mode~~ ✅ shipped (plugin) | `wickchart-replay` — `replay.start/step/seek/play/pause/stop` + speed & loop; hides the future via the public data API (setData slice + update), badge layer shows the position. Paper trading + equity curve = 0.2 follow-up. | S–M | Renderer is data-driven; slice + reuse auto-follow. |
 | Candle countdown | Time remaining in the current bar (legend pill). | S | 1 s timer, no re-render cost (HTML overlay). |
 | Shareable chart state | `getState()/setState()`; demo maps to URL hash (`#BTC-1h-sma20-rsi`). | S | Stickiness + marketing. |
 

@@ -3,6 +3,7 @@ import WickChart from '../src/wick-chart.js';
 import { encodeStateQuery, decodeStateQuery, splitIndicatorTokens, compileScript } from '../src/core.js';
 import { attachDrawings } from '../plugins/draw/draw.mjs';
 import { attachSessions } from '../plugins/sessions/sessions.mjs';
+import { attachReplay } from '../plugins/replay/replay.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -793,6 +794,58 @@ chart.addEventListener('wick:sessions', (e) => {
   btnSessions.title = e.detail && e.detail.hover
     ? `Session under crosshair: ${e.detail.hover} — click to cycle presets`
     : 'Market session shading (wickchart-sessions plugin) — cycle: off → crypto → forex → NYSE → CME';
+});
+
+/* ---------------- bar replay (wickchart-replay plugin layer) ---------------- */
+
+const replay = attachReplay(chart);
+const btnReplayStart = document.getElementById('btn-replay-start');
+const btnReplayPlay = document.getElementById('btn-replay-play');
+const btnReplayStep = document.getElementById('btn-replay-step');
+const btnReplayStop = document.getElementById('btn-replay-stop');
+
+btnReplayStart.addEventListener('click', () => {
+  stopFeed(); // live updates would fight the replay
+  replay.start();
+  toast('Replay started — the future is hidden. Space = play/pause, → = step, Esc = exit.');
+});
+btnReplayPlay.addEventListener('click', () => (replay.playing ? replay.pause() : replay.play()));
+btnReplayStep.addEventListener('click', () => replay.step());
+btnReplayStop.addEventListener('click', exitReplay);
+
+function exitReplay() {
+  if (!replay.active) return;
+  replay.stop();
+  startFeed();
+}
+
+chart.addEventListener('wick:replay', (e) => {
+  const d = e.detail;
+  btnReplayPlay.textContent = d.playing ? '⏸' : '▶';
+  btnReplayStep.disabled = !d.active;
+  btnReplayStop.disabled = !d.active;
+  btnReplayPlay.disabled = !d.active;
+  btnReplayStart.textContent = d.active
+    ? `⏵ ${d.index + 1}/${d.total}`
+    : '⏵ Replay';
+  btnReplayStart.title = d.active
+    ? `Replaying at ${d.speed} bars/s, ${d.remaining} bars hidden — click to re-anchor at 70%`
+    : 'Bar replay (wickchart-replay plugin) — start at ~70% of the data; the future stays hidden. Pauses the live feed.';
+});
+
+document.addEventListener('keydown', (e) => {
+  if (!replay.active) return;
+  const el = e.target;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  if (e.key === ' ') {
+    e.preventDefault();
+    replay.playing ? replay.pause() : replay.play();
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    replay.step();
+  } else if (e.key === 'Escape') {
+    exitReplay();
+  }
 });
 
 /* ---------------- trade demo: positions & alerts ---------------- */
