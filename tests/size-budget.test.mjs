@@ -36,6 +36,10 @@ const COMPARE_FILES = ['plugins/compare/core.mjs', 'plugins/compare/compare.mjs'
 const NAVIGATOR_BUDGET_GZ = 5 * 1024;
 const NAVIGATOR_FILES = ['plugins/navigator/core.mjs', 'plugins/navigator/navigator.mjs'];
 
+// alerts-plus: persistence + notification/webhook side channels, single file
+const ALERTS_PLUS_BUDGET_GZ = 4 * 1024;
+const ALERTS_PLUS_FILES = ['plugins/alerts-plus/alerts-plus.mjs'];
+
 const gz = (f) => gzipSync(readFileSync(f)).length;
 
 test('main entry stays under the gzip budget', () => {
@@ -120,5 +124,19 @@ test('wickchart-navigator plugin stays under its (smaller) gzip budget', () => {
   assert.ok(
     total <= NAVIGATOR_BUDGET_GZ,
     `wickchart-navigator is ${(total / 1024).toFixed(1)} KB gz, budget is ${NAVIGATOR_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
+  );
+});
+
+test('wickchart-alerts-plus plugin stays under its (smaller) gzip budget', () => {
+  let total = 0;
+  const parts = [];
+  for (const f of ALERTS_PLUS_FILES) {
+    const n = gz(f);
+    total += n;
+    parts.push(`${f}: ${(n / 1024).toFixed(1)} KB gz`);
+  }
+  assert.ok(
+    total <= ALERTS_PLUS_BUDGET_GZ,
+    `wickchart-alerts-plus is ${(total / 1024).toFixed(1)} KB gz, budget is ${ALERTS_PLUS_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
   );
 });

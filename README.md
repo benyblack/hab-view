@@ -814,6 +814,35 @@ above it, and layers draw it as `api.layout.dock`. On charts without the
 hook the navigator degrades silently. The silhouette is O(n) once per
 (dataset, width) and cached. Peer dependency: wickchart ≥ 1.5.
 
+### Alerts+ — the `wickchart-alerts-plus` plugin
+
+The "pro" alert tier (~3 KB gz, own CI budget). Core alerts are runtime-only
+by design; this adds what a trading tool actually needs, without the core
+growing any of it: **persistence** (the alert list mirrors into
+localStorage and re-arms on reload), **desktop notifications + a WebAudio
+beep** while the tab is hidden, and an optional **webhook** that receives
+every fire as `POST { id, price, when, time, bar, key }`.
+
+```js
+npm install wickchart wickchart-alerts-plus   // alerts-plus is a separate opt-in package
+
+import { attachAlertsPlus } from 'wickchart-alerts-plus';
+const ap = attachAlertsPlus(chart, {
+  key: 'BTC:1h',                       // one storage key per symbol+timeframe
+  notify: true, sound: true,           // hidden-tab surfacing
+  webhook: 'https://example.com/hook', // optional
+});
+await ap.requestNotify();              // ask for the notification permission
+ap.add({ price: 100, direction: 'above' });  // persisted, re-armed on reload
+ap.add({ when: 'rsi(close,14) < 30' });      // scripted alerts persist too
+ap.list(); ap.remove(id); ap.clear(); ap.sync(); ap.detach();
+```
+
+Once-fired alerts drop out of storage automatically; alerts added directly
+on the chart are captured at the next save point; storage/fetch are
+injectable and every storage failure degrades to memory-only, never
+throwing. Peer dependency: wickchart ≥ 1.4.
+
 ## Methods
 
 | Method                          | Description                                      |
