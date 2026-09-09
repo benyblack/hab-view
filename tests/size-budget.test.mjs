@@ -18,6 +18,12 @@ const FILES = ['src/core.js', 'src/wick-chart.js'];
 const DRAW_BUDGET_GZ = 12 * 1024;
 const DRAW_FILES = ['plugins/draw/core.mjs', 'plugins/draw/draw.mjs'];
 
+// session shading is even smaller opt-in bytes (its own budget, same rule):
+// landed at 6.3 KB gz — timezone math (DST-exact presets), bands, labels and
+// the crosshair hover bridge included.
+const SESSIONS_BUDGET_GZ = 7 * 1024;
+const SESSIONS_FILES = ['plugins/sessions/core.mjs', 'plugins/sessions/sessions.mjs'];
+
 const gz = (f) => gzipSync(readFileSync(f)).length;
 
 test('main entry stays under the gzip budget', () => {
@@ -46,5 +52,19 @@ test('wickchart-draw plugin stays under its (smaller) gzip budget', () => {
   assert.ok(
     total <= DRAW_BUDGET_GZ,
     `wickchart-draw is ${(total / 1024).toFixed(1)} KB gz, budget is ${DRAW_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
+  );
+});
+
+test('wickchart-sessions plugin stays under its (smaller) gzip budget', () => {
+  let total = 0;
+  const parts = [];
+  for (const f of SESSIONS_FILES) {
+    const n = gz(f);
+    total += n;
+    parts.push(`${f}: ${(n / 1024).toFixed(1)} KB gz`);
+  }
+  assert.ok(
+    total <= SESSIONS_BUDGET_GZ,
+    `wickchart-sessions is ${(total / 1024).toFixed(1)} KB gz, budget is ${SESSIONS_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
   );
 });

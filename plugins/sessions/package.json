@@ -1,0 +1,38 @@
+{
+  "name": "wickchart-sessions",
+  "version": "0.1.0",
+  "description": "Market session shading for wickchart — Asia/London/New York and custom sessions with DST-exact IANA timezones, weekend shading, crosshair hover events. Opt-in plugin, zero dependencies.",
+  "type": "module",
+  "main": "sessions.mjs",
+  "module": "sessions.mjs",
+  "exports": {
+    ".": "./sessions.mjs",
+    "./core": "./core.mjs"
+  },
+  "files": [
+    "sessions.mjs",
+    "core.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "sessions",
+    "trading",
+    "web-component",
+    "wickchart",
+    "canvas",
+    "crypto",
+    "forex",
+    "timezone"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}
