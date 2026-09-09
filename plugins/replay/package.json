@@ -1,0 +1,35 @@
+{
+  "name": "wickchart-replay",
+  "version": "0.1.0",
+  "description": "Bar replay for wickchart — play history forward bar-by-bar or at speed while the future stays hidden. Opt-in plugin, zero dependencies, zero core changes.",
+  "type": "module",
+  "main": "replay.mjs",
+  "module": "replay.mjs",
+  "exports": {
+    ".": "./replay.mjs"
+  },
+  "files": [
+    "replay.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "replay",
+    "backtest",
+    "bar-replay",
+    "trading",
+    "web-component",
+    "wickchart",
+    "canvas"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}
