@@ -1598,8 +1598,9 @@ class WickChart extends HTMLElementBase {
         );
       }
       const timeH = 26;
+      const dock = this._dockInset();
       const plotRight = Math.max(30, W - priceW);
-      const plotBottom = H - timeH;
+      const plotBottom = H - timeH - dock;
       const paneList = this._ind.panes;
       const paneArea = paneList.length
         ? Math.min(
@@ -1622,6 +1623,7 @@ class WickChart extends HTMLElementBase {
         plotBottom,
         main: { y0: 0, y1: mainH, h: mainH },
         panes,
+        dock: dock > 0 ? { y0: H - dock, h: dock } : null,
       });
 
       /* background */
@@ -2942,7 +2944,13 @@ class WickChart extends HTMLElementBase {
      * layer then receives that pointer's move/up/cancel events (plus a
      * 'cancel' on Escape) and the chart suppresses its own pan/measure/brush
      * for the duration.
-     * @param {{id?: string, draw: Function, onPointer?: Function}} layer
+     *
+     * A layer may also declare `insetBottom` (px, 0..160): the largest
+     * declared inset reserves a docked strip at the very bottom of the
+     * canvas — all chart content (panes + time axis) shrinks above it and
+     * the strip is handed to layers as `api.layout.dock = { y0, h }`
+     * (used by the wickchart-navigator plugin).
+     * @param {{id?: string, draw: Function, onPointer?: Function, insetBottom?: number}} layer
      * @returns {object|null} the normalized layer handle (with `id`), or null
      *   if the layer was rejected (no draw fn, or 16 layers already added)
      */
@@ -2956,6 +2964,10 @@ class WickChart extends HTMLElementBase {
       const entry = {
         id,
         draw: layer.draw,
+        insetBottom:
+          typeof layer.insetBottom === 'number' && Number.isFinite(layer.insetBottom)
+            ? Math.max(0, Math.min(160, Math.round(layer.insetBottom)))
+            : 0,
         onPointer: typeof layer.onPointer === 'function' ? layer.onPointer : null,
       };
       const at = this._layers.findIndex((l) => l.id === id);
@@ -3005,6 +3017,18 @@ class WickChart extends HTMLElementBase {
           console.warn('wick-chart: layer "' + layer.id + '" threw in draw', err);
         }
       }
+    }
+
+    /**
+     * Bottom space reserved by plugin layers: the largest declared
+     * `insetBottom` (px, clamped 0..160 at addLayer time), or 0.
+     */
+    _dockInset() {
+      let dock = 0;
+      for (const l of this._layers) {
+        if (l.insetBottom > dock) dock = l.insetBottom;
+      }
+      return dock;
     }
 
     /** Ask layers, in order, whether one claims this pointerdown. */

@@ -244,19 +244,33 @@
         </div>
       </div>
 
-      <div class="cluster" aria-label="Sessions">
-        <button type="button" id="btn-sessions" title="Market session shading (wickchart-sessions plugin) — cycle: off → crypto → forex → NYSE → CME">Sessions: off</button>
-      </div>
-
-      <div class="cluster" aria-label="Replay">
-        <button type="button" id="btn-replay-start" title="Bar replay (wickchart-replay plugin) — start at ~70% of the data; the future stays hidden. Pauses the live feed.">⏵ Replay</button>
-        <button type="button" id="btn-replay-play" disabled title="Play / pause the replay (Space)">▶</button>
-        <button type="button" id="btn-replay-step" disabled title="Reveal one bar (→)">⏭</button>
-        <button type="button" id="btn-replay-stop" disabled title="Exit replay and restore the full dataset (Esc)">✕</button>
-      </div>
-
-      <div class="cluster" aria-label="Compare">
-        <button type="button" id="btn-compare" title="Compare overlays (wickchart-compare plugin) — cycle: off → ETH → ETH+SOL, percent-rebase against this chart">Compare: off</button>
+      <div class="cluster" aria-label="Plugins">
+        <div class="seg" role="group" aria-label="Plugin toggles">
+          <button type="button" id="btn-sessions" aria-pressed="false" title="Market session shading (wickchart-sessions plugin) — click to cycle: off → crypto → forex → NYSE → CME">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.6 2.5 13.4 0 16-2.5-2.6-2.5-13.4 0-16z"/></svg><span id="lbl-sessions">Sessions</span>
+          </button>
+          <button type="button" id="btn-compare" aria-pressed="false" title="Compare overlays (wickchart-compare plugin) — click to cycle: off → ETH → ETH+SOL, percent-rebase against this chart">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-9"/><path d="M3 11l4-4 3 2" opacity=".6"/></svg><span id="lbl-compare">Compare</span>
+          </button>
+          <button type="button" id="btn-navigator" aria-pressed="false" title="Range navigator (wickchart-navigator plugin) — full-dataset silhouette with a draggable viewport window">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="14" width="18" height="7" rx="1.5"/><path d="M6 17.5l3-2 3 2 3-2.5 3 2"/></svg><span>Navigator</span>
+          </button>
+        </div>
+        <div class="seg" role="group" aria-label="Replay transport">
+          <button type="button" id="btn-replay-start" title="Bar replay (wickchart-replay plugin) — start at ~70% of the data; the future stays hidden. Pauses the live feed.">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5v14"/><path d="M18 6l-9 6 9 6z"/></svg><span id="lbl-replay">Replay</span>
+          </button>
+          <button type="button" id="btn-replay-play" disabled title="Play / pause the replay (Space)">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" id="ico-replay-play"><path d="M8 5l11 7-11 7z"/></svg>
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" style="display:none" id="ico-replay-pause"><path d="M8 5v14M16 5v14"/></svg>
+          </button>
+          <button type="button" id="btn-replay-step" disabled title="Reveal one bar (→)">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 6l8 6-8 6z"/><path d="M18 5v14"/></svg>
+          </button>
+          <button type="button" id="btn-replay-stop" disabled title="Exit replay and restore the full dataset (Esc)">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+          </button>
+        </div>
       </div>
 
       <div class="cluster cluster-trade" aria-label="Trade">

@@ -792,6 +792,28 @@ invisible scale inset 8% from the pane edges; the price scale is never
 distorted. Validated, capped at 6 series, invalid entries dropped. Peer
 dependency: wickchart ≥ 1.4.
 
+### Navigator — the `wickchart-navigator` plugin
+
+The most-missed TradingView affordance: a silhouette of the whole dataset
+docked below the chart with a draggable viewport window (~3 KB gz, own CI
+budget). Drag the window to pan, grab an edge to resize, click outside it to
+jump — pan/zoom and the window stay in sync live, both directions.
+
+```js
+npm install wickchart wickchart-navigator   // navigator is a separate opt-in package
+
+import { attachNavigator } from 'wickchart-navigator';
+const nav = attachNavigator(chart, { height: 46 }); // strip height, 24..120
+nav.detach();                                       // remove the strip again
+```
+
+The strip needs bottom space, so this plugin pairs with a small core hook:
+a layer may declare `insetBottom` (px) — the largest declared inset reserves
+a docked strip at the bottom of the canvas, panes and the time axis shrink
+above it, and layers draw it as `api.layout.dock`. On charts without the
+hook the navigator degrades silently. The silhouette is O(n) once per
+(dataset, width) and cached. Peer dependency: wickchart ≥ 1.5.
+
 ## Methods
 
 | Method                          | Description                                      |
@@ -806,7 +828,7 @@ dependency: wickchart ≥ 1.4.
 | `getDataWindow()`               | → AI-ready summary of the visible window (see below) |
 | `getState()`                    | → serializable snapshot (type, indicators, view, positions, alerts) |
 | `setState(state)`               | Apply a snapshot; a pending view applies after the next `setData()` |
-| `addLayer(layer)` / `removeLayer(idOrHandle)` | Register/detach a plugin layer (draw hook + optional pointer claim) |
+| `addLayer(layer)` / `removeLayer(idOrHandle)` | Register/detach a plugin layer (draw hook + optional pointer claim + optional `insetBottom` dock strip) |
 | `requestDraw()`                 | Repaint on the next frame (interactive layers)     |
 | `timeToX(t)` / `xToTime(x)`     | Bar time ⇄ x-pixel; extrapolates into future space |
 | `priceToY(p)` / `yToPrice(y)`   | Price ⇄ y-pixel in the main pane (log-aware)       |

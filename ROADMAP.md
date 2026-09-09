@@ -26,6 +26,7 @@ is suggested priority.
 | History backfill (`loadMore`) | `chart.onloadmore = (fromTime) => Promise<bars>` — fetch older bars when the user scrolls past the left edge. Every serious app needs this. | M | Renderer is index-based: shift `rightIndex` by the prepended count to keep the view anchored. |
 | Session / gap handling | Optional axis "gap" dividers when bar intervals jump (weekends, market close). | S | x-axis is already index-space, so gaps compress naturally; only axis *labels* need honesty — boundary-based ticks already give most of this. Session shading shipped as the opt-in `wickchart-sessions` plugin instead of a core attr. |
 | ~~Second symbol overlay~~ ✅ shipped (plugin) | `wickchart-compare` — percent-rebase compare lines + ratio/diff derived series with a live legend, drawn against an invisible secondary scale. | S | New overlay series type; legend shows both. |
+| ~~Range navigator~~ ✅ shipped (plugin) | `wickchart-navigator` — full-dataset silhouette strip with a draggable viewport window; enabled the generic `insetBottom` dock hook in the core layer API. | S | The one plugin that needed a (small) core change. |
 | Tick → bar aggregation | `aggregate="volume\|dollar\|tick"` — build advanced bars from a trade stream client-side. | M | Quant-grade feature no mainstream web chart ships built-in. Feed layer first, component second. |
 | Multi-pane series sync | Link crosshairs/ranges across several `<wick-chart>`s. | S | `wick:range`/`wick:crosshair` events already exist — a small `<wick-grid>` wrapper component finishes it. |
 

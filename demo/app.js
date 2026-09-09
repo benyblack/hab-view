@@ -5,6 +5,7 @@ import { attachDrawings } from '../plugins/draw/draw.mjs';
 import { attachSessions } from '../plugins/sessions/sessions.mjs';
 import { attachReplay } from '../plugins/replay/replay.mjs';
 import { attachCompare } from '../plugins/compare/compare.mjs';
+import { attachNavigator } from '../plugins/navigator/navigator.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -772,7 +773,7 @@ document.getElementById('btn-draw-magnet').addEventListener('click', (e) => {
 document.getElementById('btn-draw-undo').addEventListener('click', () => draw.undo());
 document.getElementById('btn-draw-clear').addEventListener('click', () => draw.clear());
 
-/* ---------------- session shading (wickchart-sessions plugin layer) ---------------- */
+/* ---------------- plugin toggles: sessions / compare / navigator ---------------- */
 
 const sessions = attachSessions(chart);
 const SESSION_MODES = [
@@ -784,17 +785,20 @@ const SESSION_MODES = [
 ];
 let sessionMode = 0;
 const btnSessions = document.getElementById('btn-sessions');
+const lblSessions = document.getElementById('lbl-sessions');
 btnSessions.addEventListener('click', () => {
   sessionMode = (sessionMode + 1) % SESSION_MODES.length;
   const [label, preset] = SESSION_MODES[sessionMode];
   sessions.setPreset(preset);
-  btnSessions.textContent = 'Sessions: ' + label;
+  lblSessions.textContent = preset ? 'Sessions · ' + label : 'Sessions';
+  btnSessions.setAttribute('aria-pressed', String(!!preset));
+  btnSessions.classList.toggle('active', !!preset);
 });
 // which session is under the crosshair (null = a gap or the weekend)
 chart.addEventListener('wick:sessions', (e) => {
   btnSessions.title = e.detail && e.detail.hover
     ? `Session under crosshair: ${e.detail.hover} — click to cycle presets`
-    : 'Market session shading (wickchart-sessions plugin) — cycle: off → crypto → forex → NYSE → CME';
+    : 'Market session shading (wickchart-sessions plugin) — click to cycle: off → crypto → forex → NYSE → CME';
 });
 
 /* ---------------- bar replay (wickchart-replay plugin layer) ---------------- */
@@ -804,6 +808,7 @@ const btnReplayStart = document.getElementById('btn-replay-start');
 const btnReplayPlay = document.getElementById('btn-replay-play');
 const btnReplayStep = document.getElementById('btn-replay-step');
 const btnReplayStop = document.getElementById('btn-replay-stop');
+const lblReplay = document.getElementById('lbl-replay');
 
 btnReplayStart.addEventListener('click', () => {
   stopFeed(); // live updates would fight the replay
@@ -822,13 +827,12 @@ function exitReplay() {
 
 chart.addEventListener('wick:replay', (e) => {
   const d = e.detail;
-  btnReplayPlay.textContent = d.playing ? '⏸' : '▶';
+  document.getElementById('ico-replay-play').style.display = d.playing ? 'none' : '';
+  document.getElementById('ico-replay-pause').style.display = d.playing ? '' : 'none';
   btnReplayStep.disabled = !d.active;
   btnReplayStop.disabled = !d.active;
   btnReplayPlay.disabled = !d.active;
-  btnReplayStart.textContent = d.active
-    ? `⏵ ${d.index + 1}/${d.total}`
-    : '⏵ Replay';
+  lblReplay.textContent = d.active ? `Replay ${d.index + 1}/${d.total}` : 'Replay';
   btnReplayStart.title = d.active
     ? `Replaying at ${d.speed} bars/s, ${d.remaining} bars hidden — click to re-anchor at 70%`
     : 'Bar replay (wickchart-replay plugin) — start at ~70% of the data; the future stays hidden. Pauses the live feed.';
@@ -856,6 +860,7 @@ const COMPARE_MODES = ['off', 'ETH', 'ETH+SOL'];
 let compareMode = 0;
 const compareCache = new Map();
 const btnCompare = document.getElementById('btn-compare');
+const lblCompare = document.getElementById('lbl-compare');
 
 /** Klines for a compare symbol; falls back to the synthetic history offline. */
 async function compareSeries(sym) {
@@ -877,18 +882,37 @@ async function compareSeries(sym) {
 btnCompare.addEventListener('click', async () => {
   compareMode = (compareMode + 1) % COMPARE_MODES.length;
   const mode = COMPARE_MODES[compareMode];
+  btnCompare.setAttribute('aria-pressed', String(mode !== 'off'));
+  btnCompare.classList.toggle('active', mode !== 'off');
   if (mode === 'off') {
     cmp.clear();
-    btnCompare.textContent = 'Compare: off';
+    lblCompare.textContent = 'Compare';
     return;
   }
-  btnCompare.textContent = 'Compare: …';
+  lblCompare.textContent = 'Compare · …';
   const list = [];
   for (const s of mode.split('+')) {
     list.push({ label: s, data: await compareSeries(s) });
   }
   cmp.setSeries(list);
-  btnCompare.textContent = 'Compare: ' + mode;
+  lblCompare.textContent = 'Compare · ' + mode;
+});
+
+/* ---------------- range navigator (wickchart-navigator plugin layer) ---------------- */
+
+const btnNavigator = document.getElementById('btn-navigator');
+let navPlugin = null;
+btnNavigator.addEventListener('click', () => {
+  if (navPlugin) {
+    navPlugin.detach();
+    navPlugin = null;
+    btnNavigator.setAttribute('aria-pressed', 'false');
+    btnNavigator.classList.remove('active');
+  } else {
+    navPlugin = attachNavigator(chart);
+    btnNavigator.setAttribute('aria-pressed', 'true');
+    btnNavigator.classList.add('active');
+  }
 });
 
 /* ---------------- trade demo: positions & alerts ---------------- */
