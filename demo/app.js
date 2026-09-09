@@ -2,6 +2,7 @@
 import WickChart from '../src/wick-chart.js';
 import { encodeStateQuery, decodeStateQuery, splitIndicatorTokens, compileScript } from '../src/core.js';
 import { attachDrawings } from '../plugins/draw/draw.mjs';
+import { attachSessions } from '../plugins/sessions/sessions.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -768,6 +769,31 @@ document.getElementById('btn-draw-magnet').addEventListener('click', (e) => {
 });
 document.getElementById('btn-draw-undo').addEventListener('click', () => draw.undo());
 document.getElementById('btn-draw-clear').addEventListener('click', () => draw.clear());
+
+/* ---------------- session shading (wickchart-sessions plugin layer) ---------------- */
+
+const sessions = attachSessions(chart);
+const SESSION_MODES = [
+  ['off', null],
+  ['crypto', 'crypto'],
+  ['forex', 'forex'],
+  ['NYSE', 'nyse'],
+  ['CME', 'cme'],
+];
+let sessionMode = 0;
+const btnSessions = document.getElementById('btn-sessions');
+btnSessions.addEventListener('click', () => {
+  sessionMode = (sessionMode + 1) % SESSION_MODES.length;
+  const [label, preset] = SESSION_MODES[sessionMode];
+  sessions.setPreset(preset);
+  btnSessions.textContent = 'Sessions: ' + label;
+});
+// which session is under the crosshair (null = a gap or the weekend)
+chart.addEventListener('wick:sessions', (e) => {
+  btnSessions.title = e.detail && e.detail.hover
+    ? `Session under crosshair: ${e.detail.hover} — click to cycle presets`
+    : 'Market session shading (wickchart-sessions plugin) — cycle: off → crypto → forex → NYSE → CME';
+});
 
 /* ---------------- trade demo: positions & alerts ---------------- */
 

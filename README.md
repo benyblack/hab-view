@@ -707,6 +707,32 @@ writer wins, remote updates never touch the local undo stack. Peer
 dependency: wickchart ≥ 1.4. See the live playground in the docs (Drawings
 section — it shares a room, so open it twice and draw on either chart).
 
+### Sessions — the `wickchart-sessions` plugin
+
+Market session shading as opt-in bytes (~6 KB gz, own CI budget): Asia /
+London / New York and other sessions drawn as translucent bands, with labels,
+closed-weekend shading for equities/futures, and crosshair hover events.
+Presets for crypto & forex use the common UTC convention; equity/futures
+presets use IANA timezones, so 09:30 is the real 09:30 across DST changes.
+Custom defs (`{ name, start, end, tz?, days?, color?, alpha? }`) cover
+midnight-crossing sessions and weekday filters.
+
+```js
+npm install wickchart wickchart-sessions   // sessions are a separate opt-in package
+
+import { attachSessions } from 'wickchart-sessions';
+
+const sessions = attachSessions(chart, { preset: 'crypto' });
+sessions.setPreset('nyse');   // 'crypto' | 'forex' | 'nyse' | 'cme' | null
+sessions.setSessions([...]);  // custom defs (validated; getSessions() → JSON)
+sessions.setWeekends(true);   // shade closed Sat+Sun (default for nyse/cme)
+chart.addEventListener('wick:sessions', (e) => status.textContent = e.detail.hover || '');
+```
+
+The hover bridge listens to the chart's own crosshair events, so shading
+never claims a pointer gesture — pan/zoom/measure work untouched. Peer
+dependency: wickchart ≥ 1.4.
+
 ## Methods
 
 | Method                          | Description                                      |
