@@ -25,7 +25,7 @@ is suggested priority.
 |---|---|---|---|
 | History backfill (`loadMore`) | `chart.onloadmore = (fromTime) => Promise<bars>` — fetch older bars when the user scrolls past the left edge. Every serious app needs this. | M | Renderer is index-based: shift `rightIndex` by the prepended count to keep the view anchored. |
 | Session / gap handling | Optional axis "gap" dividers when bar intervals jump (weekends, market close). | S | x-axis is already index-space, so gaps compress naturally; only axis *labels* need honesty — boundary-based ticks already give most of this. Session shading shipped as the opt-in `wickchart-sessions` plugin instead of a core attr. |
-| Second symbol overlay | `compare="ETH"` — normalized (% from window start) second line. | S | New overlay series type; legend shows both. |
+| ~~Second symbol overlay~~ ✅ shipped (plugin) | `wickchart-compare` — percent-rebase compare lines + ratio/diff derived series with a live legend, drawn against an invisible secondary scale. | S | New overlay series type; legend shows both. |
 | Tick → bar aggregation | `aggregate="volume\|dollar\|tick"` — build advanced bars from a trade stream client-side. | M | Quant-grade feature no mainstream web chart ships built-in. Feed layer first, component second. |
 | Multi-pane series sync | Link crosshairs/ranges across several `<wick-chart>`s. | S | `wick:range`/`wick:crosshair` events already exist — a small `<wick-grid>` wrapper component finishes it. |
 
@@ -73,7 +73,7 @@ is suggested priority.
 | ~~Sonification toggle~~ ✅ shipped | Pitch maps to price movement — screen-reader traders get trend by ear. Rare a11y win. | S–M |
 | ~~AI-ready data hook~~ ✅ shipped | `chart.getDataWindow()` — structured + markdown summary of the visible window (trend, vol percentile, patterns); demo "Explain" button with copy-to-clipboard. Data stays local. | S |
 | Branded snapshot/report export | exportPNG + stats table + watermark composed into one shareable image. | M |
-| Spread & ratio charts | `formula="BTC/ETH"` live derived series. | M |
+| Spread & ratio charts (pane) | ~~`formula="BTC/ETH"` live derived series~~ derived ratio/diff lines shipped in `wickchart-compare` (rebased, raw value in the legend); a dedicated spread *pane* with its own axis stays open — needs core pane support. | M |
 
 ## Track 5 — Engineering & scale (continuous)
 
