@@ -226,6 +226,70 @@ const MS_CUTOFF = 1e11;
 export const toMs = (t) =>
   t instanceof Date ? t.getTime() : t < MS_CUTOFF ? t * 1000 : t;
 
+/* ------------------------------------------------------------------ *
+ * Timezones
+ * ------------------------------------------------------------------ */
+
+const zoneDtfCache = new Map();
+
+/** Cached Intl formatter for a zone; null (→ UTC) if the zone is unusable. */
+function zoneDtf(zone) {
+  let f = zoneDtfCache.get(zone);
+  if (f === undefined) {
+    try {
+      f = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone,
+        hourCycle: 'h23',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch (_) {
+      // unknown zone: read as UTC rather than throwing on a render path, but
+      // say so once — a silently-UTC axis from a typo is hard to spot
+      f = null;
+      if (typeof console !== 'undefined') {
+        console.warn('wick-chart: unknown timezone "' + zone + '" — using UTC');
+      }
+    }
+    zoneDtfCache.set(zone, f);
+  }
+  return f;
+}
+
+const zoneOffCache = new Map();
+
+/**
+ * Milliseconds east of UTC in `zone` at the instant `at`.
+ *   'utc'            → 0
+ *   'local' / null   → the browser's zone (DST-correct via Date)
+ *   number           → a fixed offset in ms (exchange sessions)
+ *   IANA name        → DST-correct via Intl
+ * Never throws: an unusable zone reads as UTC.
+ * @param {number} at epoch ms
+ * @param {string|number|null} [zone]
+ * @returns {number} offset in ms
+ */
+export function zoneOffset(at, zone) {
+  if (zone === 'utc' || zone === 'UTC') return 0;
+  if (isNum(zone)) return zone;
+  if (zone == null || zone === 'local') return -new Date(at).getTimezoneOffset() * 60000;
+  const f = zoneDtf(zone);
+  if (!f) return 0;
+  // DST shifts land on hour/half-hour boundaries, so one Intl lookup per
+  // 30-minute bucket is exact — and keeps the slow part off the per-bar path.
+  const key = zone + '|' + Math.floor(at / 1800000);
+  const hit = zoneOffCache.get(key);
+  if (hit !== undefined) return hit;
+  const p = {};
+  for (const part of f.formatToParts(new Date(at))) p[part.type] = part.value;
+  // compare whole minutes: the formatted parts carry no seconds
+  const wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
+  const off = wall - Math.floor(at / 60000) * 60000;
+  if (zoneOffCache.size > 8192) zoneOffCache.clear();
+  zoneOffCache.set(key, off);
+  return off;
+}
+
 // Sub-day / day-aligned steps (ms), plus month/year handled separately.
 export const TIME_STEPS = [
   { ms: MIN, label: 'time' },
@@ -249,7 +313,9 @@ const dtfCache = new Map();
 function dtf(fmt) {
   let f = dtfCache.get(fmt);
   if (!f) {
-    f = new Intl.DateTimeFormat(undefined, fmt);
+    // Locale stays the viewer's; the zone is pinned to UTC because callers
+    // pass an instant already shifted into the display zone (see _zt()).
+    f = new Intl.DateTimeFormat(undefined, { timeZone: 'UTC', ...fmt });
     dtfCache.set(fmt, f);
   }
   return f;
@@ -259,16 +325,20 @@ const MON_FMT = { month: 'short' };
 const MON_Y_FMT = { month: 'short', year: 'numeric' };
 const YR_FMT = { year: 'numeric' };
 
+/* Axis/legend formatters. Each takes an instant ALREADY shifted into the
+ * display zone (t + zoneOffset(t, zone)) and renders it as UTC, so one set of
+ * cached formatters serves every timezone. With the default 'local' zone the
+ * shift equals the browser offset and the output is what it always was. */
 export const hhmm = (t) => {
   const d = new Date(t);
-  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  return pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
 };
 export const fmtDay = (t) => dtf(DAY_FMT).format(t);
 export const fmtMonth = (t, withYear) => dtf(withYear ? MON_Y_FMT : MON_FMT).format(t);
 export const fmtYear = (t) => dtf(YR_FMT).format(t);
 export const fmtFull = (t) => {
   const d = new Date(t);
-  return dtf(DAY_FMT).format(d) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  return dtf(DAY_FMT).format(d) + ' ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
 };
 
 /* ------------------------------------------------------------------ *
@@ -521,12 +591,23 @@ export function calcATR(bars, period = 14) {
 }
 
 /**
- * Volume-weighted average price over the hlc3 typical price, anchored to
- * each UTC day (resets at the session boundary).
+ * Volume-weighted average price over the hlc3 typical price, resetting at
+ * each session boundary.
+ *
+ * The anchor defaults to the UTC day — the crypto convention, and what this
+ * has always done. Equities, futures and FX rarely open at UTC midnight, so
+ * pass the session's zone (or a fixed offset) to move the reset. Note this is
+ * deliberately independent of the chart's `timezone`, which only governs how
+ * times are displayed: changing the axis to Stockholm should not silently
+ * re-anchor a BTC chart's VWAP.
+ *
  * @param {Bar[]} bars
+ * @param {string|number} [anchor='utc'] 'utc' | 'local' | IANA zone | fixed
+ *   offset in ms — see zoneOffset()
  * @returns {Array<number|null>}
  */
-export function calcVWAP(bars) {
+export function calcVWAP(bars, anchor) {
+  if (anchor == null) anchor = 'utc';
   const out = new Array(bars.length).fill(null);
   let pv = 0;
   let vv = 0;
@@ -534,7 +615,7 @@ export function calcVWAP(bars) {
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i];
     const ms = toMs(b.time);
-    const d = Math.floor(ms / DAY);
+    const d = Math.floor((ms + zoneOffset(ms, anchor)) / DAY);
     if (d !== day) {
       day = d;
       pv = 0;
@@ -1099,7 +1180,9 @@ export const BUILTIN_INDICATORS = new Map(
     vwap: {
       kind: 'overlay',
       params: {},
-      compute: (bars) => calcVWAP(bars),
+      // `anchor` rides in on the params the chart builds, from its
+      // `vwap-anchor` attribute; absent, calcVWAP defaults to the UTC day.
+      compute: (bars, p) => calcVWAP(bars, p && p.anchor),
     },
     supertrend: {
       kind: 'overlay',

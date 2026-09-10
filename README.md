@@ -999,6 +999,32 @@ forwards Binance's `k.x` flag, so the signal lands at the close rather than
 one candle later. Historical corrections and backfilled candles never fire
 live alerts in either mode.
 
+### Timezone & VWAP sessions
+
+Axis labels and the crosshair readout use the viewer's timezone by default.
+Pin them with `timezone` — `local`, `utc`, or any IANA zone, DST included:
+
+```html
+<wick-chart timezone="Europe/Stockholm"></wick-chart>
+<wick-chart timezone="America/New_York"></wick-chart>
+```
+
+Day dividers and month/year ticks follow the chosen zone, so a "1 Feb" tick
+is 1 February *there*. An unrecognised zone falls back to UTC and warns once.
+
+VWAP's session boundary is deliberately **separate** from the display zone —
+changing the axis to Stockholm shouldn't silently re-anchor a BTC chart. It
+defaults to the UTC day (the crypto convention) and moves only when asked:
+
+```html
+<wick-chart indicators="vwap" vwap-anchor="America/New_York"></wick-chart>
+```
+
+`vwap-anchor` takes `utc` (default), `local`, an IANA zone, or a fixed offset
+in milliseconds. Equities, futures and FX rarely open at UTC midnight, so the
+default is right for crypto and wrong for most other markets — set it
+deliberately. `calcVWAP(bars, anchor)` takes the same values directly.
+
 ### Stats & measure
 
 `<wick-chart stats>` shows live statistics of the visible range — return %,

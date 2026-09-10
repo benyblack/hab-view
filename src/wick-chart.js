@@ -21,7 +21,7 @@
 import {
   clamp, isNum, numberFmt, fmtCompact, autoPrecision, niceStep, hexToRgba,
   FONT_STACK, axisFont, pillFont, roundRectPath,
-  TIME_STEPS, HOUR, DAY, toMs, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
+  TIME_STEPS, HOUR, DAY, toMs, zoneOffset, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
   positionPnl, positionPnlPct, checkAlertCross, computeStats, safeColor,
@@ -50,7 +50,7 @@ const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class
 
 class WickChart extends HTMLElementBase {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'co-view-name', 'brush', 'sonify', 'alert-evaluate'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'co-view-name', 'brush', 'sonify', 'alert-evaluate', 'timezone', 'vwap-anchor'];
     }
 
     constructor() {
@@ -252,6 +252,8 @@ class WickChart extends HTMLElementBase {
       // bar index known to be final — see _lastClosedIndex().
       this._alertEval = 'live';
       this._lastClosedIdx = -1;
+      this._tz = 'local';
+      this._vwapAnchor = 'utc';
 
       // server-side overlays (zones & levels)
       this._overlays = [];
@@ -415,6 +417,20 @@ class WickChart extends HTMLElementBase {
         // signals — it degrades to today's behaviour.
         case 'alert-evaluate':
           this._alertEval = val === 'close' ? 'close' : 'live';
+          break;
+        // Display zone for axis labels and the crosshair readout: 'local'
+        // (default), 'utc', or an IANA name. Deliberately does NOT re-anchor
+        // VWAP — the trading session is a separate question from how times
+        // are shown; see calcVWAP's `anchor`.
+        case 'timezone':
+          this._tz = val || 'local';
+          break;
+        // Session anchor for VWAP: 'utc' (default), 'local', an IANA zone, or
+        // a fixed offset in ms. Bumping the version drops the per-version
+        // indicator cache so the series recomputes on the next frame.
+        case 'vwap-anchor':
+          this._vwapAnchor = val || 'utc';
+          this._version++;
           break;
       }
       this._invalidate();
@@ -1409,7 +1425,9 @@ class WickChart extends HTMLElementBase {
       if (!this._cache.map[k]) {
         let res;
         try {
-          res = entry.def.compute(this._data, entry.params);
+          // the session anchor rides along for indicators that observe one
+          // (vwap); the rest ignore the extra key
+          res = entry.def.compute(this._data, { ...entry.params, anchor: this._vwapAnchor });
         } catch (err) {
           res = null;
         }
@@ -1591,6 +1609,11 @@ class WickChart extends HTMLElementBase {
      * the walk to those bars — used at deep zoom where bars are aggregated
      * into pixel columns (keeps this O(screen) instead of O(visible bars)).
      */
+    /** An instant shifted into the chart's display zone, for the formatters. */
+    _zt(t) {
+      return t + zoneOffset(t, this._tz);
+    }
+
     _timeTicks(i0, i1, sampleIdx) {
       const d = this._data;
       const sp = this._view.spacing;
@@ -1618,7 +1641,6 @@ class WickChart extends HTMLElementBase {
         }
       }
 
-      const tz = (t) => -new Date(t).getTimezoneOffset() * 60000;
       const ticks = [];
       let prevKey = null;
       // Labels are built lazily — only for bars that actually start a new step.
@@ -1626,30 +1648,32 @@ class WickChart extends HTMLElementBase {
       const visit = (i) => {
         if (i < 0 || i >= d.length) return;
         const t = d[i].time;
+        // shifted into the display zone once, then read with UTC getters
+        const zt = this._zt(t);
         let key;
         let label = null;
         if (stepMs != null) {
-          key = Math.floor((t + tz(t)) / stepMs);
+          key = Math.floor(zt / stepMs);
           if (prevKey !== null && key !== prevKey) {
             if (stepLabel === 'time') {
               const prevT = d[i - 1] ? d[i - 1].time : t;
-              const dayKey = Math.floor((t + tz(t)) / DAY);
-              const prevDay = Math.floor((prevT + tz(prevT)) / DAY);
-              label = dayKey !== prevDay ? fmtDay(t) : hhmm(t);
+              const dayKey = Math.floor(zt / DAY);
+              const prevDay = Math.floor(this._zt(prevT) / DAY);
+              label = dayKey !== prevDay ? fmtDay(zt) : hhmm(zt);
             } else {
-              const dt_ = new Date(t);
-              label = dt_.getDate() === 1 ? fmtMonth(t, dt_.getMonth() === 0) : fmtDay(t);
+              const dt_ = new Date(zt);
+              label = dt_.getUTCDate() === 1 ? fmtMonth(zt, dt_.getUTCMonth() === 0) : fmtDay(zt);
             }
           }
         } else if (monthStep) {
-          const dt_ = new Date(t);
-          key = Math.floor((dt_.getFullYear() * 12 + dt_.getMonth()) / monthStep);
+          const dt_ = new Date(zt);
+          key = Math.floor((dt_.getUTCFullYear() * 12 + dt_.getUTCMonth()) / monthStep);
           if (prevKey !== null && key !== prevKey) {
-            label = fmtMonth(t, dt_.getMonth() === 0 || monthStep > 1);
+            label = fmtMonth(zt, dt_.getUTCMonth() === 0 || monthStep > 1);
           }
         } else {
-          key = new Date(t).getFullYear();
-          if (prevKey !== null && key !== prevKey) label = fmtYear(t);
+          key = new Date(zt).getUTCFullYear();
+          if (prevKey !== null && key !== prevKey) label = fmtYear(zt);
         }
         if (label !== null) ticks.push({ x: this._xFor(i), label });
         prevKey = key;
@@ -2703,7 +2727,7 @@ class WickChart extends HTMLElementBase {
         }
 
         // time pill
-        const tLabel = fmtFull(d[h.index].time);
+        const tLabel = fmtFull(this._zt(d[h.index].time));
         ctx.font = pillFont();
         const tw = ctx.measureText(tLabel).width + 12;
         this._pill(
@@ -2774,7 +2798,7 @@ class WickChart extends HTMLElementBase {
         ctx.stroke();
         ctx.restore();
         if (gxVisible && this._data[g.index]) {
-          const tLabel = fmtFull(this._data[g.index].time);
+          const tLabel = fmtFull(this._zt(this._data[g.index].time));
           ctx.font = pillFont();
           const tw = ctx.measureText(tLabel).width + 12;
           this._pill(
