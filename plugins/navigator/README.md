@@ -1,5 +1,7 @@
 # wickchart-navigator
 
+[![npm](https://img.shields.io/npm/v/wickchart-navigator)](https://www.npmjs.com/package/wickchart-navigator)
+
 The range-slider strip for [wickchart](https://github.com/benyblack/wickchart),
 as an opt-in plugin layer — the most-missed TradingView affordance. A
 silhouette of the whole dataset docks at the bottom of the canvas with a

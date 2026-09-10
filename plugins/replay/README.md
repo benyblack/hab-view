@@ -1,5 +1,7 @@
 # wickchart-replay
 
+[![npm](https://img.shields.io/npm/v/wickchart-replay)](https://www.npmjs.com/package/wickchart-replay)
+
 Bar replay for [wickchart](https://github.com/benyblack/wickchart), as an
 opt-in plugin — the core stays replay-free. Zero dependencies, zero core
 changes: the whole engine runs on the public data API (`setData` + `update`).

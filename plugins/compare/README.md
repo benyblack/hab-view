@@ -1,5 +1,7 @@
 # wickchart-compare
 
+[![npm](https://img.shields.io/npm/v/wickchart-compare)](https://www.npmjs.com/package/wickchart-compare)
+
 Normalized multi-asset overlays for [wickchart](https://github.com/benyblack/wickchart),
 as an opt-in plugin layer — the core stays compare-free. Zero dependencies,
 zero core changes: the lines draw through the public layer API against their
