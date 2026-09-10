@@ -60,7 +60,7 @@ jobs:
             for(const m of s.matchAll(/(?:src|href)=\"(\.[^\"]+)\"/g)) refs.push(path.join(path.dirname(html),m[1]));
           }
           const uniq=[...new Set(refs)];
-          const missing=uniq.filter(p=>!fs.existsSync(path.join('site',p)));
+          const missing=uniq.map(p=>p.split('#')[0]).filter(p=>!fs.existsSync(path.join('site',p)));
           if(missing.length){console.error('Missing from site/:',missing);process.exit(1);}
           console.log('all',uniq.length,'local references resolve');
           "
