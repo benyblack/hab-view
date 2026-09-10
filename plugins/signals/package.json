@@ -1,0 +1,39 @@
+{
+  "name": "wickchart-signals",
+  "version": "0.1.0",
+  "description": "Candlestick pattern badges for wickchart — bullish/bearish engulfing, pin bars and inside bars as letter chips with crosshair hover explanations. Opt-in plugin, zero dependencies.",
+  "type": "module",
+  "main": "signals.mjs",
+  "module": "signals.mjs",
+  "exports": {
+    ".": "./signals.mjs",
+    "./core": "./core.mjs"
+  },
+  "files": [
+    "signals.mjs",
+    "core.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "patterns",
+    "signals",
+    "engulfing",
+    "pinbar",
+    "candlestick",
+    "trading",
+    "web-component",
+    "wickchart",
+    "canvas"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}
