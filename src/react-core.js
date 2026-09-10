@@ -107,7 +107,13 @@ export function applyChartProps(el, split) {
   }
   // The element exposes `data` as a getter-only accessor — feed it through
   // setData() (guarded by identity so unchanged arrays never re-ingest).
-  if (split.data != null && el.data !== split.data) {
+  // setData() normalizes into a *fresh* array, so `el.data` never matches
+  // what we passed in; the identity we compare against is tracked on the
+  // element, exactly as overlays do below. Comparing `el.data` instead would
+  // re-ingest on every render — which resets the viewport, since setData()
+  // sets `_needsFit` and clears the hover.
+  if (split.data != null && el.__wickDataRef !== split.data) {
+    el.__wickDataRef = split.data;
     if (typeof el.setData === 'function') el.setData(split.data);
     else el.data = split.data;
   }

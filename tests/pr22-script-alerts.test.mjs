@@ -111,7 +111,7 @@ test('addAlert compiles `when` predicates and rejects invalid ones', async () =>
   assert.match(src, /compileScript\(alert\.when\)/, 'when predicates are compiled (no eval)');
   assert.match(src, /predicateTrueSeries\(alert\.compiled/, 'evaluation goes through the truth series');
   assert.match(src, /scriptAlertStep\(a\.armed/, 'edge state machine drives firing');
-  assert.match(src, /price: bar\.close, when: a\.when/, 'scripted events carry a price + the source');
+  assert.match(src, /price: cur\.close, when: a\.when/, 'scripted events carry a price + the source');
   assert.match(src, /a\.fired \|\| !isNum\(a\.price\)/, 'scripted alerts draw no price line');
   // once:false re-fires: the armed flag must reset (re-arm) and not be removed
   assert.match(src, /a\.armed = step\.armed/);
@@ -119,7 +119,7 @@ test('addAlert compiles `when` predicates and rejects invalid ones', async () =>
 
 test('scripted alerts round-trip through getState/setState as plain objects', async () => {
   const src = read('src/wick-chart.js');
-  assert.match(src, /a\.when != null\s*\?\s*\{ id: a\.id, when: a\.when, once: a\.once \}/, 'getState serializes the when source (never the AST)');
+  assert.match(src, /a\.when != null\s*\?\s*\{ id: a\.id, when: a\.when, once: a\.once,/, 'getState serializes the when source (never the AST)');
   assert.match(src, /isNum\(a\.price\) \|\| typeof a\.when === 'string'/, 'setState accepts both alert kinds');
   assert.match(src, /compiled: compileScript\(a\.when\)/, 'setState recompiles on restore');
 });

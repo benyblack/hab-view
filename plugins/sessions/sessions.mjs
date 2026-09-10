@@ -145,7 +145,7 @@ export class SessionsLayer {
     if (!this._chart) return;
     let t = detail && detail.bar ? detail.bar.time : null;
     if (!isNum(t)) t = null;
-    else if (t < 1e12) t *= 1000;
+    else if (t < 1e11) t *= 1000; // same heuristic as the chart's toMs()
     const name = t == null ? null : this._nameAt(t);
     if (name !== this._hover) {
       this._hover = name;

@@ -3,7 +3,7 @@
 North star: **"TradingView-class usefulness inside a zero-dependency custom element."**
 Every feature must survive the test: *one tag, zero build step, sane defaults*.
 
-Current state (v0.2): candles/line/area, volume, SMA/EMA/BB overlays, RSI/MACD
+Current state (v1.6): candles/line/area, volume, SMA/EMA/BB overlays, RSI/MACD
 panes + custom indicator registry, history backfill, gap dividers, positions
 & alerts with live P&L, visible-range stats, measure tool, shareable URL
 state, crosshair + OHLC legend, zoom/pan/pinch/keyboard, streaming, theming,

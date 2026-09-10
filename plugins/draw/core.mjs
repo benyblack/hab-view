@@ -64,7 +64,7 @@ export function normalizeDrawings(list) {
       let t = Number(pt.t);
       const p = Number(pt.p);
       if (!isNum(t) || !isNum(p)) { ok = false; break; }
-      if (t < 1e12) t *= 1000; // seconds → ms, same heuristic as the chart
+      if (t < 1e11) t *= 1000; // seconds → ms, same heuristic as the chart's toMs()
       points.push({ t, p });
     }
     if (!ok) continue;

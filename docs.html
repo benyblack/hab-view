@@ -333,6 +333,7 @@ chart.<span class="attr">data</span>;             <span class="cmt">// getter �
           <tr><td><code>overlays</code></td><td>–</td><td>JSON array of zones &amp; levels — <a href="#overlays">details</a></td></tr>
           <tr><td><code>co-view</code></td><td>–</td><td>BroadcastChannel name: sync crosshair/markings across tabs</td></tr>
           <tr><td><code>sonify</code></td><td>off</td><td>Arrow keys play the chart as pitch (a11y)</td></tr>
+          <tr><td><code>alert-evaluate</code></td><td><code>live</code></td><td>Default alert evaluation: <code>live</code> (every tick) or <code>close</code> (final candles only) — <a href="#alert-evaluate">details</a></td></tr>
         </table>
         <p>* <code>indicators=""</code> disables everything, including volume.</p>
       </section>
@@ -551,6 +552,13 @@ chart.<span class="attr">addAlert</span>({ <span class="attr">when</span>: 'volu
 chart.<span class="attr">removeAlert</span>('a1');  chart.<span class="attr">clearAlerts</span>();
 chart.<span class="attr">addEventListener</span>('wick:alert', (e) =&gt; console.log(e.detail.id, e.detail.price));</pre></div>
         <p>Scripted events carry the triggering close as <code>price</code> plus the <code>when</code> source; <code>once: false</code> re-arms after the condition drops false again. Invalid predicates return <code>null</code> — never throw.</p>
+        <h3 id="alert-evaluate">Live vs closed-candle alerts <a class="anchor" href="#alert-evaluate">#</a></h3>
+        <p>By default alerts evaluate on <b>every update</b>, including the still-forming candle. That is what you want for a price line, but a technical signal can <i>repaint</i>: RSI crosses 30 mid-candle, the alert fires, price reverses, and the candle closes with RSI back above 30 — a signal that, in hindsight, never happened.</p>
+        <p>Set <code>evaluate: 'close'</code> to evaluate only candles that are final:</p>
+        <div class="codewrap"><pre class="code">chart.<span class="attr">addAlert</span>({ <span class="attr">when</span>: 'crossup(rsi(close,14), 30)', <span class="attr">evaluate</span>: 'close' });</pre></div>
+        <p>Or set the default for a whole chart, still overridable per alert:</p>
+        <div class="codewrap"><pre class="code">&lt;<span class="tag">wick-chart</span> <span class="attr">alert-evaluate</span>=<span class="str">"close"</span>&gt;&lt;/<span class="tag">wick-chart</span>&gt;</pre></div>
+        <p>A candle counts as final once a newer bar arrives, or as soon as the feed says so by passing <code>closed: true</code> to <code>update()</code> — which <code>&lt;wick-feed&gt;</code> does automatically from Binance's <code>k.x</code> flag, so the signal lands at the close rather than one candle later. Historical corrections and backfilled candles never fire live alerts in either mode.</p>
         <div class="demo-card">
           <div class="demo-head">
             <span class="t">Live</span><span class="spacer"></span>

@@ -206,6 +206,26 @@ export const MIN = 60 * SEC;
 export const HOUR = 60 * MIN;
 export const DAY = 24 * HOUR;
 
+/**
+ * Below this, a numeric timestamp is read as seconds. 1e11 is the year 5138
+ * in seconds but 1973-03-03 in milliseconds, so it sits in the widest quiet
+ * gap between the two ranges. (The old 1e12 cutoff was inside the plausible
+ * millisecond range and silently multiplied every ms timestamp before
+ * 2001-09-09 by 1000 — all pre-2001 equity/index/FX history.)
+ */
+const MS_CUTOFF = 1e11;
+
+/**
+ * Interpret a timestamp as milliseconds. Numbers may be seconds or ms, so
+ * some threshold is unavoidable; pass a `Date` for anything before 1973,
+ * which is unambiguous. Single source of truth — everything that reads a
+ * caller-supplied time goes through here.
+ * @param {number|Date} t
+ * @returns {number} milliseconds
+ */
+export const toMs = (t) =>
+  t instanceof Date ? t.getTime() : t < MS_CUTOFF ? t * 1000 : t;
+
 // Sub-day / day-aligned steps (ms), plus month/year handled separately.
 export const TIME_STEPS = [
   { ms: MIN, label: 'time' },
@@ -513,7 +533,7 @@ export function calcVWAP(bars) {
   let day = null;
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i];
-    const ms = b.time < 1e12 ? b.time * 1000 : b.time;
+    const ms = toMs(b.time);
     const d = Math.floor(ms / DAY);
     if (d !== day) {
       day = d;
@@ -1604,13 +1624,27 @@ function evalScriptCall(node, vars, n, bars) {
     case 'rsi': return calcRSI(clean, p);
     case 'hh':
     case 'll': {
+      // Sliding window in O(n) via a monotonic deque of indices. The naive
+      // nested loop was O(n*p), which a shared chart URL could weaponize:
+      // hh(close,50000) over 100k bars blocked the main thread for ~1.7s.
+      // A separate NaN count reproduces the old behaviour of propagating a
+      // warm-up gap through the whole window (Math.max/min do that for free,
+      // a deque does not).
       const out = new Array(n).fill(null);
-      for (let i = p - 1; i < n; i++) {
-        let v = clean[i];
-        for (let j = i - p + 1; j <= i; j++) {
-          v = name === 'hh' ? Math.max(v, clean[j]) : Math.min(v, clean[j]);
+      const isMax = name === 'hh';
+      const dq = []; // indices; their values decrease (hh) / increase (ll)
+      let nan = 0;
+      for (let i = 0; i < n; i++) {
+        const v = clean[i];
+        if (Number.isNaN(v)) nan++;
+        if (i >= p && Number.isNaN(clean[i - p])) nan--;
+        // drop values that can never win again while v is in the window
+        while (dq.length && (isMax ? clean[dq[dq.length - 1]] <= v : clean[dq[dq.length - 1]] >= v)) {
+          dq.pop();
         }
-        out[i] = v;
+        dq.push(i);
+        while (dq[0] < i - p + 1) dq.shift();
+        if (i >= p - 1) out[i] = nan > 0 ? NaN : clean[dq[0]];
       }
       return out;
     }
@@ -1714,6 +1748,20 @@ export function positionPnl(pos, price) {
   const dir = pos.side === 'short' ? -1 : 1;
   const qty = isNum(pos.qty) ? pos.qty : 1;
   return (price - pos.entry) * dir * qty;
+}
+
+/**
+ * Percent return of a position at `price` — the move per unit, so it does
+ * NOT scale with `qty` the way positionPnl() does. Deriving this by dividing
+ * positionPnl() by the entry price reports qty × the true return.
+ * @param {{side?: 'long'|'short', entry: number}} pos
+ * @param {number} price
+ * @returns {number} percent (10 means +10%)
+ */
+export function positionPnlPct(pos, price) {
+  if (!pos || !isNum(pos.entry) || !pos.entry || !isNum(price)) return 0;
+  const dir = pos.side === 'short' ? -1 : 1;
+  return (((price - pos.entry) * dir) / pos.entry) * 100;
 }
 
 /**
@@ -1942,9 +1990,8 @@ export function parseVolShading(val) {
  * Server-side overlays (zones & levels)
  * ------------------------------------------------------------------ */
 
-/** Normalize a timestamp to milliseconds (bar times and query times both
- *  auto-detect seconds — anything below 1e12 is treated as seconds). */
-const normMs = (t) => (t < 1e12 ? t * 1000 : t);
+/** Normalize a timestamp to milliseconds — see toMs(). */
+const normMs = toMs;
 
 /**
  * Index of the last bar whose time is <= `t` (binary search). Clamps to
