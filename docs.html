@@ -177,6 +177,7 @@
     <span class="brand-tag">docs</span>
     <nav>
       <a href="./">Home</a>
+      <a href="./plugins.html">Plugins</a>
       <a href="./demo/">Demo</a>
       <a href="./demo/react.html">React demo</a>
       <a href="https://github.com/benyblack/wickchart">GitHub</a>
@@ -953,7 +954,7 @@ chart.addEventListener(<span class="str">'wick:drawings'</span>, (e) =&gt; save(
 chart.<span class="attr">addEventListener</span>(<span class="str">'wick:drawings'</span>, (e) =&gt; save(e.detail.drawings));
 chart.<span class="attr">addEventListener</span>(<span class="str">'wick:signals'</span>,  (e) =&gt; status.textContent = e.detail?.label ?? <span class="str">''</span>);
 nav.<span class="attr">detach</span>();  <span class="cmt">// everything detaches cleanly — the core never knew it was there</span></pre></div>
-        <div class="note">Version notes: the navigator and the tape build on the 1.6 <code>insetBottom</code> dock hook (peer: wickchart ≥ 1.6); everything else targets ≥ 1.4. The navigator and the tape share the single bottom dock — attach one or the other. Each package's README documents its full API, and every package is size-budgeted in this repo's CI, so none of them can silently bloat.</div>
+        <div class="note">Version notes: the navigator and the tape build on the 1.6 <code>insetBottom</code> dock hook (peer: wickchart ≥ 1.6); everything else targets ≥ 1.4. The navigator and the tape share the single bottom dock — attach one or the other. Every one of these packages has its own chapter with a live playground on the <a href="./plugins.html">Plugins hub</a>, and each is size-budgeted in this repo's CI, so none of them can silently bloat.</div>
       </section>
 
       <section id="perf">
