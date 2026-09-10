@@ -872,6 +872,28 @@ Pair a `load` with `wickchart-alerts-plus`'s `sync()` if you also persist
 alerts, since a layout load replaces the chart's alert list. Peer
 dependency: wickchart ≥ 1.4.
 
+### Signals — the `wickchart-signals` plugin
+
+Candlestick pattern badges (~4 KB gz, own CI budget): bullish/bearish
+**engulfing**, **pin bars** (hammer / shooting star) and **inside bars**
+drawn as direction-colored letter chips above/below the bar. Hover a badged
+bar and the plugin draws the explanation ("Bullish engulfing") and fires
+`wick:signals` — the same passive crosshair bridge as wickchart-sessions,
+so badges never claim a pointer gesture.
+
+```js
+npm install wickchart wickchart-signals   // signals is a separate opt-in package
+
+import { attachSignals } from 'wickchart-signals';
+const signals = attachSignals(chart);
+signals.setKinds(['engulfing', 'pinbar']); // subset (default: all three)
+signals.setLabels(false);                  // hover explanations off
+chart.addEventListener('wick:signals', (e) => status.textContent = e.detail?.label || '');
+```
+
+Detection is O(n), cached per dataset and kind subset — pan/zoom are pure
+repaints. Peer dependency: wickchart ≥ 1.4.
+
 ## Methods
 
 | Method                          | Description                                      |

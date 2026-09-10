@@ -8,6 +8,7 @@ import { attachCompare } from '../plugins/compare/compare.mjs';
 import { attachNavigator } from '../plugins/navigator/navigator.mjs';
 import { attachAlertsPlus } from '../plugins/alerts-plus/alerts-plus.mjs';
 import { attachLayouts } from '../plugins/layouts/layouts.mjs';
+import { attachSignals } from '../plugins/signals/signals.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -915,6 +916,24 @@ btnNavigator.addEventListener('click', () => {
     btnNavigator.setAttribute('aria-pressed', 'true');
     btnNavigator.classList.add('active');
   }
+});
+
+/* ---------------- pattern signals (wickchart-signals plugin layer) ---------------- */
+
+const signalsPlugin = attachSignals(chart);
+const btnSignals = document.getElementById('btn-signals');
+btnSignals.addEventListener('click', () => {
+  const on = !btnSignals.classList.contains('active');
+  if (on) signalsPlugin.setKinds(['engulfing', 'pinbar', 'inside']);
+  else signalsPlugin.setKinds([]);
+  btnSignals.setAttribute('aria-pressed', String(on));
+  btnSignals.classList.toggle('active', on);
+});
+// the pattern under the crosshair (null = none)
+chart.addEventListener('wick:signals', (e) => {
+  btnSignals.title = e.detail && e.detail.label
+    ? `Pattern signals (wickchart-signals plugin) — under crosshair: ${e.detail.label}`
+    : 'Pattern signals (wickchart-signals plugin) — bullish/bearish engulfing, pin bars and inside bars as badges; hover one for the explanation';
 });
 
 /* ---------------- persistent alerts (wickchart-alerts-plus plugin) ---------------- */
