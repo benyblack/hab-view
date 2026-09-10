@@ -556,9 +556,15 @@ chart.<span class="attr">addEventListener</span>(<span class="str">'wick:tape'</
       const draw = attachDrawings(c, { magnet: true });
       let magnet = true;
       seg($('draw-seg'), [
-        ['select', 'Select'], ['trendline', 'Trendline'], ['level', 'Level'],
+        ['select', 'Select'], ['trendline', 'Trendline'], ['hline', 'Level'],
         ['rect', 'Rect'], ['fib', 'Fib'], ['text', 'Text'],
-      ], 'select', (v) => { draw.setTool(v === 'select' ? null : v); foot.textContent = v === 'select' ? 'select mode — click a drawing to move/re-anchor' : v + ' armed — drag on the chart'; });
+      ], 'select', (v) => {
+        draw.setTool(v === 'select' ? null : v);
+        foot.textContent =
+          v === 'select' ? 'select mode — click a drawing to move/re-anchor'
+          : v === 'hline' || v === 'text' ? v + ' armed — click to place'
+          : v + ' armed — drag on the chart';
+      });
       mkBtn($('draw-tools'), 'Magnet', 'toggle magnet snapping', (e) => {
         magnet = !magnet;
         draw.setMagnet(magnet);
