@@ -24,7 +24,7 @@ import {
   TIME_STEPS, HOUR, DAY, toMs, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
-  positionPnl, checkAlertCross, computeStats, safeColor,
+  positionPnl, positionPnlPct, checkAlertCross, computeStats, safeColor,
   SERIES_TYPES, calcHeikinAshi, buildColumns, computeVolumeProfile,
   calcRSI, detectAnnotations, priceToFreq,
   calcRealizedVol, volRegimeBands, percentileOfSorted, parseVolShading,
@@ -2935,7 +2935,7 @@ class WickChart extends HTMLElementBase {
       let html = '';
       for (const p of this._positions) {
         const pnl = positionPnl(p, price);
-        const pct = p.entry ? (pnl / p.entry) * 100 : 0;
+        const pct = positionPnlPct(p, price);
         const cls = pnl >= 0 ? 'up' : 'dn';
         const qtyStr = p.qty != null ? ' ' + p.qty : '';
         html +=

@@ -69,6 +69,90 @@ test('a once:true price alert fires once and is removed', () => {
   assert.equal(chart._alerts.length, 0, 'a once-alert drops out of the list');
 });
 
+/* --------------------- WickScript window performance --------------------- */
+
+test('hh/ll match a naive rolling window, including warm-up gaps', async () => {
+  const { evalScript } = await import('../src/core.js');
+  const closes = [5, 3, 9, 9, 1, 7, 4, 4, 8, 2, 6];
+  const bars = mkBars(closes);
+  const naive = (vals, p, pick) =>
+    vals.map((_, i) => (i < p - 1 ? NaN : vals.slice(i - p + 1, i + 1).reduce(pick)));
+
+  for (const p of [1, 2, 3, 5, closes.length, closes.length + 3]) {
+    assert.deepEqual(
+      evalScript(`hh(close,${p})`, bars),
+      naive(closes, p, (a, b) => Math.max(a, b)),
+      `hh window ${p}`
+    );
+    assert.deepEqual(
+      evalScript(`ll(close,${p})`, bars),
+      naive(closes, p, (a, b) => Math.min(a, b)),
+      `ll window ${p}`
+    );
+  }
+});
+
+test('a window containing a warm-up gap stays NaN', async () => {
+  const { evalScript } = await import('../src/core.js');
+  const bars = mkBars([1, 2, 3, 4, 5, 6]);
+  // sma(close,3) is NaN for the first two bars; hh over it must not report
+  // a max computed from a partially-warm window
+  const v = evalScript('hh(sma(close,3), 3)', bars);
+  assert.ok(Number.isNaN(v[2]), 'window still overlaps the warm-up gap');
+  assert.ok(Number.isNaN(v[3]), 'window still overlaps the warm-up gap');
+  assert.equal(v[4], 4, 'first fully-warm window'); // sma over [2,3,4]=3, [3,4,5]=4 → max 4
+});
+
+test('a large rolling window stays linear, not quadratic', async () => {
+  const { evalScript, compileScript } = await import('../src/core.js');
+  const n = 100000;
+  const bars = mkBars(Array.from({ length: n }, (_, i) => 100 + Math.sin(i) * 10));
+  const compiled = compileScript(`hh(close,${n / 2})`);
+
+  const t0 = performance.now();
+  evalScript(compiled, bars);
+  const ms = performance.now() - t0;
+
+  // O(n*p) here is ~5e9 comparisons (~1.6s measured). O(n) is a couple of ms,
+  // so 150ms sits an order of magnitude clear of both outcomes.
+  assert.ok(ms < 150, `hh over a 50k window took ${ms.toFixed(0)}ms — expected linear time`);
+});
+
+/* ------------------------- position P&L percent ------------------------- */
+
+test('percent return is independent of position size', async () => {
+  const { positionPnlPct } = await import('../src/core.js');
+  // entry 100 → price 110 is +10%, however many units you hold
+  for (const qty of [1, 10, 0.25]) {
+    assert.equal(positionPnlPct({ side: 'long', entry: 100, qty }, 110), 10, `qty ${qty}`);
+  }
+});
+
+test('percent return is signed by side', async () => {
+  const { positionPnlPct } = await import('../src/core.js');
+  assert.equal(positionPnlPct({ side: 'short', entry: 100, qty: 3 }, 90), 10, 'short profits as price falls');
+  assert.equal(positionPnlPct({ side: 'long', entry: 100, qty: 3 }, 90), -10, 'long loses as price falls');
+});
+
+test('percent return is 0 for an unusable entry', async () => {
+  const { positionPnlPct } = await import('../src/core.js');
+  assert.equal(positionPnlPct({ side: 'long', entry: 0 }, 110), 0);
+  assert.equal(positionPnlPct(null, 110), 0);
+});
+
+test('the HUD chip shows monetary P&L and percent return separately', () => {
+  const chart = makeChart(mkBars([100, 110]));
+  chart._positions = [{ id: 'p1', side: 'long', entry: 100, qty: 10 }];
+  chart._poss = { innerHTML: '' };
+  chart._precision = 2;
+  chart._prec = P._prec.bind(chart);
+  P._updateHud.call(chart);
+
+  const html = chart._poss.innerHTML;
+  assert.match(html, /\+100\b/, 'monetary P&L scales with the 10 units held');
+  assert.match(html, /\+10\.00%/, 'percent return does not');
+});
+
 /* --------------------- seconds vs milliseconds --------------------- */
 
 test('a pre-2001 millisecond timestamp survives normalization', () => {
