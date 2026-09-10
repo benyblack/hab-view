@@ -280,6 +280,17 @@ class WickChart extends HTMLElementBase {
         this.fit();
       };
       this._onKey = (e) => this._keydown(e);
+      // devicePixelRatio changes without the CSS box changing size — dragging
+      // the window to a monitor with a different ratio, or a browser zoom
+      // that lands on the same layout width. ResizeObserver stays silent for
+      // those, so the canvas would keep its old backing store and render
+      // soft until something else forced a resize. A `resolution` media
+      // query is the only event for it; it only ever matches the ratio it
+      // was created with, so each change re-arms a fresh one.
+      this._onDprChange = () => {
+        this._watchDpr();
+        this._invalidate();
+      };
     }
 
     connectedCallback() {
@@ -307,6 +318,7 @@ class WickChart extends HTMLElementBase {
         document.fonts.ready.then(() => this._invalidate()).catch(() => {});
       }
       if (this._coviewName) this._setupCoView();
+      this._watchDpr();
       this._invalidate();
     }
 
@@ -331,6 +343,7 @@ class WickChart extends HTMLElementBase {
       }
       clearTimeout(this._ghostTimer);
       if (this._ro) this._ro.disconnect();
+      this._unwatchDpr();
       const cv = this._canvas;
       cv.removeEventListener('pointerdown', this._onPointerDown);
       cv.removeEventListener('pointermove', this._onPointerMove);
@@ -341,6 +354,21 @@ class WickChart extends HTMLElementBase {
       cv.removeEventListener('dblclick', this._onDbl);
       this.removeEventListener('keydown', this._onKey);
       if (this._raf) cancelAnimationFrame(this._raf), (this._raf = 0);
+    }
+
+    /** (Re)arm the devicePixelRatio watcher for the current ratio. */
+    _watchDpr() {
+      this._unwatchDpr();
+      if (typeof matchMedia !== 'function') return;
+      const dpr = window.devicePixelRatio || 1;
+      this._dprMq = matchMedia(`(resolution: ${dpr}dppx)`);
+      this._dprMq.addEventListener('change', this._onDprChange);
+    }
+
+    _unwatchDpr() {
+      if (!this._dprMq) return;
+      this._dprMq.removeEventListener('change', this._onDprChange);
+      this._dprMq = null;
     }
 
     attributeChangedCallback(name, _old, val) {

@@ -1129,12 +1129,54 @@ column, and an offscreen layer so hover only repaints the crosshair.
 ## Architecture notes
 
 - Single ES module, Custom Element + Shadow DOM, Canvas 2D with
-  devicePixelRatio scaling and rAF-batched invalidation
+  devicePixelRatio scaling and rAF-batched invalidation. The ratio is watched
+  with a `resolution` media query, so moving a window between monitors
+  re-renders at the new resolution rather than staying soft
 - Only visible bars are drawn; indicator series are computed lazily and cached
   per data version (prefix-sum SMA, Wilder RSI)
 - Time axis picks tick steps from bar interval (minutes → months) and labels
   day/month boundaries like a pro terminal
 - No dependencies, no build step required — but it bundles/tree-shakes fine
+
+## Tests
+
+Two suites, and they answer different questions.
+
+```bash
+npm test          # Node: pure functions, indicator maths, parsing, plugins
+npm run test:e2e  # Playwright: the chart in a real browser
+```
+
+`npm test` is the fast one and covers the bulk of the library. What it cannot
+reach is anything that only exists once a browser is involved: custom-element
+upgrade, a real canvas, wheel/pointer/touch input, `devicePixelRatio`,
+`ResizeObserver`, and React re-renders against a live DOM node. Bugs have
+shipped in exactly that gap — a React parent re-render used to silently reset
+the user's zoom, and a chart moved to a monitor with a different pixel ratio
+kept rendering at the old resolution. Both are covered in `e2e/` now.
+
+The browser suite serves the repository over a small dependency-free static
+server (`e2e/server.mjs`) and loads the library from source, so it tests the
+files that ship rather than a build artifact. The React fixture pulls React
+from esm.sh, the same way `demo/react.html` does.
+
+**Running it locally.** `npm run test:e2e` downloads Playwright's bundled
+Chromium the first time. If that CDN is blocked on your machine, point the
+suite at a browser you already have:
+
+```bash
+WICK_E2E_CHANNEL=chrome npm run test:e2e     # or msedge
+```
+
+**Visual regression** is opt-in. Canvas output is not pixel-identical across
+operating systems, so a committed baseline from one machine red-lights
+everyone else; the rest of the suite compares the chart against *itself*
+instead (repaint X, assert only what should have moved did). To gate on real
+screenshots, generate baselines on the platform that will run them:
+
+```bash
+WICK_E2E_VISUAL=1 npm run test:e2e -- --update-snapshots
+```
 
 ## Roadmap ideas
 

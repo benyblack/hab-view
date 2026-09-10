@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>wick-chart react e2e fixture</title>
+  <style>
+    html, body { margin: 0; background: #0b0d12; color: #e6edf3; }
+    #box { width: 900px; height: 460px; }
+  </style>
+  <!-- React is not bundled anywhere in this repo; the shipped demo loads it
+       from esm.sh and this fixture follows it, so the suite exercises the
+       same path a consumer does. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19",
+        "react-dom/client": "https://esm.sh/react-dom@19/client?external=react"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    import { createElement as h, useState } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { WickChart } from '/src/react.js';
+    import { makeBars, settle } from './bars.js';
+
+    window.makeBars = makeBars;
+    window.settle = settle;
+    window.events = { range: [], alert: [], crosshair: [] };
+    window.renders = 0;
+
+    function App() {
+      const [bars, setBars] = useState(() => makeBars());
+      // An unrelated piece of state: bumping it re-renders the tree without
+      // changing a single chart prop — the exact shape of a parent re-render
+      // in a real app.
+      const [tick, setTick] = useState(0);
+
+      window.renders++;
+      window.setBars = setBars;
+      window.bump = () => setTick((t) => t + 1);
+
+      return h(
+        'div',
+        null,
+        h('span', { id: 'tick' }, String(tick)),
+        h(
+          'div',
+          { id: 'box' },
+          h(WickChart, {
+            id: 'chart',
+            type: 'candles',
+            data: bars,
+            onRange: (d) => window.events.range.push(d),
+            onAlert: (d) => window.events.alert.push(d),
+            style: { width: '100%', height: '100%' },
+          })
+        )
+      );
+    }
+
+    createRoot(document.getElementById('root')).render(h(App));
+
+    // Wait for the element to exist and paint before the specs touch it.
+    await new Promise((r) => {
+      const wait = () => (document.getElementById('chart') ? r() : requestAnimationFrame(wait));
+      wait();
+    });
+    window.chart = document.getElementById('chart');
+    await settle();
+    window.ready = true;
+  </script>
+</body>
+</html>
