@@ -48,6 +48,11 @@ const LAYOUTS_FILES = ['plugins/layouts/layouts.mjs'];
 const SIGNALS_BUDGET_GZ = 5 * 1024;
 const SIGNALS_FILES = ['plugins/signals/core.mjs', 'plugins/signals/signals.mjs'];
 
+// tape: print normalization + tick rule + trades→bars + the docked strip
+// (landed at 4.6 KB gz — display-only layer, no pointer machinery)
+const TAPE_BUDGET_GZ = 6 * 1024;
+const TAPE_FILES = ['plugins/tape/core.mjs', 'plugins/tape/tape.mjs'];
+
 const gz = (f) => gzipSync(readFileSync(f)).length;
 
 test('main entry stays under the gzip budget', () => {
@@ -174,5 +179,19 @@ test('wickchart-signals plugin stays under its (smaller) gzip budget', () => {
   assert.ok(
     total <= SIGNALS_BUDGET_GZ,
     `wickchart-signals is ${(total / 1024).toFixed(1)} KB gz, budget is ${SIGNALS_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
+  );
+});
+
+test('wickchart-tape plugin stays under its (smaller) gzip budget', () => {
+  let total = 0;
+  const parts = [];
+  for (const f of TAPE_FILES) {
+    const n = gz(f);
+    total += n;
+    parts.push(`${f}: ${(n / 1024).toFixed(1)} KB gz`);
+  }
+  assert.ok(
+    total <= TAPE_BUDGET_GZ,
+    `wickchart-tape is ${(total / 1024).toFixed(1)} KB gz, budget is ${TAPE_BUDGET_GZ / 1024} KB\n  ${parts.join('\n  ')}`
   );
 });

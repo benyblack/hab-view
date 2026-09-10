@@ -1,0 +1,38 @@
+{
+  "name": "wickchart-tape",
+  "version": "0.1.0",
+  "description": "Time & sales for wickchart — a live trade-print strip docked below the chart, with tick-rule side inference and trades→bars aggregation. Zero dependencies.",
+  "type": "module",
+  "main": "tape.mjs",
+  "module": "tape.mjs",
+  "exports": {
+    ".": "./tape.mjs",
+    "./core": "./core.mjs"
+  },
+  "files": [
+    "tape.mjs",
+    "core.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "chart",
+    "charting",
+    "tape",
+    "time-and-sales",
+    "trades",
+    "order-flow",
+    "trading",
+    "web-component",
+    "wickchart",
+    "canvas"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wickchart": ">=1.6.0"
+  },
+  "peerDependenciesMeta": {
+    "wickchart": {
+      "optional": true
+    }
+  }
+}

@@ -9,6 +9,7 @@ import { attachNavigator } from '../plugins/navigator/navigator.mjs';
 import { attachAlertsPlus } from '../plugins/alerts-plus/alerts-plus.mjs';
 import { attachLayouts } from '../plugins/layouts/layouts.mjs';
 import { attachSignals } from '../plugins/signals/signals.mjs';
+import { attachTape } from '../plugins/tape/tape.mjs';
 import {
   genSynthetic,
   makeSynthStream,
@@ -912,6 +913,7 @@ btnNavigator.addEventListener('click', () => {
     btnNavigator.setAttribute('aria-pressed', 'false');
     btnNavigator.classList.remove('active');
   } else {
+    if (tapePlugin) btnTape.click(); // the bottom dock fits one strip
     navPlugin = attachNavigator(chart);
     btnNavigator.setAttribute('aria-pressed', 'true');
     btnNavigator.classList.add('active');
@@ -934,6 +936,70 @@ chart.addEventListener('wick:signals', (e) => {
   btnSignals.title = e.detail && e.detail.label
     ? `Pattern signals (wickchart-signals plugin) — under crosshair: ${e.detail.label}`
     : 'Pattern signals (wickchart-signals plugin) — bullish/bearish engulfing, pin bars and inside bars as badges; hover one for the explanation';
+});
+
+/* ---------------- time & sales (wickchart-tape plugin layer) ---------------- */
+
+const btnTape = document.getElementById('btn-tape');
+let tapePlugin = null;
+let tapeTimer = 0;
+let tapePrice = 0;
+
+function seedTape() {
+  const d = chart.data;
+  if (!d.length) return;
+  tapePrice = d[d.length - 1].close;
+  const now = Date.now();
+  let p = tapePrice * 0.999;
+  const back = [];
+  for (let i = 40; i > 0; i--) {
+    p += (Math.random() - 0.48) * tapePrice * 0.0004;
+    back.push({
+      time: now - i * 1500,
+      price: +p.toFixed(2),
+      size: Math.random() > 0.92 ? Math.round(30 + Math.random() * 90) : +(0.05 + Math.random() * 3).toFixed(2),
+    });
+  }
+  tapePlugin.set(back);
+}
+
+// synthetic print stream — random-walks around the live chart's last close
+function tapeTick() {
+  const d = chart.data;
+  if (!d.length) return;
+  const drift = (Math.random() - 0.5) * tapePrice * 0.0006;
+  tapePrice += drift;
+  const k = 1 + Math.floor(Math.random() * 3);
+  const now = Date.now();
+  let p = tapePrice - drift;
+  const prints = [];
+  for (let i = 0; i < k; i++) {
+    p += drift / k;
+    prints.push({
+      time: now - (k - i) * 40,
+      price: +p.toFixed(2),
+      size: Math.random() > 0.9 ? Math.round(25 + Math.random() * 90) : +(0.05 + Math.random() * 3).toFixed(2),
+    });
+  }
+  tapePlugin.push(prints);
+}
+
+btnTape.addEventListener('click', () => {
+  if (tapePlugin) {
+    clearInterval(tapeTimer);
+    tapePlugin.detach();
+    tapePlugin = null;
+    btnTape.setAttribute('aria-pressed', 'false');
+    btnTape.classList.remove('active');
+    return;
+  }
+  if (navPlugin) btnNavigator.click(); // the bottom dock fits one strip
+  tapePlugin = attachTape(chart, { bigSize: 50 });
+  seedTape();
+  tapeTimer = setInterval(tapeTick, 450);
+  btnTape.setAttribute('aria-pressed', 'true');
+  btnTape.classList.add('active');
+  toast('Trade tape docked — prints are synthetic here; feed real ones via tape.push().');
 });
 
 /* ---------------- persistent alerts (wickchart-alerts-plus plugin) ---------------- */
