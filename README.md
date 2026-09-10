@@ -896,6 +896,30 @@ chart.addEventListener('wick:signals', (e) => status.textContent = e.detail?.lab
 Detection is O(n), cached per dataset and kind subset — pan/zoom are pure
 repaints. Peer dependency: wickchart ≥ 1.4.
 
+### Tape — the `wickchart-tape` plugin
+
+Time & sales (~4.6 KB gz, own CI budget): a live trade-print strip docked at
+the bottom of the canvas through the `insetBottom` hook — `time · price ·
+size` rows colored by side with proportional size bars, oversized prints
+highlighted. Display-only: it never claims a pointer gesture. Prints carry
+an optional side; without one the plugin applies the classic **tick rule**
+(uptick → buy, downtick → sell), carried continuously across pushes. The
+same stream drives the chart: `chart.setData(tape.toBars(60000))`.
+
+```js
+npm install wickchart wickchart-tape   // tape is a separate opt-in package
+
+import { attachTape } from 'wickchart-tape';
+const tape = attachTape(chart, { rows: 7, bigSize: 50 });
+socket.onmessage = (m) => tape.push(m.trades); // single print or batch
+tape.setRows(4); tape.hide(); tape.detach();   // rows 3–8; hide frees the dock
+chart.addEventListener('wick:tape', (e) => status.textContent = e.detail.total + ' prints');
+```
+
+Keeps the newest 500 prints. Peer dependency: wickchart ≥ 1.6 (the dock
+hook); shares the bottom strip with wickchart-navigator, so attach one or
+the other.
+
 ## Methods
 
 | Method                          | Description                                      |
