@@ -13,7 +13,10 @@ const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const OPS = new Set(['ratio', 'diff']);
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 
-const toMs = (t) => (t < 1e12 ? t * 1000 : t);
+// 1e11 = year 5138 in seconds, 1973-03-03 in ms — same heuristic as the
+// chart's toMs(). (1e12 sat inside the plausible ms range and rescaled
+// every pre-2001 timestamp.)
+const toMs = (t) => (t < 1e11 ? t * 1000 : t);
 
 /**
  * Close/value pairs [[ms, v], …] sorted by time; null when nothing valid.

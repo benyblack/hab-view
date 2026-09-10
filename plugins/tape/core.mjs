@@ -28,7 +28,7 @@ export function normalizeTrades(list) {
     const size = Number(raw.size);
     if (!isNum(time) || !isNum(price) || price <= 0) continue;
     if (!isNum(size) || size <= 0) continue;
-    if (time < 1e12) time *= 1000; // seconds → ms, same heuristic as the chart
+    if (time < 1e11) time *= 1000; // seconds → ms, same heuristic as the chart's toMs()
     let side = raw.side;
     if (side === 'b') side = 'buy';
     else if (side === 's') side = 'sell';

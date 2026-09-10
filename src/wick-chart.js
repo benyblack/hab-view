@@ -21,7 +21,7 @@
 import {
   clamp, isNum, numberFmt, fmtCompact, autoPrecision, niceStep, hexToRgba,
   FONT_STACK, axisFont, pillFont, roundRectPath,
-  TIME_STEPS, HOUR, DAY, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
+  TIME_STEPS, HOUR, DAY, toMs, hhmm, fmtDay, fmtMonth, fmtYear, fmtFull,
   THEMES, mergeOlderData, detectGaps,
   parseIndicators, normalizeIndicatorResult, BUILTIN_INDICATORS,
   positionPnl, checkAlertCross, computeStats, safeColor,
@@ -508,7 +508,11 @@ class WickChart extends HTMLElementBase {
       if (!b) return;
       const d = this._data;
       const last = d[d.length - 1];
-      this._checkAlerts(last ? last.close : NaN, b);
+      const prevClose = last ? last.close : NaN;
+      // Only the front of the series is a live signal. A historical
+      // correction or a backfilled candle must never be compared against the
+      // latest price — that would fire an alert on a stale bar.
+      let live = true;
       if (!last || b.time > last.time) {
         d.push(b);
         if (d.length > 1) this._computeDt();
@@ -516,6 +520,7 @@ class WickChart extends HTMLElementBase {
         d[d.length - 1] = b;
       } else {
         // out-of-order / backfill: replace matching or insert
+        live = false;
         let i = d.length - 1;
         while (i >= 0 && d[i].time > b.time) i--;
         if (i >= 0 && d[i].time === b.time) d[i] = b;
@@ -523,6 +528,10 @@ class WickChart extends HTMLElementBase {
         this._computeDt();
       }
       this._version++;
+      // Alerts run after the dataset AND the version are updated, so scripted
+      // predicates evaluate over the bar that just arrived rather than
+      // re-reading the previous version's memoized series.
+      if (live) this._checkAlerts(prevClose, b);
       if (this._hover && this._hover.index >= d.length) this._hover = null;
       this._updateAria();
       this._invalidate();
@@ -1084,6 +1093,10 @@ class WickChart extends HTMLElementBase {
     _checkAlerts(prevClose, bar) {
       if (!this._alerts.length) return;
       for (const a of [...this._alerts]) {
+        // `fired` means "spent forever" — it is only ever set on `once`
+        // alerts. Repeating (once:false) alerts re-fire on every edge:
+        // price alerts are edge-triggered by checkAlertCross(), scripted
+        // ones by the armed/scriptAlertStep() latch below.
         if (a.fired) continue;
         if (a.when != null) {
           const series = this._predicateCache(a);
@@ -1091,7 +1104,7 @@ class WickChart extends HTMLElementBase {
           const step = scriptAlertStep(a.armed, curTrue);
           a.armed = step.armed;
           if (step.fire) {
-            a.fired = true;
+            if (a.once) a.fired = true;
             this._fire('alert', { id: a.id, price: bar.close, when: a.when, bar });
             if (a.once) this._alerts = this._alerts.filter((x) => x !== a);
           }
@@ -1099,7 +1112,7 @@ class WickChart extends HTMLElementBase {
         }
         if (!isNum(prevClose)) continue;
         if (checkAlertCross(a, prevClose, bar.close)) {
-          a.fired = true;
+          if (a.once) a.fired = true;
           this._fire('alert', { id: a.id, price: a.price, bar });
           if (a.once) this._alerts = this._alerts.filter((x) => x !== a);
         }
@@ -1147,13 +1160,14 @@ class WickChart extends HTMLElementBase {
     }
 
     static _timeToMs(t) {
-      return isNum(t) ? (t < 1e12 ? t * 1000 : t) : Date.now();
+      if (t instanceof Date) return t.getTime();
+      return isNum(t) ? toMs(t) : Date.now();
     }
 
     static _normBar(b) {
       if (!b) return null;
       const t = b.time != null ? b.time : b.t;
-      if (!isNum(t)) return null;
+      if (!isNum(t) && !(t instanceof Date)) return null;
       const time = WickChart._timeToMs(t);
       const close = isNum(b.close) ? b.close : isNum(b.value) ? b.value : NaN;
       if (!isNum(close)) return null;
@@ -3093,7 +3107,7 @@ class WickChart extends HTMLElementBase {
       const ly = this._ly;
       const d = this._data;
       if (!ly || !d.length || !isNum(time)) return null;
-      const t = time < 1e12 ? time * 1000 : time;
+      const t = toMs(time);
       const last = d.length - 1;
       if (t >= d[last].time) {
         return this._xFor(last + (t - d[last].time) / (this._dt || HOUR));

@@ -206,6 +206,26 @@ export const MIN = 60 * SEC;
 export const HOUR = 60 * MIN;
 export const DAY = 24 * HOUR;
 
+/**
+ * Below this, a numeric timestamp is read as seconds. 1e11 is the year 5138
+ * in seconds but 1973-03-03 in milliseconds, so it sits in the widest quiet
+ * gap between the two ranges. (The old 1e12 cutoff was inside the plausible
+ * millisecond range and silently multiplied every ms timestamp before
+ * 2001-09-09 by 1000 — all pre-2001 equity/index/FX history.)
+ */
+const MS_CUTOFF = 1e11;
+
+/**
+ * Interpret a timestamp as milliseconds. Numbers may be seconds or ms, so
+ * some threshold is unavoidable; pass a `Date` for anything before 1973,
+ * which is unambiguous. Single source of truth — everything that reads a
+ * caller-supplied time goes through here.
+ * @param {number|Date} t
+ * @returns {number} milliseconds
+ */
+export const toMs = (t) =>
+  t instanceof Date ? t.getTime() : t < MS_CUTOFF ? t * 1000 : t;
+
 // Sub-day / day-aligned steps (ms), plus month/year handled separately.
 export const TIME_STEPS = [
   { ms: MIN, label: 'time' },
@@ -513,7 +533,7 @@ export function calcVWAP(bars) {
   let day = null;
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i];
-    const ms = b.time < 1e12 ? b.time * 1000 : b.time;
+    const ms = toMs(b.time);
     const d = Math.floor(ms / DAY);
     if (d !== day) {
       day = d;
@@ -1942,9 +1962,8 @@ export function parseVolShading(val) {
  * Server-side overlays (zones & levels)
  * ------------------------------------------------------------------ */
 
-/** Normalize a timestamp to milliseconds (bar times and query times both
- *  auto-detect seconds — anything below 1e12 is treated as seconds). */
-const normMs = (t) => (t < 1e12 ? t * 1000 : t);
+/** Normalize a timestamp to milliseconds — see toMs(). */
+const normMs = toMs;
 
 /**
  * Index of the last bar whose time is <= `t` (binary search). Clamps to

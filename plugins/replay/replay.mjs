@@ -244,7 +244,8 @@ export class Replay {
     }
     const n = Number(when);
     if (!Number.isFinite(n)) return def;
-    if (Math.abs(n) >= TIME_MIN) return this._headForTime(n < 1e12 ? n * 1000 : n, d);
+    // same heuristic as the chart's toMs()
+    if (Math.abs(n) >= TIME_MIN) return this._headForTime(n < 1e11 ? n * 1000 : n, d);
     if (Number.isInteger(n) && n >= 0) return Math.min(last, n);
     return def;
   }
