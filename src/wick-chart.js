@@ -498,6 +498,16 @@ class WickChart extends HTMLElementBase {
         }
       }
       if (!sorted) norm.sort((a, b) => a.time - b.time);
+      // One bar per timestamp. A REST history fetch and the websocket that
+      // takes over from it overlap, so the same final candle routinely
+      // arrives twice; the later copy is the corrected one and wins. In
+      // place and allocation-free when the data is already unique.
+      let dst = 0;
+      for (let i = 0; i < norm.length; i++) {
+        if (dst > 0 && norm[i].time === norm[dst - 1].time) norm[dst - 1] = norm[i];
+        else norm[dst++] = norm[i];
+      }
+      norm.length = dst;
       this._data = norm;
       this._version++;
       this._computeDt();
@@ -533,12 +543,13 @@ class WickChart extends HTMLElementBase {
       } else if (b.time === last.time) {
         d[d.length - 1] = b;
       } else {
-        // out-of-order / backfill: replace matching or insert
+        // out-of-order / backfill: replace matching or insert. Binary search
+        // for the slot — a backward scan is O(n) per bar, which turns a
+        // backfill of old candles into O(n·m) over a long history.
         live = false;
-        let i = d.length - 1;
-        while (i >= 0 && d[i].time > b.time) i--;
-        if (i >= 0 && d[i].time === b.time) d[i] = b;
-        else d.splice(i + 1, 0, b);
+        const i = WickChart._indexForTime(d, b.time);
+        if (d[i] && d[i].time === b.time) d[i] = b;
+        else d.splice(i, 0, b);
         this._computeDt();
       }
       this._version++;
