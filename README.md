@@ -812,7 +812,7 @@ a layer may declare `insetBottom` (px) — the largest declared inset reserves
 a docked strip at the bottom of the canvas, panes and the time axis shrink
 above it, and layers draw it as `api.layout.dock`. On charts without the
 hook the navigator degrades silently. The silhouette is O(n) once per
-(dataset, width) and cached. Peer dependency: wickchart ≥ 1.5.
+(dataset, width) and cached. Peer dependency: wickchart ≥ 1.6.
 
 ### Alerts+ — the `wickchart-alerts-plus` plugin
 

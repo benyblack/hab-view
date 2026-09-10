@@ -27,7 +27,7 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "wickchart": ">=1.5.0"
+    "wickchart": ">=1.6.0"
   },
   "peerDependenciesMeta": {
     "wickchart": {
