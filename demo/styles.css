@@ -426,6 +426,10 @@ wick-chart {
   overflow: hidden;
 }
 
+/* the display: flex above beats the UA [hidden] rule — keep ✕ and the
+   initial hidden attribute actually working */
+.explain-panel[hidden] { display: none; }
+
 .explain-head {
   display: flex;
   align-items: center;

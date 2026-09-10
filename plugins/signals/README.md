@@ -29,7 +29,7 @@ import { attachSignals } from 'wickchart-signals';
 const chart = document.querySelector('wick-chart');
 const signals = attachSignals(chart);
 
-signals.setKinds(['engulfing', 'pinbar']); // subset (default: all three)
+signals.setKinds(['engulfing', 'pinbar']); // subset (default: all three; [] = off)
 signals.setLabels(false);                  // hover explanations off
 signals.count;                             // signals in the current dataset
 signals.detach();

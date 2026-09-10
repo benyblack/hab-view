@@ -922,12 +922,11 @@ btnNavigator.addEventListener('click', () => {
 
 /* ---------------- pattern signals (wickchart-signals plugin layer) ---------------- */
 
-const signalsPlugin = attachSignals(chart);
+const signalsPlugin = attachSignals(chart, { kinds: [] }); // starts off — toggle to arm
 const btnSignals = document.getElementById('btn-signals');
 btnSignals.addEventListener('click', () => {
   const on = !btnSignals.classList.contains('active');
-  if (on) signalsPlugin.setKinds(['engulfing', 'pinbar', 'inside']);
-  else signalsPlugin.setKinds([]);
+  signalsPlugin.setKinds(on ? ['engulfing', 'pinbar', 'inside'] : []);
   btnSignals.setAttribute('aria-pressed', String(on));
   btnSignals.classList.toggle('active', on);
 });

@@ -888,7 +888,7 @@ npm install wickchart wickchart-signals   // signals is a separate opt-in packag
 
 import { attachSignals } from 'wickchart-signals';
 const signals = attachSignals(chart);
-signals.setKinds(['engulfing', 'pinbar']); // subset (default: all three)
+signals.setKinds(['engulfing', 'pinbar']); // subset (default: all three; [] = off)
 signals.setLabels(false);                  // hover explanations off
 chart.addEventListener('wick:signals', (e) => status.textContent = e.detail?.label || '');
 ```

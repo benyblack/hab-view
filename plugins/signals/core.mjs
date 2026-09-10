@@ -51,12 +51,12 @@ function pinbar(a) {
 /**
  * Detect signals over a full bar array. O(n); cache the result per dataset.
  * @param {Array<{time,open,high,low,close}>} bars
- * @param {string[]} [kinds] subset of KINDS to detect (default: all)
+ * @param {string[]} [kinds] subset of KINDS to detect (default: all; [] = none)
  * @returns {Array<{i: number, kind: string, dir: 'bull'|'bear'|null}>}
  */
 export function detectSignals(bars, kinds) {
   if (!Array.isArray(bars) || bars.length < 2) return [];
-  const want = Array.isArray(kinds) && kinds.length ? new Set(kinds.filter((k) => KINDS.includes(k))) : new Set(KINDS);
+  const want = Array.isArray(kinds) ? new Set(kinds.filter((k) => KINDS.includes(k))) : new Set(KINDS);
   const out = [];
   for (let i = 1; i < bars.length; i++) {
     const cur = anatomy(bars[i]);

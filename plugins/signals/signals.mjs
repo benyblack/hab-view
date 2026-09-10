@@ -8,6 +8,7 @@
  *   import { attachSignals } from 'wickchart-signals';
  *   const signals = attachSignals(chart);
  *   signals.setKinds(['engulfing', 'pinbar']);  // subset (default: all)
+ *   signals.setKinds([]);                       // none — off until kinds return
  *   signals.setLabels(false);                   // hover explanations off
  *   signals.detach();
  *
@@ -24,7 +25,7 @@ const OFFSET = 14; // px between the bar extreme and the chip center
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 
 const normKinds = (k) =>
-  Array.isArray(k) && k.length ? k.filter((x) => KINDS.includes(x)) : KINDS.slice();
+  Array.isArray(k) ? k.filter((x) => KINDS.includes(x)) : KINDS.slice(); // omitted → all, [] → off
 
 export function attachSignals(chart, opts = {}) {
   return new SignalsLayer(chart, opts);
