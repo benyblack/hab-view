@@ -32,6 +32,7 @@ test('detectSignals: dedicated two-bar shapes, kinds subset, tiny inputs', () =>
   assert.deepEqual(detectSignals(hammer), [{ i: 1, kind: 'pinbar', dir: 'bull' }]);
   assert.deepEqual(detectSignals(bearThenBull, ['pinbar']), [], 'subset filters kinds');
   assert.deepEqual(detectSignals(bearThenBull, ['bogus']), []);
+  assert.deepEqual(detectSignals(bearThenBull, []), [], 'empty kinds = off, not "all"');
   assert.deepEqual(detectSignals(bearThenBull[0]), [], 'a single bar has no context');
   assert.deepEqual(detectSignals([]), []);
   assert.equal(KINDS.join(','), 'engulfing,pinbar,inside');

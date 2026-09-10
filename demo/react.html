@@ -62,6 +62,8 @@
     import { createElement as h, useState, useRef, useEffect, useCallback } from 'react';
     import { createRoot } from 'react-dom/client';
     import { WickChart } from '../src/react.js';
+    import { attachNavigator } from '../plugins/navigator/navigator.mjs';
+    import { attachTape } from '../plugins/tape/tape.mjs';
 
     const TF = 3600e3;
     const fmt = (ms) => new Date(ms).toISOString().slice(5, 16).replace('T', ' ');
@@ -91,21 +93,78 @@
       return bars;
     }
 
-    const IND_PRESETS = ['none', 'sma:20', 'sma:20 ema:50', 'sma:20 volume'];
+    const IND_PRESETS = ['none', 'sma:20 volume', 'ema:50 vwap', 'bb:20 atr:14', 'macd rsi:14'];
 
     function App() {
       const [bars, setBars] = useState(genBars);
       const [type, setType] = useState('candles');
-      const [indIdx, setIndIdx] = useState(3);
+      const [indIdx, setIndIdx] = useState(4);
+      const [theme, setTheme] = useState('dark');
       const [vsh, setVsh] = useState(false);
       const [live, setLive] = useState(false);
+      const [navOn, setNavOn] = useState(false);
+      const [tapeOn, setTapeOn] = useState(false);
       const [events, setEvents] = useState([]);
       const [ai, setAi] = useState(null);
       const chartRef = useRef(null);
+      const navRef = useRef(null);
+      const tapeRef = useRef(null);
+      const seq = useRef(0);
+
+      // plugins attach to the same element the ref exposes — detaching on
+      // unmount keeps React strict-mode double-mounts clean
+      useEffect(() => () => {
+        if (navRef.current) navRef.current.detach();
+        if (tapeRef.current) tapeRef.current.detach();
+      }, []);
 
       const push = useCallback((name, text) => {
         setEvents((list) => [...list.slice(-5), { name, text }]);
       }, []);
+
+      const toggleNavigator = () => {
+        const el = chartRef.current;
+        if (!el) return;
+        if (navRef.current) {
+          navRef.current.detach();
+          navRef.current = null;
+          setNavOn(false);
+          push('plugin', 'navigator detached — dock space released');
+          return;
+        }
+        if (tapeRef.current) toggleTape(); // one strip per dock
+        navRef.current = attachNavigator(el);
+        setNavOn(true);
+        push('plugin', 'wickchart-navigator attached — drag the window to pan');
+      };
+
+      const toggleTape = () => {
+        const el = chartRef.current;
+        if (!el) return;
+        if (tapeRef.current) {
+          tapeRef.current.detach();
+          tapeRef.current = null;
+          setTapeOn(false);
+          push('plugin', 'wickchart-tape detached');
+          return;
+        }
+        if (navRef.current) toggleNavigator(); // one strip per dock
+        tapeRef.current = attachTape(el, { bigSize: 45 });
+        const d = el.data;
+        if (d && d.length) {
+          const close = d[d.length - 1].close;
+          const now = Date.now();
+          tapeRef.current.push(
+            Array.from({ length: 30 }, (_, i) => ({
+              time: now - (30 - i) * 1200,
+              price: +(close * (0.998 + Math.random() * 0.004)).toFixed(2),
+              size: Math.random() > 0.85 ? Math.round(30 + Math.random() * 60) : +(Math.random() * 4).toFixed(2),
+            }))
+          );
+        }
+        setTapeOn(true);
+        push('plugin', 'wickchart-tape attached — prints are synthetic here');
+      };
 
       // Live stream: append a bar on an interval. A fresh array is what
       // triggers the chart update — never mutate the state array in place.
@@ -134,6 +193,21 @@
         chart.addAlert({ id: 'react-' + Math.floor(performance.now()), price, direction: 'above' });
       };
 
+      const addPosition = () => {
+        const chart = chartRef.current;
+        if (!chart || !chart.data || !chart.data.length) return;
+        const entry = chart.data[chart.data.length - 1].close;
+        chart.addPosition({
+          id: 'react-' + (++seq.current),
+          side: 'long',
+          entry,
+          stop: entry * 0.98,
+          target: entry * 1.04,
+          qty: 0.5,
+        });
+        push('position', 'demo long @ ' + entry.toFixed(2) + ' — stop −2%, target +4%');
+      };
+
       const seg = (id, items, value, onPick) =>
         h('div', { className: 'seg', id }, items.map(([val, label]) =>
           h('button', {
@@ -149,6 +223,28 @@
           seg('seg-type', [['candles', 'Candles'], ['line', 'Line'], ['area', 'Area']], type, setType),
           seg('seg-ind', IND_PRESETS.map((p, i) => [i, p]), indIdx, setIndIdx),
           h('button', {
+            id: 'btn-theme', type: 'button', className: 'icon-btn', onClick: () => {
+              setTheme((t) => {
+                const next = t === 'dark' ? 'light' : 'dark';
+                // the chart's palette follows the page's --wick-* CSS vars —
+                // flip data-theme (like the main demo) so both stay in sync
+                document.documentElement.dataset.theme = next;
+                return next;
+              });
+            },
+            title: 'Toggle dark / light theme',
+          }, theme === 'dark' ? '☾ Dark' : '☀ Light'),
+          h('button', {
+            id: 'btn-nav', type: 'button', className: 'icon-btn' + (navOn ? ' active' : ''),
+            'aria-pressed': String(navOn), onClick: toggleNavigator,
+            title: 'wickchart-navigator plugin — full-dataset silhouette with a draggable viewport (docks below the chart)',
+          }, 'Navigator'),
+          h('button', {
+            id: 'btn-tape', type: 'button', className: 'icon-btn' + (tapeOn ? ' active' : ''),
+            'aria-pressed': String(tapeOn), onClick: toggleTape,
+            title: 'wickchart-tape plugin — time & sales docked below the chart (shares the strip with the navigator)',
+          }, 'Tape'),
+          h('button', {
             id: 'btn-vsh', type: 'button', className: 'icon-btn' + (vsh ? ' active' : ''),
             'aria-pressed': String(vsh), onClick: () => setVsh((v) => !v),
             title: 'Toggle volatility-regime shading',
@@ -162,6 +258,7 @@
             id: 'btn-regen', type: 'button', className: 'icon-btn',
             onClick: () => setBars(genBars()), title: 'Regenerate the random walk',
           }, '↻ New data'),
+          h('button', { id: 'btn-position', type: 'button', className: 'icon-btn', onClick: addPosition, title: 'Add a demo long position (stop −2%, target +4%)' }, '+ Position'),
           h('button', { id: 'btn-alert', type: 'button', className: 'icon-btn', onClick: addAlert, title: 'Add a price alert 1% above the last close' }, '+ Alert'),
           h('button', { id: 'btn-explain', type: 'button', className: 'icon-btn', onClick: explain, title: 'getDataWindow() — AI-ready summary of the visible range' }, 'Explain'),
           h('nav', { className: 'topbar-links', 'aria-label': 'More demos' },
@@ -173,7 +270,7 @@
           h('div', { className: 'react-chart' },
             h(WickChart, {
               ref: chartRef,
-              theme: 'dark',
+              theme,
               type,
               indicators,
               volshading: vsh,

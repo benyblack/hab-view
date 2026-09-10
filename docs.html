@@ -214,6 +214,7 @@
         <li><a href="#react">React, Vue, Svelte</a></li>
         <li><a href="#plugins">Plugin layers<span class="new-pill">NEW</span></a></li>
         <li><a href="#drawing">Drawings<span class="new-pill">NEW</span></a></li>
+        <li><a href="#family">The plugin family<span class="new-pill">NEW</span></a></li>
         <li><a href="#perf">Performance &amp; export</a></li>
         <li><a href="#migrate">Migrating from 0.x</a></li>
       </ul>
@@ -254,7 +255,7 @@
 <span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="str">"module"</span><span class="tag">&gt;</span>
   <span class="tag">import</span> { attachDrawings } <span class="tag">from</span> <span class="str">'https://unpkg.com/wickchart-draw'</span>;
 <span class="tag">&lt;/script&gt;</span></pre></div>
-        <p>Then <code>attachDrawings(chart)</code> — the full tour (tools, magnet snap, sharing across tabs) is in the <a href="#drawing">Drawings</a> section.</p>
+        <p>Then <code>attachDrawings(chart)</code> — the full tour (tools, magnet snap, sharing across tabs) is in the <a href="#drawing">Drawings</a> section. Drawing is only one of <b>eight</b> opt-in packages now — sessions, replay, compare, navigator, alerts-plus, layouts, signals and tape — see <a href="#family">The plugin family</a>.</p>
       </section>
 
       <section id="data">
@@ -864,11 +865,12 @@ chart.addEventListener(<span class="str">'wick:peers'</span>, (e) =&gt; {
 chart.<span class="attr">removeLayer</span>(handle);  <span class="cmt">// or removeLayer('my-layer')</span>
 chart.<span class="attr">requestDraw</span>();        <span class="cmt">// repaint hook for interactive layers</span></pre></div>
         <p>Returning <code>true</code> from a <code>down</code> claims that gesture: the layer receives the pointer's <code>move</code>/<code>up</code> (a <code>cancel</code> on Escape or pointercancel) while the chart suppresses pan, brush and measure for it. Layers are asked in registration order — first claim wins; a throwing layer is isolated with a console warning and never breaks the render.</p>
+        <p>A layer may also declare <code>insetBottom</code> (px, 0–160): the largest declared inset reserves a docked strip at the very bottom of the canvas — panes and the time axis shrink above it, and the strip is handed to layers as <code>layout.dock = { y0, h }</code>. This is how the navigator's silhouette and the tape's print strip dock; the two share that one strip, so attach one or the other.</p>
         <p>The draw <code>api</code> carries live state plus the four coordinate transforms (also public methods on the element, for use in event handlers):</p>
         <table>
           <tr><th>api</th><th>what it gives you</th></tr>
           <tr><td><code>ctx</code></td><td>The canvas 2D context — DPR-scaled, draw in CSS pixels</td></tr>
-          <tr><td><code>layout</code></td><td><code>{ W, H, priceW, timeH, plotRight, plotBottom, main: {y0,y1,h}, panes }</code></td></tr>
+          <tr><td><code>layout</code></td><td><code>{ W, H, priceW, timeH, plotRight, plotBottom, main: {y0,y1,h}, panes, dock: {y0,h} | null }</code></td></tr>
           <tr><td><code>palette</code></td><td>Resolved theme colors (<code>up</code>/<code>down</code>/<code>accent</code>/<code>text</code>/<code>border</code>…)</td></tr>
           <tr><td><code>data</code>, <code>view</code></td><td>Normalized bars + <code>{ rightIndex, spacing }</code></td></tr>
           <tr><td><code>timeToX</code> ⇄ <code>xToTime</code></td><td>Bar time (ms or s) ⇄ x-pixel — <b>extrapolates past the last bar into future space</b>, so a trendline can point at tomorrow</td></tr>
@@ -919,6 +921,39 @@ chart.addEventListener(<span class="str">'wick:drawings'</span>, (e) =&gt; save(
           <div class="foot" id="dr-foot">pick a tool and drag on the chart — drawings anchor in time &amp; price</div>
         </div>
         <div class="note">The package ships as <code>wickchart-draw</code> on npm (peer: wickchart ≥ 1.4) with its own gzip budget — the drawing toolkit can never silently bloat the core. Locked/invisible flags, per-drawing color and width ride along in the JSON. Pass <code>share: true</code> (or a room name) to sync drawings across tabs over BroadcastChannel — this playground shares the <code>docs-draw</code> room, so <b>open the page in a second window and draw</b>: every trendline, fib and note appears on both charts. Last writer wins; remote updates fire <code>wick:drawings</code> with action <code>remote</code> and never touch the local undo stack.</div>
+      </section>
+
+      <section id="family">
+        <h2>The plugin family <a class="anchor" href="#family">#</a> <span class="pill new">NEW</span></h2>
+        <p>Eight opt-in packages now build on the <a href="#plugins">layer API</a> — each one a separate npm package, zero dependencies, wired through public surface only and kept small by its own CI gzip budget. The core chart stays plugin-free; you pay bytes only for what you attach.</p>
+        <table>
+          <tr><th>Package</th><th>What it gives you</th></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-draw">wickchart-draw</a></td><td>Drawing tools — trendline/ray/level/rect/fib/text with magnet snap, undo, JSON (de)serialization, optional cross-tab sharing</td></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-sessions">wickchart-sessions</a></td><td>Market-session shading — crypto/forex/NYSE/CME presets or custom windows, DST-correct, weekend tint, crosshair hover bridge</td></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-replay">wickchart-replay</a></td><td>Bar replay — step/seek/play from any anchor, adjustable speed, loop, badge overlay, aborts cleanly when the dataset moves</td></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-compare">wickchart-compare</a></td><td>Symbol overlays — up to 6 rebased series, ratio &amp; diff derived series, legend chips with live values</td></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-navigator">wickchart-navigator</a></td><td>Range navigator — full-dataset silhouette docked below the chart, drag/resize/click-jump viewport (peer: wickchart ≥ 1.6)</td></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-alerts-plus">wickchart-alerts-plus</a></td><td>Alert persistence + delivery — localStorage/any storage, WebAudio beep, hidden-tab Notification, webhook POST</td></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-layouts">wickchart-layouts</a></td><td>Named workspace snapshots — save/load/rename/delete/export/import of full chart state (+ drawings)</td></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-signals">wickchart-signals</a></td><td>Candlestick signals — engulfing, pin bar, inside bar chips with crosshair explanations (<code>setKinds([])</code> = off)</td></tr>
+          <tr><td><a href="https://www.npmjs.com/package/wickchart-tape">wickchart-tape</a></td><td>Time &amp; sales — live trade prints docked below the chart, tick-rule side inference, <code>toBars()</code> feeds the chart from a trade stream (peer: wickchart ≥ 1.6)</td></tr>
+        </table>
+        <p>All of them follow the same shape — attach, configure, detach — and compose freely (the demo toolbar toggles most of them):</p>
+        <div class="codewrap"><pre class="code"><span class="tag">import</span> { attachDrawings }  <span class="tag">from</span> <span class="str">'wickchart-draw'</span>;
+<span class="tag">import</span> { attachSessions }  <span class="tag">from</span> <span class="str">'wickchart-sessions'</span>;
+<span class="tag">import</span> { attachSignals }   <span class="tag">from</span> <span class="str">'wickchart-signals'</span>;
+<span class="tag">import</span> { attachNavigator } <span class="tag">from</span> <span class="str">'wickchart-navigator'</span>;
+
+<span class="tag">const</span> chart = document.<span class="attr">querySelector</span>(<span class="str">'wick-chart'</span>);
+<span class="tag">const</span> draw  = <span class="attr">attachDrawings</span>(chart);
+<span class="attr">attachSessions</span>(chart, { preset: <span class="str">'crypto'</span> });
+<span class="tag">const</span> sig   = <span class="attr">attachSignals</span>(chart, { kinds: [] }); <span class="cmt">// armed by your UI</span>
+<span class="tag">const</span> nav   = <span class="attr">attachNavigator</span>(chart);              <span class="cmt">// docks the bottom strip</span>
+
+chart.<span class="attr">addEventListener</span>(<span class="str">'wick:drawings'</span>, (e) =&gt; save(e.detail.drawings));
+chart.<span class="attr">addEventListener</span>(<span class="str">'wick:signals'</span>,  (e) =&gt; status.textContent = e.detail?.label ?? <span class="str">''</span>);
+nav.<span class="attr">detach</span>();  <span class="cmt">// everything detaches cleanly — the core never knew it was there</span></pre></div>
+        <div class="note">Version notes: the navigator and the tape build on the 1.6 <code>insetBottom</code> dock hook (peer: wickchart ≥ 1.6); everything else targets ≥ 1.4. The navigator and the tape share the single bottom dock — attach one or the other. Each package's README documents its full API, and every package is size-budgeted in this repo's CI, so none of them can silently bloat.</div>
       </section>
 
       <section id="perf">

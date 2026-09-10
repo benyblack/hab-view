@@ -141,15 +141,28 @@ test('render: one chip per detected pattern, colored by direction', () => {
   assert.ok(fills.includes(PAL.up) && fills.includes(PAL.down) && fills.includes(PAL.text), 'bull/bear/neutral colors');
 });
 
-test('render: setKinds subsets the detection; junk kinds are ignored', () => {
-  const { s, rc, api } = fresh();
+test('render: setKinds subsets the detection; junk kinds are ignored; empty = off', () => {
+  const { c, s, api } = fresh();
   s.setKinds(['pinbar', 'bogus']);
   assert.deepEqual(s.kinds, ['pinbar']);
   s._render(api);
   assert.equal(s.count, 2, 'hammer + shooting star');
+  const rc = recordCtx();
+  s._render(apiFor(c, rc));
   assert.deepEqual(rc.ops.filter((o) => o[0] === 'fillText').map((o) => o[1]).sort(), ['P', 'P']);
   s.setKinds([]);
-  assert.deepEqual(s.kinds, ['engulfing', 'pinbar', 'inside'], 'empty → all kinds');
+  assert.deepEqual(s.kinds, [], 'empty = all kinds off');
+  const rc2 = recordCtx();
+  s._render(apiFor(c, rc2));
+  assert.equal(rc2.ops.filter((o) => o[0] === 'arc').length, 0, 'nothing drawn while off');
+});
+
+test('constructing with kinds: [] starts fully off (opt-in from there)', () => {
+  const c = new FakeChart();
+  const s = attachSignals(c, { kinds: [] });
+  assert.deepEqual(s.kinds, []);
+  s._render(apiFor(c, recordCtx()));
+  assert.equal(s.count, 0);
 });
 
 test('render: empty data paints nothing', () => {
