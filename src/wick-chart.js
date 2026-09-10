@@ -459,9 +459,10 @@ class WickChart extends HTMLElementBase {
       });
     }
 
-    /** The custom element class (also exported implicitly for users). */
+    /** The tag this class registers as. (<hab-chart> is a deprecated alias
+     *  registered from the HabChart subclass, not this name.) */
     static get elementName() {
-      return 'hab-chart';
+      return 'wick-chart';
     }
 
     /* ------------------------------------------------------------ *

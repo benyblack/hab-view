@@ -80,7 +80,8 @@ TradingView's charting library is powerful but heavy and enterprise-licensed;
 most wrappers add build steps and framework lock-in. WickChart takes the opposite
 bet:
 
-- **Zero dependencies, single file** (~40 KB unminified, no build step required)
+- **Zero dependencies, no build step required** (~67 KB gzipped for the whole
+  component — `core.js` + `wick-chart.js`, held to a 68 KB CI budget)
 - **One tag, sane defaults** — drop it in and it renders; everything optional
 - **Built-in usefulness** — crosshair + OHLC legend, last-price line, wheel zoom,
   drag pan, pinch, keyboard navigation, live streaming, PNG export

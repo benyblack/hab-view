@@ -74,6 +74,12 @@ test('a once:true price alert fires once and is removed', () => {
   assert.equal(chart._alerts.length, 0, 'a once-alert drops out of the list');
 });
 
+/* ---------------------------- rebrand residue ---------------------------- */
+
+test('elementName reports the tag the class is actually registered as', () => {
+  assert.equal(WickChart.elementName, 'wick-chart');
+});
+
 /* ------------------------- closed-candle alerts ------------------------- */
 
 test('a bar carries `closed` only when the feed says so', () => {
