@@ -99,7 +99,10 @@ chart, the full interactive demo, the zero-JavaScript declarative page, and a
 [benyblack.github.io/wickchart/docs.html](./docs.html)** — every attribute,
 method, event, the WickScript reference, overlays (with a live JSON
 playground), feeds, theming and framework bindings, each with runnable
-examples. This README covers the same ground in plain markdown.
+examples. The **[Plugins hub](./plugins.html)** documents every opt-in
+package — draw, sessions, replay, compare, navigator, alerts+, layouts,
+signals, tape — each with its own live playground. This README covers the
+same ground in plain markdown.
 
 ## Run the demo locally
 

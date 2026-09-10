@@ -35,7 +35,7 @@ jobs:
       - name: Assemble site (landing + docs + demo + modules + every plugin package, nothing else)
         run: |
           mkdir site
-          cp -r src demo index.html docs.html site/
+          cp -r src demo index.html docs.html plugins.html site/
           mkdir -p site/plugins
           for d in plugins/*/; do
             name=$(basename "$d")
@@ -55,7 +55,7 @@ jobs:
           const app=fs.readFileSync('demo/app.js','utf8');
           for(const m of app.matchAll(/from\s+'(\.[^']+)'/g)) refs.push(path.join('demo',m[1]));
           for(const m of app.matchAll(/import\s+'(\.[^']+)'/g)) refs.push(path.join('demo',m[1]));
-          for(const html of ['demo/index.html','index.html','docs.html']){
+          for(const html of ['demo/index.html','index.html','docs.html','plugins.html']){
             const s=fs.readFileSync(html,'utf8');
             for(const m of s.matchAll(/(?:src|href)=\"(\.[^\"]+)\"/g)) refs.push(path.join(path.dirname(html),m[1]));
           }
