@@ -7,10 +7,10 @@ draggable viewport window: drag the window to pan, grab an edge to resize,
 click outside it to jump. Panning/zooming the chart moves the window and
  vice versa — both stay in sync live.
 
-Requires wickchart ≥ **1.5.0** with the `insetBottom` dock hook (added in
-the same release as this plugin): the largest `insetBottom` declared by any
-layer reserves a strip at the bottom of the canvas — panes and the time
-axis shrink above it, and the strip is handed to layers as
+Requires wickchart ≥ **1.6.0** with the `insetBottom` dock hook (added in
+1.6.0, the same release as this plugin): the largest `insetBottom` declared
+by any layer reserves a strip at the bottom of the canvas — panes and the
+time axis shrink above it, and the strip is handed to layers as
 `api.layout.dock`. On older charts the plugin degrades silently (the layer
 renders nothing).
 
@@ -32,4 +32,4 @@ nav.detach();                                   // remove the strip again
 - **Performance**: the silhouette is O(n) once per (dataset, strip width)
   and cached; renders are pure repaints.
 
-Peer dependency: wickchart ≥ 1.5.0 (the dock hook).
+Peer dependency: wickchart ≥ 1.6.0 (the dock hook).
