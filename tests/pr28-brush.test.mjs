@@ -95,7 +95,9 @@ test('clearBrush is idempotent and resets both committed and live state', () => 
 
 test('brush is wired into the chart: attribute, pointer flow, escape, draw', () => {
   const src = read('src/wick-chart.js');
-  assert.match(src, /'brush', 'sonify'\]/, 'brush is an observed attribute');
+  // read the real list rather than its literal spelling, so adding another
+  // observed attribute cannot fail this test
+  assert.ok(WickChart.observedAttributes.includes('brush'), 'brush is an observed attribute');
   const attr = src.slice(src.indexOf("case 'brush':"), src.indexOf("case 'brush':") + 200);
   assert.match(attr, /val !== 'false'/, 'brush="false" disables the mode');
   const pd = src.slice(src.indexOf('_pointerDown(e) {'), src.indexOf('_pointerDown(e) {') + 2200);

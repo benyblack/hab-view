@@ -50,7 +50,7 @@ const HTMLElementBase = typeof HTMLElement !== 'undefined' ? HTMLElement : class
 
 class WickChart extends HTMLElementBase {
     static get observedAttributes() {
-      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'co-view-name', 'brush', 'sonify'];
+      return ['theme', 'type', 'log', 'auto', 'indicators', 'precision', 'label', 'stats', 'profile', 'annotations', 'volshading', 'overlays', 'co-view', 'co-view-name', 'brush', 'sonify', 'alert-evaluate'];
     }
 
     constructor() {
@@ -248,6 +248,10 @@ class WickChart extends HTMLElementBase {
       this._positions = [];
       this._alerts = [];
       this._seq = 0;
+      // Default evaluation mode for alerts that don't pick one, and the last
+      // bar index known to be final — see _lastClosedIndex().
+      this._alertEval = 'live';
+      this._lastClosedIdx = -1;
 
       // server-side overlays (zones & levels)
       this._overlays = [];
@@ -406,6 +410,12 @@ class WickChart extends HTMLElementBase {
           this._sonify = val != null && val !== 'false';
           this._lastToneIdx = -1;
           break;
+        // Default evaluation mode for alerts added without one. Anything
+        // other than "close" means live, so a typo cannot silently mute
+        // signals — it degrades to today's behaviour.
+        case 'alert-evaluate':
+          this._alertEval = val === 'close' ? 'close' : 'live';
+          break;
       }
       this._invalidate();
     }
@@ -490,6 +500,9 @@ class WickChart extends HTMLElementBase {
       this._data = norm;
       this._version++;
       this._computeDt();
+      // history is not a live signal: re-baseline so close-mode alerts only
+      // fire on candles that close from here on
+      this._syncClosedIdx();
       this._needsFit = true;
       this._auto = this._autoAttr();
       this._hover = null;
@@ -531,7 +544,10 @@ class WickChart extends HTMLElementBase {
       // Alerts run after the dataset AND the version are updated, so scripted
       // predicates evaluate over the bar that just arrived rather than
       // re-reading the previous version's memoized series.
+      // A historical insert shifts indices without closing anything, so the
+      // cursor moves with the data rather than reading as a fresh close.
       if (live) this._checkAlerts(prevClose, b);
+      else this._syncClosedIdx();
       if (this._hover && this._hover.index >= d.length) this._hover = null;
       this._updateAria();
       this._invalidate();
@@ -540,6 +556,7 @@ class WickChart extends HTMLElementBase {
     clearData() {
       this._data = [];
       this._version++;
+      this._syncClosedIdx();
       this._hover = null;
       this._needsFit = true;
       this._noMore = false;
@@ -586,6 +603,7 @@ class WickChart extends HTMLElementBase {
           this._computeDt();
           // keep the exact same bars on screen: every index shifts by `added`
           this._view.rightIndex += added;
+          this._syncClosedIdx(); // backfill shifts indices, it closes nothing
           if (this._hover) this._hover.index = Math.min(this._hover.index + added, this._data.length - 1);
           this._clampView();
           this._invalidate();
@@ -710,8 +728,8 @@ class WickChart extends HTMLElementBase {
           .filter((a) => !a.fired)
           .map((a) =>
             a.when != null
-              ? { id: a.id, when: a.when, once: a.once }
-              : { id: a.id, price: a.price, direction: a.direction, once: a.once }
+              ? { id: a.id, when: a.when, once: a.once, evaluate: a.evaluate }
+              : { id: a.id, price: a.price, direction: a.direction, once: a.once, evaluate: a.evaluate }
           ),
       };
     }
@@ -759,6 +777,7 @@ class WickChart extends HTMLElementBase {
                   when: a.when.trim(),
                   compiled: compileScript(a.when),
                   once: a.once !== false,
+                  evaluate: this._evalMode(a.evaluate),
                   fired: false,
                   armed: true,
                 };
@@ -771,6 +790,7 @@ class WickChart extends HTMLElementBase {
               price: a.price,
               direction: a.direction || 'cross',
               once: a.once !== false,
+              evaluate: this._evalMode(a.evaluate),
               fired: false,
             };
           })
@@ -854,6 +874,7 @@ class WickChart extends HTMLElementBase {
           when: alert.when.trim(),
           compiled,
           once: alert.once !== false,
+          evaluate: this._evalMode(alert.evaluate),
           fired: false,
           armed: true,
         };
@@ -864,6 +885,7 @@ class WickChart extends HTMLElementBase {
           price: alert.price,
           direction: alert.direction || 'cross',
           once: alert.once !== false,
+          evaluate: this._evalMode(alert.evaluate),
           fired: false,
         };
       }
@@ -1090,31 +1112,78 @@ class WickChart extends HTMLElementBase {
     /** Check alerts against an incoming bar (prev close → new close).
      *  Scripted (`when`) alerts evaluate their predicate series, cached per
      *  data version, and fire on the false→true edge. */
+    /**
+     * Index of the newest bar known to be final: any bar with a newer bar
+     * behind it, plus the front bar when the feed flagged it `closed: true`
+     * (Binance's `k.x`). -1 when nothing has closed yet.
+     */
+    _lastClosedIndex() {
+      const d = this._data;
+      if (!d.length) return -1;
+      const last = d.length - 1;
+      return d[last] && d[last].closed === true ? last : last - 1;
+    }
+
+    /** Re-baseline the closed-bar cursor without firing anything. */
+    _syncClosedIdx() {
+      this._lastClosedIdx = this._lastClosedIndex();
+    }
+
+    /**
+     * Resolve an alert's evaluation mode: an explicit 'close' / 'live' on the
+     * alert wins, otherwise the chart-level `alert-evaluate` default (itself
+     * 'live', so 1.x behaviour is unchanged unless asked for).
+     * @param {string|undefined} v
+     * @returns {'live'|'close'}
+     */
+    _evalMode(v) {
+      if (v === 'close' || v === 'live') return v;
+      return this._alertEval === 'close' ? 'close' : 'live';
+    }
+
+    /** Dispatch one alert, retiring it when it was a `once` alert. */
+    _fireAlert(alert, detail) {
+      if (alert.once) alert.fired = true;
+      this._fire('alert', { id: alert.id, ...detail });
+      if (alert.once) this._alerts = this._alerts.filter((x) => x !== alert);
+    }
+
     _checkAlerts(prevClose, bar) {
+      const closedIdx = this._lastClosedIndex();
+      // A bar closing is an edge, not a level: close-mode alerts evaluate
+      // only on the update that finalizes a candle, so a candle that ticks
+      // through a threshold and back never produces a signal.
+      const justClosed = closedIdx > this._lastClosedIdx;
+      if (justClosed) this._lastClosedIdx = closedIdx;
       if (!this._alerts.length) return;
+      const d = this._data;
       for (const a of [...this._alerts]) {
         // `fired` means "spent forever" — it is only ever set on `once`
         // alerts. Repeating (once:false) alerts re-fire on every edge:
         // price alerts are edge-triggered by checkAlertCross(), scripted
-        // ones by the armed/scriptAlertStep() latch below.
+        // ones by the armed/scriptAlertStep() latch.
         if (a.fired) continue;
+
+        // Close mode reads the newest final candle; live mode reads the
+        // front of the series, forming or not.
+        const onClose = a.evaluate === 'close';
+        if (onClose && (!justClosed || closedIdx < 0)) continue;
+        const idx = onClose ? closedIdx : d.length - 1;
+        const cur = onClose ? d[idx] : bar;
+        if (!cur) continue;
+
         if (a.when != null) {
-          const series = this._predicateCache(a);
-          const curTrue = series.length ? series[series.length - 1] : false;
-          const step = scriptAlertStep(a.armed, curTrue);
+          // predicates are causal, so the value at `idx` is the same whether
+          // it was computed over the whole series or just the prefix
+          const step = scriptAlertStep(a.armed, this._predicateCache(a)[idx] === true);
           a.armed = step.armed;
-          if (step.fire) {
-            if (a.once) a.fired = true;
-            this._fire('alert', { id: a.id, price: bar.close, when: a.when, bar });
-            if (a.once) this._alerts = this._alerts.filter((x) => x !== a);
-          }
+          if (step.fire) this._fireAlert(a, { price: cur.close, when: a.when, bar: cur });
           continue;
         }
-        if (!isNum(prevClose)) continue;
-        if (checkAlertCross(a, prevClose, bar.close)) {
-          if (a.once) a.fired = true;
-          this._fire('alert', { id: a.id, price: a.price, bar });
-          if (a.once) this._alerts = this._alerts.filter((x) => x !== a);
+        const prev = onClose ? (d[idx - 1] ? d[idx - 1].close : NaN) : prevClose;
+        if (!isNum(prev)) continue;
+        if (checkAlertCross(a, prev, cur.close)) {
+          this._fireAlert(a, { price: a.price, bar: cur });
         }
       }
     }
@@ -1172,7 +1241,7 @@ class WickChart extends HTMLElementBase {
       const close = isNum(b.close) ? b.close : isNum(b.value) ? b.value : NaN;
       if (!isNum(close)) return null;
       const open = isNum(b.open) ? b.open : close;
-      return {
+      const nb = {
         time,
         open,
         high: isNum(b.high) ? b.high : Math.max(open, close),
@@ -1180,6 +1249,10 @@ class WickChart extends HTMLElementBase {
         close,
         volume: isNum(b.volume) ? b.volume : isNum(b.v) ? b.v : 0,
       };
+      // Only carried when the feed actually says the candle is final
+      // (Binance `k.x`), so the bar shape is unchanged for everyone else.
+      if (b.closed === true) nb.closed = true;
+      return nb;
     }
 
     static _indexForTime(d, time) {

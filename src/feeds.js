@@ -168,7 +168,13 @@ export function openBinanceSocket(symbol, tfId, onBar, onDown, timeoutMs = 8000)
     try {
       const k = JSON.parse(ev.data).k;
       if (!k) return;
-      onBar({ time: k.t, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v });
+      // k.x is Binance's "this kline is final" flag — pass it through so
+      // close-mode alerts can fire the moment the candle closes rather than
+      // waiting for the next one to arrive.
+      onBar({
+        time: k.t, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v,
+        closed: k.x === true,
+      });
     } catch (_) {}
   };
   ws.onclose = () => {

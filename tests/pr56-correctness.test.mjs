@@ -22,16 +22,21 @@ function makeChart(bars = []) {
     _data: bars,
     _hover: null,
     _dt: 3600e3,
+    _alertEval: 'live',
+    _lastClosedIdx: -1,
     fires: [],
     _invalidate() {},
     _computeDt() {},
     _updateAria() {},
     _fire(name, detail) { this.fires.push({ name, ...detail }); },
   };
-  chart.addAlert = P.addAlert.bind(chart);
-  chart._checkAlerts = P._checkAlerts.bind(chart);
-  chart._predicateCache = P._predicateCache.bind(chart);
-  chart.update = P.update.bind(chart);
+  for (const m of [
+    'addAlert', '_checkAlerts', '_predicateCache', 'update', '_fireAlert',
+    '_lastClosedIndex', '_syncClosedIdx', '_evalMode',
+  ]) {
+    chart[m] = P[m].bind(chart);
+  }
+  chart._syncClosedIdx(); // baseline, as setData() does on the real element
   return chart;
 }
 
@@ -67,6 +72,148 @@ test('a once:true price alert fires once and is removed', () => {
 
   assert.equal(chart.fires.length, 1, 'only the first crossing fires');
   assert.equal(chart._alerts.length, 0, 'a once-alert drops out of the list');
+});
+
+/* ------------------------- closed-candle alerts ------------------------- */
+
+test('a bar carries `closed` only when the feed says so', () => {
+  const plain = WickChart._normBar({ time: 1, open: 1, high: 2, low: 0, close: 1.5, volume: 1 });
+  assert.ok(!('closed' in plain), 'bar shape is unchanged when no flag is supplied');
+  const final = WickChart._normBar({ time: 1, open: 1, high: 2, low: 0, close: 1.5, volume: 1, closed: true });
+  assert.equal(final.closed, true, 'an explicit final candle is marked');
+});
+
+test("evaluate:'close' does not fire on the still-forming candle", () => {
+  const chart = makeChart(mkBars([90, 90]));
+  chart.addAlert({ id: 'ta', when: 'close > 100', once: false, evaluate: 'close' });
+
+  // a new forming bar breaks 100 — but it is not final yet
+  chart.update({ time: 1_700_000_000_000 + 2 * 3600e3, open: 90, high: 111, low: 90, close: 110, volume: 1 });
+  assert.equal(chart.fires.length, 0, 'the forming candle is not a signal');
+
+  // the next bar arrives, so the 110 candle is now final
+  chart.update({ time: 1_700_000_000_000 + 3 * 3600e3, open: 110, high: 116, low: 110, close: 115, volume: 1 });
+  assert.equal(chart.fires.length, 1, 'the candle closed above 100 — now it fires');
+});
+
+test("evaluate:'close' fires immediately on an explicitly final candle", () => {
+  const chart = makeChart(mkBars([90, 90]));
+  chart.addAlert({ id: 'ta', when: 'close > 100', once: false, evaluate: 'close' });
+
+  // the Binance k.x path: the feed tells us this candle is final
+  chart.update({ time: 1_700_000_000_000 + 2 * 3600e3, open: 90, high: 111, low: 90, close: 110, volume: 1, closed: true });
+
+  assert.equal(chart.fires.length, 1, 'no need to wait for the next candle');
+});
+
+test("the default stays 'live' and fires on the forming candle", () => {
+  const chart = makeChart(mkBars([90, 90]));
+  chart.addAlert({ id: 'ta', when: 'close > 100', once: false });
+
+  chart.update({ time: 1_700_000_000_000 + 2 * 3600e3, open: 90, high: 111, low: 90, close: 110, volume: 1 });
+
+  assert.equal(chart.fires.length, 1, 'existing 1.x behaviour is unchanged');
+});
+
+test("evaluate:'close' applies to price alerts too", () => {
+  const chart = makeChart(mkBars([90, 90]));
+  chart.addAlert({ id: 'px', price: 100, direction: 'cross', once: false, evaluate: 'close' });
+
+  chart.update({ time: 1_700_000_000_000 + 2 * 3600e3, open: 90, high: 111, low: 90, close: 110, volume: 1 });
+  assert.equal(chart.fires.length, 0, 'a forming candle crossing 100 is not final');
+
+  chart.update({ time: 1_700_000_000_000 + 3 * 3600e3, open: 110, high: 116, low: 110, close: 115, volume: 1 });
+  assert.equal(chart.fires.length, 1, 'the crossing is confirmed on close');
+});
+
+test('loading data does not retroactively fire close-mode alerts', () => {
+  const chart = makeChart([]);
+  chart.setData = P.setData.bind(chart);
+  chart._autoAttr = () => true;
+  chart.clearBrush = () => {};
+  chart.addAlert({ id: 'ta', when: 'close > 100', once: false, evaluate: 'close' });
+
+  chart.setData(mkBars([90, 150, 160])); // history already satisfies the predicate
+
+  assert.equal(chart.fires.length, 0, 'history is not a live signal');
+});
+
+test('alert-evaluate sets the chart-level default, overridable per alert', () => {
+  assert.ok(
+    WickChart.observedAttributes.includes('alert-evaluate'),
+    'the attribute is observed'
+  );
+
+  const chart = makeChart(mkBars([90, 90]));
+  chart.attributeChangedCallback = P.attributeChangedCallback.bind(chart);
+  chart.attributeChangedCallback('alert-evaluate', null, 'close');
+
+  const inherited = chart._alerts[chart.addAlert({ when: 'close > 1' }) && 0];
+  assert.equal(inherited.evaluate, 'close', 'an alert with no evaluate inherits the default');
+
+  chart.addAlert({ id: 'override', when: 'close > 1', evaluate: 'live' });
+  assert.equal(chart._alerts[1].evaluate, 'live', 'an explicit mode still wins');
+});
+
+test('an unknown alert-evaluate value falls back to live', () => {
+  const chart = makeChart(mkBars([90, 90]));
+  chart.attributeChangedCallback = P.attributeChangedCallback.bind(chart);
+  chart.attributeChangedCallback('alert-evaluate', null, 'nonsense');
+  chart.addAlert({ when: 'close > 1' });
+  assert.equal(chart._alerts[0].evaluate, 'live');
+});
+
+test('an alert keeps its evaluate mode across getState/setState', () => {
+  const chart = makeChart(mkBars([90, 90]));
+  chart._positions = [];
+  chart._ind = { volume: false, overlays: [], panes: [] };
+  chart._type = 'candles';
+  chart._theme = 'dark';
+  chart.getVisibleRange = () => null;
+  chart.getState = P.getState.bind(chart);
+  chart.addAlert({ id: 'ta', when: 'close > 100', evaluate: 'close' });
+  chart.addAlert({ id: 'px', price: 100, evaluate: 'close' });
+
+  const saved = chart.getState().alerts;
+  assert.equal(saved[0].evaluate, 'close', 'scripted alert persists its mode');
+  assert.equal(saved[1].evaluate, 'close', 'price alert persists its mode');
+
+  const restored = makeChart(mkBars([90, 90]));
+  restored.setState = P.setState.bind(restored);
+  restored.setAttribute = () => {};
+  restored.toggleAttribute = () => {};
+  restored._positions = [];
+  restored.setState({ alerts: saved });
+
+  assert.equal(restored._alerts[0].evaluate, 'close', 'scripted mode survives the round trip');
+  assert.equal(restored._alerts[1].evaluate, 'close', 'price mode survives the round trip');
+});
+
+test('the Binance socket forwards the final-candle flag', async () => {
+  const { openBinanceSocket } = await import('../src/feeds.js');
+  const sockets = [];
+  globalThis.WebSocket = class {
+    constructor(url) { this.url = url; this.readyState = 1; sockets.push(this); }
+    close() {}
+  };
+  globalThis.WebSocket.OPEN = 1;
+
+  const bars = [];
+  try {
+    // close() clears the socket's failover timer, which would otherwise
+    // outlive the test and fire against a deleted global
+    const handle = openBinanceSocket('BTCUSDT', '1h', (b) => bars.push(b), () => {});
+    const ws = sockets[0];
+    ws.onmessage({ data: JSON.stringify({ k: { t: 1, o: '1', h: '2', l: '0', c: '1.5', v: '9', x: false } }) });
+    ws.onmessage({ data: JSON.stringify({ k: { t: 1, o: '1', h: '2', l: '0', c: '1.6', v: '9', x: true } }) });
+    handle.close();
+  } finally {
+    delete globalThis.WebSocket;
+  }
+
+  assert.equal(bars.length, 2);
+  assert.ok(!bars[0].closed, 'a forming kline is not final');
+  assert.equal(bars[1].closed, true, 'k.x true marks the candle final');
 });
 
 /* --------------------- WickScript window performance --------------------- */
@@ -222,7 +369,11 @@ test('a scripted alert sees the incoming bar on the update that delivers it', ()
   chart.update({ time: 1_700_000_000_000 + 2 * 3600e3, open: 90, high: 111, low: 90, close: 110, volume: 1 });
 
   assert.equal(chart.fires.length, 1, 'fires on the update carrying the breakout, not the next one');
-  assert.equal(chart.fires[0].id, 'breakout');
+  const ev = chart.fires[0];
+  assert.equal(ev.id, 'breakout');
+  assert.equal(ev.when, 'close > 100', 'the event carries the predicate source');
+  assert.equal(ev.price, 110, 'and the price that triggered it');
+  assert.equal(ev.bar.close, 110, 'and the bar it evaluated');
 });
 
 test('appending a bar still fires a price alert on a real crossing', () => {

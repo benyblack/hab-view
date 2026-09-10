@@ -976,6 +976,9 @@ chart.addEventListener('wick:alert', (e) => {
 // scripted alerts — any WickScript predicate, fired on its false→true edge
 chart.addAlert({ when: 'crossup(rsi(close,14), 30)' });
 chart.addAlert({ when: 'volume > sma(volume,20) * 3', once: false }); // re-arms
+
+// evaluate only on final candles, so the signal cannot repaint
+chart.addAlert({ when: 'crossup(rsi(close,14), 30)', evaluate: 'close' });
 ```
 
 The P&L chip recalculates on every streamed bar. Alerts are edge-triggered
@@ -983,6 +986,17 @@ The P&L chip recalculates on every streamed bar. Alerts are edge-triggered
 Scripted alerts are evaluated locally on every streamed bar — the event
 carries the triggering close as `price` plus the `when` source; an invalid
 predicate is rejected (`addAlert` returns `null`), never thrown.
+
+**Live vs closed-candle evaluation.** Alerts evaluate on every update by
+default, the still-forming candle included — so a technical signal can
+repaint (RSI crosses 30 mid-candle, price reverses, the candle closes back
+above 30). Pass `evaluate: 'close'` to fire only on final candles, or set
+`<wick-chart alert-evaluate="close">` as the chart-wide default (per-alert
+`evaluate` still wins). A candle is final once a newer bar arrives, or as
+soon as the feed says so via `closed: true` on `update()` — `<wick-feed>`
+forwards Binance's `k.x` flag, so the signal lands at the close rather than
+one candle later. Historical corrections and backfilled candles never fire
+live alerts in either mode.
 
 ### Stats & measure
 
