@@ -334,6 +334,8 @@ chart.<span class="attr">data</span>;             <span class="cmt">// getter �
           <tr><td><code>co-view</code></td><td>–</td><td>BroadcastChannel name: sync crosshair/markings across tabs</td></tr>
           <tr><td><code>sonify</code></td><td>off</td><td>Arrow keys play the chart as pitch (a11y)</td></tr>
           <tr><td><code>alert-evaluate</code></td><td><code>live</code></td><td>Default alert evaluation: <code>live</code> (every tick) or <code>close</code> (final candles only) — <a href="#alert-evaluate">details</a></td></tr>
+          <tr><td><code>timezone</code></td><td><code>local</code></td><td>Display zone for axis labels &amp; the crosshair: <code>local</code>, <code>utc</code>, or an IANA name — <a href="#timezone">details</a></td></tr>
+          <tr><td><code>vwap-anchor</code></td><td><code>utc</code></td><td>Session boundary VWAP resets on — <a href="#timezone">details</a></td></tr>
         </table>
         <p>* <code>indicators=""</code> disables everything, including volume.</p>
       </section>
@@ -535,6 +537,19 @@ chart.<span class="attr">riskPlan</span>;                      <span class="cmt"
           <wick-chart id="ex-rp" label="BTC · 1h · risk plan"></wick-chart>
           <div class="foot" id="rp-foot">no plan — pick a preset</div>
         </div>
+      </section>
+
+      <section id="timezone">
+        <h2>Timezone &amp; sessions <a class="anchor" href="#timezone">#</a></h2>
+        <p>Axis labels and the crosshair readout use the viewer's own timezone by default. Set <code>timezone</code> to pin them somewhere specific — <code>utc</code>, or any IANA zone, DST included:</p>
+        <div class="codewrap"><pre class="code">&lt;<span class="tag">wick-chart</span> <span class="attr">timezone</span>=<span class="str">"Europe/Stockholm"</span>&gt;&lt;/<span class="tag">wick-chart</span>&gt;
+&lt;<span class="tag">wick-chart</span> <span class="attr">timezone</span>=<span class="str">"America/New_York"</span>&gt;&lt;/<span class="tag">wick-chart</span>&gt;
+&lt;<span class="tag">wick-chart</span> <span class="attr">timezone</span>=<span class="str">"utc"</span>&gt;&lt;/<span class="tag">wick-chart</span>&gt;</pre></div>
+        <p>Day dividers, month and year ticks all follow the chosen zone, so a "1 Feb" tick is 1 February <i>there</i>. An unrecognised zone falls back to UTC and warns once in the console.</p>
+        <h3>VWAP session anchor</h3>
+        <p>VWAP resets at a session boundary, and that boundary is <b>not</b> the display timezone — changing the axis to Stockholm should not silently re-anchor a BTC chart. It defaults to the UTC day, which is the crypto convention, and moves only when you say so:</p>
+        <div class="codewrap"><pre class="code">&lt;<span class="tag">wick-chart</span> <span class="attr">indicators</span>=<span class="str">"vwap"</span> <span class="attr">vwap-anchor</span>=<span class="str">"America/New_York"</span>&gt;&lt;/<span class="tag">wick-chart</span>&gt;</pre></div>
+        <p>Accepts <code>utc</code> (default), <code>local</code>, an IANA zone, or a fixed offset in milliseconds for an exchange session that doesn't start at local midnight. Equities, futures and FX rarely open at UTC midnight — the default is right for crypto and wrong for most other markets, so set it deliberately.</p>
       </section>
 
       <section id="trading">

@@ -11,7 +11,20 @@ import { gzipSync } from 'node:zlib';
 
 // 64→68 KB: the indicators batch (vwap/atr/stoch/obv/supertrend/donchian/
 // keltner/cci/wr) landed at 64.3 KB gz — still zero-dependency, still small.
-const BUDGET_GZ = 68 * 1024; // 68 KB gzipped for the whole main entry
+//
+// 68→72 KB: timezone-aware axis labels + a VWAP session anchor. The correctness
+// pass before this took the entry to 67.26 KB, leaving 0.74 KB — not enough for
+// DST-exact Intl offset math, and shaving comments to squeeze a feature in is
+// how a budget stops meaning anything.
+//
+// This is a ceiling raise, not a licence to sprawl. The reclaim is already
+// measured and deliberately deferred to 2.0, where the plugin split moves
+// sonification (1.11), narrator (1.26), story (1.60), co-view (1.79),
+// scenario/risk (1.86) and the AI helpers (2.01) out of the core — ~9.6 KB,
+// targeting an entry back under 62 KB. Extracting them now would break
+// chart.narrate() / playStory() / playRange() / getPeers() and the sonify and
+// co-view attributes, which is a major-version conversation, not a budget one.
+const BUDGET_GZ = 72 * 1024; // 72 KB gzipped for the whole main entry
 const FILES = ['src/core.js', 'src/wick-chart.js'];
 
 // the drawing toolkit is opt-in bytes; it earns its own, smaller budget
