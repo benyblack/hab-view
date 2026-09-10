@@ -1,5 +1,7 @@
 # WickChart
 
+[![npm](https://img.shields.io/npm/v/wickchart)](https://www.npmjs.com/package/wickchart)
+
 **`<wick-chart>` — a modern, simpler, more useful charting web component.**
 
 A TradingView-style financial chart as a single framework-agnostic Web Component.

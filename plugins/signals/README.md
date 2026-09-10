@@ -1,5 +1,7 @@
 # wickchart-signals
 
+[![npm](https://img.shields.io/npm/v/wickchart-signals)](https://www.npmjs.com/package/wickchart-signals)
+
 Candlestick pattern badges for [wickchart](https://github.com/benyblack/wickchart),
 as an opt-in plugin layer — the core stays pattern-free. Zero dependencies.
 

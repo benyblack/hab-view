@@ -1,5 +1,7 @@
 # wickchart-alerts-plus
 
+[![npm](https://img.shields.io/npm/v/wickchart-alerts-plus)](https://www.npmjs.com/package/wickchart-alerts-plus)
+
 The "pro" alert tier for [wickchart](https://github.com/benyblack/wickchart),
 as an opt-in plugin — core alerts are runtime-only by design, so persistence,
 desktop notifications and webhooks live here instead. Zero dependencies.

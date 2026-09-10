@@ -1,5 +1,7 @@
 # wickchart-sessions
 
+[![npm](https://img.shields.io/npm/v/wickchart-sessions)](https://www.npmjs.com/package/wickchart-sessions)
+
 Market session shading for [wickchart](https://github.com/benyblack/wickchart),
 as an opt-in plugin layer — the core stays session-free. Zero dependencies.
 

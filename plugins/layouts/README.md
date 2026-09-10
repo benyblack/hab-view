@@ -1,5 +1,7 @@
 # wickchart-layouts
 
+[![npm](https://img.shields.io/npm/v/wickchart-layouts)](https://www.npmjs.com/package/wickchart-layouts)
+
 Named workspace persistence for [wickchart](https://github.com/benyblack/wickchart),
 as an opt-in plugin — save and restore whole chart setups by name. Zero
 dependencies, zero core changes: everything rides the core's public

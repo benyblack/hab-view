@@ -1,5 +1,7 @@
 # wickchart-draw
 
+[![npm](https://img.shields.io/npm/v/wickchart-draw)](https://www.npmjs.com/package/wickchart-draw)
+
 Drawing tools for [wickchart](https://github.com/benyblack/wickchart), as an
 opt-in plugin layer — the core stays drawing-free. Zero dependencies.
 
