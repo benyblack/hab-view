@@ -32,13 +32,38 @@ jobs:
       - run: npm ci
       - run: npm run ci
 
-      - name: Assemble site (landing + docs + demo + modules + draw plugin, nothing else)
+      - name: Assemble site (landing + docs + demo + modules + every plugin package, nothing else)
         run: |
           mkdir site
           cp -r src demo index.html docs.html site/
           mkdir -p site/plugins
-          cp -r plugins/draw site/plugins/
+          for d in plugins/*/; do
+            name=$(basename "$d")
+            cp -r "$d" "site/plugins/$name"
+            rm -rf "site/plugins/$name/tests"
+          done
           find site -name '*.html' -printf '%p\n'
+
+      # the demo boots via relative imports in demo/app.js — if any of them is
+      # missing from the artifact the page renders a dead toolbar (this shipped
+      # once: plugins/ was hard-coded to draw/ only). Fail the deploy instead.
+      - name: Guard — every local reference must resolve inside the artifact
+        run: |
+          node -e "
+          const fs=require('fs'),path=require('path');
+          const refs=[];
+          const app=fs.readFileSync('demo/app.js','utf8');
+          for(const m of app.matchAll(/from\s+'(\.[^']+)'/g)) refs.push(path.join('demo',m[1]));
+          for(const m of app.matchAll(/import\s+'(\.[^']+)'/g)) refs.push(path.join('demo',m[1]));
+          for(const html of ['demo/index.html','index.html','docs.html']){
+            const s=fs.readFileSync(html,'utf8');
+            for(const m of s.matchAll(/(?:src|href)=\"(\.[^\"]+)\"/g)) refs.push(path.join(path.dirname(html),m[1]));
+          }
+          const uniq=[...new Set(refs)];
+          const missing=uniq.filter(p=>!fs.existsSync(path.join('site',p)));
+          if(missing.length){console.error('Missing from site/:',missing);process.exit(1);}
+          console.log('all',uniq.length,'local references resolve');
+          "
 
       - uses: actions/upload-pages-artifact@v3
         with:
