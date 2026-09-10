@@ -3,3 +3,5 @@ node_modules/
 *.log
 .mimosa/
 types/
+test-results/
+playwright-report/

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>wick-chart e2e fixture</title>
+  <style>
+    html, body { margin: 0; background: #0b0d12; }
+    /* A fixed box so screenshots and pixel maths are deterministic; the
+       resize spec drives #box directly. */
+    #box { width: 900px; height: 460px; }
+    wick-chart { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="box"><wick-chart id="chart" type="candles"></wick-chart></div>
+
+  <script type="module">
+    import '/src/wick-chart.js';
+
+    import { makeBars, settle } from './bars.js';
+
+    window.makeBars = makeBars;
+    window.settle = settle;
+
+    /**
+     * Plot geometry in CSS pixels, so specs can diff one band of the canvas
+     * (the time axis, say) rather than the whole picture.
+     */
+    window.layout = () => {
+      const ly = document.getElementById('chart')._ly;
+      const cv = document.getElementById('chart').shadowRoot.querySelector('canvas');
+      return ly
+        ? { W: ly.W, H: ly.H, priceW: ly.priceW, timeH: ly.timeH,
+            plotRight: ly.plotRight, plotBottom: ly.plotBottom,
+            dpr: cv.width / cv.getBoundingClientRect().width }
+        : null;
+    };
+
+    const params = new URLSearchParams(location.search);
+    // ?fill — size the box to the viewport, for phone-sized runs.
+    if (params.has('fill')) {
+      const box = document.getElementById('box');
+      box.style.width = '100vw';
+      box.style.height = '70vh';
+    }
+
+    const chart = document.getElementById('chart');
+    window.chart = chart;
+
+    /** Events the specs assert on, recorded in arrival order. */
+    window.events = { range: [], alert: [], crosshair: [] };
+    for (const name of Object.keys(window.events)) {
+      chart.addEventListener('wick:' + name, (e) => window.events[name].push(e.detail));
+    }
+
+    // Seed unless a spec asked for an empty chart (?empty).
+    if (!params.has('empty')) {
+      chart.setData(window.makeBars());
+    }
+    await window.settle();
+    window.ready = true;
+  </script>
+</body>
+</html>
