@@ -111,32 +111,35 @@ test('a bar older than everything goes to the front', () => {
 });
 
 test('placing an out-of-order bar does not scan the whole series', () => {
-  /** Time 500 front-inserts — the worst case for a backward scan. */
-  const timeInserts = (n) => {
-    const chart = makeChart();
-    chart.setData(Array.from({ length: n }, (_, i) => bar(i, 100)));
-    const t0 = performance.now();
-    for (let k = 0; k < 500; k++) {
-      chart.update({ time: chart._data[0].time - 3600e3, open: 1, high: 1, low: 1, close: 1, volume: 1 });
-    }
-    return performance.now() - t0;
-  };
+  const n = 300000;
+  const ROUNDS = 500;
+  const newBar = (time) => ({ time, open: 1, high: 1, low: 1, close: 1, volume: 1 });
 
-  // Measured against a ratio rather than a stopwatch: the absolute numbers
-  // move with the machine and with whatever else is running, and the original
-  // 100ms ceiling sat close enough to the real ~19ms to fail under load. How
-  // the cost *scales* with series length is the actual claim, and it is the
-  // part a backward scan would break.
-  const small = timeInserts(30000);
-  const large = timeInserts(300000);
+  // Inserting at the front of a 300k array is memmove-bound no matter how the
+  // slot is found, so that irreducible cost is the yardstick. Timing it in the
+  // same run on the same machine is what makes this stable: an absolute
+  // ceiling failed under load locally, and a small-vs-large ratio failed on CI
+  // at 91x — because the splice, not the search, is what scales there.
+  const plain = Array.from({ length: n }, (_, i) => newBar(T0 + i * 3600e3));
+  const t0 = performance.now();
+  for (let k = 0; k < ROUNDS; k++) plain.splice(0, 0, newBar(plain[0].time - 3600e3));
+  const splices = performance.now() - t0;
 
-  // A backward scan is O(n) per insert, so 10x the bars costs ~10x the time.
-  // A binary search is O(log n), leaving only the splice — which is memmove,
-  // far cheaper per element than interpreted comparisons.
-  const ratio = large / Math.max(small, 0.5);
+  const chart = makeChart();
+  chart.setData(Array.from({ length: n }, (_, i) => bar(i, 100)));
+  const t1 = performance.now();
+  for (let k = 0; k < ROUNDS; k++) {
+    // the worst case for a backward scan: older than every existing bar
+    chart.update(newBar(chart._data[0].time - 3600e3));
+  }
+  const updates = performance.now() - t1;
+
+  // A binary search adds ~log2(300k) comparisons per insert, which disappears
+  // next to the splice. A backward scan adds 300k, which does not.
+  const overhead = updates / Math.max(splices, 0.5);
   assert.ok(
-    ratio < 5,
-    `500 front-inserts cost ${small.toFixed(0)}ms at 30k bars and ${large.toFixed(0)}ms at 300k ` +
-      `(${ratio.toFixed(1)}x for 10x the data) — expected a binary search, not a scan`
+    overhead < 3,
+    `${ROUNDS} front-inserts took ${updates.toFixed(0)}ms against a bare-splice floor of ` +
+      `${splices.toFixed(0)}ms (${overhead.toFixed(1)}x) — expected a binary search, not a scan`
   );
 });
