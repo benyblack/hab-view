@@ -82,4 +82,28 @@ test.describe('phone layout', () => {
       expect(report.stranded, 'content wider than the screen that nothing can scroll to').toEqual([]);
     });
   }
+
+  for (const path of ['/index.html', '/docs.html', '/plugins.html']) {
+    test(`${path} has finger-sized nav links`, async ({ page }) => {
+      await page.goto(path);
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForTimeout(400);
+
+      // The top nav only — the docs sidebar is a long list read by scrolling,
+      // not a row of targets competing for the same thumb.
+      const small = await page.evaluate(() => {
+        const links = document.querySelectorAll('body > nav a, .topbar nav a');
+        const out = [];
+        for (const a of links) {
+          const box = a.getBoundingClientRect();
+          if (box.height === 0) continue;
+          if (box.height < 32) out.push(`${a.textContent.trim()} ${Math.round(box.width)}x${Math.round(box.height)}`);
+        }
+        return { checked: links.length, small: out };
+      });
+
+      expect(small.checked, 'no nav links found — has the markup changed?').toBeGreaterThan(2);
+      expect(small.small, 'nav links shorter than a fingertip').toEqual([]);
+    });
+  }
 });

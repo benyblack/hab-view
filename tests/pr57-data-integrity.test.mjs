@@ -111,17 +111,32 @@ test('a bar older than everything goes to the front', () => {
 });
 
 test('placing an out-of-order bar does not scan the whole series', () => {
-  const n = 300000;
-  const chart = makeChart();
-  chart.setData(Array.from({ length: n }, (_, i) => bar(i, 100)));
+  /** Time 500 front-inserts — the worst case for a backward scan. */
+  const timeInserts = (n) => {
+    const chart = makeChart();
+    chart.setData(Array.from({ length: n }, (_, i) => bar(i, 100)));
+    const t0 = performance.now();
+    for (let k = 0; k < 500; k++) {
+      chart.update({ time: chart._data[0].time - 3600e3, open: 1, high: 1, low: 1, close: 1, volume: 1 });
+    }
+    return performance.now() - t0;
+  };
 
-  const t0 = performance.now();
-  for (let k = 0; k < 500; k++) {
-    // the worst case for a backward scan: older than every existing bar
-    chart.update({ time: chart._data[0].time - 3600e3, open: 1, high: 1, low: 1, close: 1, volume: 1 });
-  }
-  const ms = performance.now() - t0;
+  // Measured against a ratio rather than a stopwatch: the absolute numbers
+  // move with the machine and with whatever else is running, and the original
+  // 100ms ceiling sat close enough to the real ~19ms to fail under load. How
+  // the cost *scales* with series length is the actual claim, and it is the
+  // part a backward scan would break.
+  const small = timeInserts(30000);
+  const large = timeInserts(300000);
 
-  // measured: ~345ms scanning backwards, ~19ms with a binary search
-  assert.ok(ms < 100, `500 front-inserts into ${n} bars took ${ms.toFixed(0)}ms — expected a binary search`);
+  // A backward scan is O(n) per insert, so 10x the bars costs ~10x the time.
+  // A binary search is O(log n), leaving only the splice — which is memmove,
+  // far cheaper per element than interpreted comparisons.
+  const ratio = large / Math.max(small, 0.5);
+  assert.ok(
+    ratio < 5,
+    `500 front-inserts cost ${small.toFixed(0)}ms at 30k bars and ${large.toFixed(0)}ms at 300k ` +
+      `(${ratio.toFixed(1)}x for 10x the data) — expected a binary search, not a scan`
+  );
 });

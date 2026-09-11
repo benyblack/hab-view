@@ -73,3 +73,24 @@ test.describe('custom element', () => {
     await expectCanvasUnchanged(page);
   });
 });
+
+test.describe('overlays on a wide chart', () => {
+  test('the HUD stays opposite the legend', async ({ page }) => {
+    await openFixture(page);
+    const { legend, hud } = await page.evaluate(async () => {
+      window.chart.setAttribute('label', 'BTCUSD');
+      window.chart.setAttribute('stats', 'true');
+      await window.settle();
+      const root = window.chart.shadowRoot;
+      const box = (sel) => {
+        const r = root.querySelector(sel).getBoundingClientRect();
+        return { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top) };
+      };
+      return { legend: box('.legend'), hud: box('.hud'), canvas: box('canvas') };
+    });
+    // Narrow charts stack these (see the container query); a 900px one must
+    // keep the classic terminal layout — legend left, stats right, same line.
+    expect(hud.left).toBeGreaterThan(legend.left);
+    expect(Math.abs(hud.top - legend.top)).toBeLessThanOrEqual(2);
+  });
+});

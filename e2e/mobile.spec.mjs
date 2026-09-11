@@ -314,3 +314,110 @@ test.describe('long-press scrub', () => {
     expect((await visibleRange(page)).from).toBeGreaterThan(before.from);
   });
 });
+
+test.describe('overlays on a narrow chart', () => {
+  /** A chart configured the way the demo configures it: label, stats, indicators. */
+  async function busyChart(page) {
+    await openFixture(page, '?fill');
+    await page.evaluate(async () => {
+      window.chart.setAttribute('label', 'BTCUSD');
+      window.chart.setAttribute('stats', 'true');
+      window.chart.setAttribute('indicators', 'sma:20 rsi:14 volume');
+      await window.settle();
+    });
+    return page.evaluate(() => {
+      const root = window.chart.shadowRoot;
+      const box = (sel) => {
+        const r = root.querySelector(sel).getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
+      };
+      return { legend: box('.legend'), hud: box('.hud'), canvas: box('canvas') };
+    });
+  }
+
+  test('the legend and the stats HUD do not overlap', async ({ page }) => {
+    const { legend, hud } = await busyChart(page);
+    const overlapX = Math.min(legend.right, hud.right) - Math.max(legend.left, hud.left);
+    const overlapY = Math.min(legend.bottom, hud.bottom) - Math.max(legend.top, hud.top);
+    // Both used to be pinned to the top on opposite sides: 350x28px of the
+    // stats row drew straight through the legend text.
+    expect(
+      overlapX > 0 && overlapY > 0,
+      `legend ${JSON.stringify(legend)} overlaps hud ${JSON.stringify(hud)}`
+    ).toBe(false);
+  });
+
+  test('both overlays stay inside the chart', async ({ page }) => {
+    const { legend, hud, canvas } = await busyChart(page);
+    for (const [name, box] of [['legend', legend], ['hud', hud]]) {
+      expect(box.left, `${name} starts before the chart`).toBeGreaterThanOrEqual(canvas.left - 1);
+      expect(box.right, `${name} runs past the chart`).toBeLessThanOrEqual(canvas.right + 1);
+    }
+  });
+});
+
+test.describe('drawings by touch', () => {
+  /** The plugins-hub draw playground, served from source. */
+  async function openPlayground(page) {
+    await page.route('**/*', (route) =>
+      route.request().url().startsWith('http://127.0.0.1') ? route.continue() : route.abort()
+    );
+    await page.goto('/plugins.html');
+    await page.waitForFunction(() => {
+      const c = document.getElementById('ex-draw');
+      return c && c.shadowRoot && c.shadowRoot.querySelector('canvas') && c.data && c.data.length > 0;
+    });
+    return page.locator('#ex-draw canvas').first();
+  }
+
+  const toolButton = (page, label) =>
+    page.locator('#draw-tools button, #draw-seg button').filter({ hasText: label }).first();
+
+  const drawingCount = (page) =>
+    page.evaluate(() => {
+      // The playground's footer reports the count after every change.
+      const m = /^(\d+) drawing/.exec(document.getElementById('draw-foot').textContent.trim());
+      return m ? Number(m[1]) : 0;
+    });
+
+  test('a drawing can be made and then deleted without a keyboard', async ({ page, context }) => {
+    const canvas = await openPlayground(page);
+
+    /**
+     * Tap the middle of the chart. The box is re-read every time because
+     * tapping a toolbar button scrolls it into view, which moves the canvas —
+     * a stale box sends the touch somewhere else entirely.
+     */
+    const tapChart = async () => {
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+      await touchSequence(page, context, [
+        ['touchStart', [{ x: box.x + box.width * 0.5, y: box.y + box.height / 2 }]],
+        ['touchEnd', []],
+      ]);
+    };
+
+    // Arm the level tool and place one — a single tap.
+    await toolButton(page, 'Level').tap();
+    await tapChart();
+    await expect.poll(() => drawingCount(page)).toBe(1);
+
+    // Back to select mode, tap the drawing to select it.
+    await toolButton(page, 'Select').tap();
+    await tapChart();
+
+    const del = page.locator('#draw-tools button').filter({ hasText: 'Delete' }).first();
+    // The button is the only route to deleting one drawing on a touchscreen:
+    // the plugin's other path is the Del key.
+    await expect(del).toBeEnabled();
+    await del.tap();
+
+    await expect.poll(() => drawingCount(page)).toBe(0);
+  });
+
+  test('the delete button is inert until something is selected', async ({ page }) => {
+    await openPlayground(page);
+    const del = page.locator('#draw-tools button').filter({ hasText: 'Delete' }).first();
+    await expect(del).toBeDisabled();
+  });
+});

@@ -777,6 +777,19 @@ document.getElementById('btn-draw-magnet').addEventListener('click', (e) => {
 document.getElementById('btn-draw-undo').addEventListener('click', () => draw.undo());
 document.getElementById('btn-draw-clear').addEventListener('click', () => draw.clear());
 
+// Deleting one drawing was Del/Backspace only, which a touchscreen does not
+// have — on a phone you could create drawings and never remove one. The
+// button tracks the plugin's selection so it is only live when it would do
+// something.
+const btnDrawDelete = document.getElementById('btn-draw-delete');
+btnDrawDelete.addEventListener('click', () => draw.deleteSelected());
+chart.addEventListener('wick:drawselect', (e) => {
+  btnDrawDelete.disabled = !e.detail.id;
+});
+chart.addEventListener('wick:drawings', () => {
+  btnDrawDelete.disabled = !draw.selectedId;
+});
+
 /* ---------------- plugin toggles: sessions / compare / navigator ---------------- */
 
 const sessions = attachSessions(chart);

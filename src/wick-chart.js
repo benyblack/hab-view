@@ -65,6 +65,9 @@ class WickChart extends HTMLElementBase {
             height: 100%;
             min-height: 220px;
             contain: content;
+            /* the overlays lay themselves out against the chart's own width
+               (see the @container rule at the end of this sheet) */
+            container-type: inline-size;
           }
           :host(:focus-visible) {
             outline: 2px solid var(--wick-accent, var(--hab-accent, #4c8dff));
@@ -157,6 +160,32 @@ class WickChart extends HTMLElementBase {
           .hud .v { color: var(--wick-text-strong, var(--hab-text-strong, #e6edf3)); font-variant-numeric: tabular-nums; }
           .hud .up { color: var(--wick-up, var(--hab-up, #16c784)); }
           .hud .dn { color: var(--wick-down, var(--hab-down, #ea3943)); }
+
+          /* Narrow charts: the legend (top-left) and the HUD (top-right) are
+             both pinned to the top, so on a phone they land on top of each
+             other — a label plus a few indicators wraps the legend to three
+             rows and the stats row draws straight through it. Below 560px
+             they stack instead.
+
+             A container query, not a media query: what matters is how wide
+             the chart is, not the screen. A narrow chart in a sidebar on a
+             desktop has exactly the same problem.
+
+             They become position:relative rather than static so they stay in
+             flow *and* keep their stacking context — an unpositioned box would
+             paint underneath the absolutely positioned canvas. The canvas is
+             out of flow either way, so the flex column never moves it. */
+          @container (max-width: 560px) {
+            .wrap { display: flex; flex-direction: column; align-items: flex-start; }
+            .legend, .hud {
+              position: relative;
+              left: auto; right: auto; top: auto;
+              max-width: calc(100% - 20px);
+            }
+            .legend { margin: 8px 10px 0; }
+            .hud { margin: 4px 10px 0; align-items: flex-start; }
+            .hud .pos, .hud .statsrow { white-space: normal; }
+          }
         </style>
         <div class="wrap" part="wrap">
           <canvas part="canvas" role="img"></canvas>

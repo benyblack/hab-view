@@ -138,6 +138,8 @@
          so neither may rely on staying on one line. */
       nav { flex-wrap: wrap; gap: 8px 12px; }
       nav .links { margin-left: 0; flex-wrap: wrap; gap: 8px 14px; }
+      /* 21px-tall links are comfortably under a fingertip */
+      nav .links a, nav .logo { display: inline-flex; align-items: center; min-height: 36px; }
     }
     .col p.hint { color: var(--muted); font-size: 12.5px; margin: 8px 2px 0; }
 
