@@ -149,9 +149,16 @@
     }
     .note b { color: var(--text); }
     @media (max-width: 980px) {
-      .layout { flex-direction: column; }
+      /* see docs.html: without align-items: stretch the stacked <main> sizes
+         to its content, and the phone renders the whole page zoomed out */
+      .layout { flex-direction: column; align-items: stretch; }
       .side { position: static; width: 100%; flex: none; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
-      main { padding: 22px 18px 70px; max-width: none; }
+      main { padding: 22px 18px 70px; max-width: none; min-width: 0; }
+      table { display: block; width: max-content; max-width: 100%; overflow-x: auto; }
+      .topbar { flex-wrap: wrap; row-gap: 4px; }
+      /* the demo cards clip their overflow, so a segmented control wider than
+         the phone loses its last buttons outright — wrap them instead */
+      .seg { flex-wrap: wrap; }
     }
   </style>
 </head>

@@ -1092,7 +1092,9 @@ wick-chart {
 | Trackpad horizontal scroll | Pan                                 |
 | Drag                       | Pan (auto-follow re-arms at the right edge) |
 | Pinch (touch)              | Zoom                                |
-| Double-click               | Reset view                          |
+| Long press (touch)         | Open the crosshair, then drag to scrub across bars |
+| Vertical swipe (touch)     | Scrolls the page, not the chart     |
+| Double-click / double-tap  | Reset view                          |
 | `←` `→` (`+Shift` ×10)     | Move crosshair                      |
 | `+` / `−`                  | Zoom in / out                       |
 | `Home` / `End`             | Jump to oldest / newest             |
