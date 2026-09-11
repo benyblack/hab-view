@@ -133,7 +133,11 @@
     .cols > * { min-width: 0; }
     @media (max-width: 760px) {
       .cols { grid-template-columns: 1fr; }
+      /* Both rows have to wrap: the nav, and the link list inside it. How
+         close this runs to the edge depends on the font that actually loads,
+         so neither may rely on staying on one line. */
       nav { flex-wrap: wrap; gap: 8px 12px; }
+      nav .links { margin-left: 0; flex-wrap: wrap; gap: 8px 14px; }
     }
     .col p.hint { color: var(--muted); font-size: 12.5px; margin: 8px 2px 0; }
 
