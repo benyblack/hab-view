@@ -404,6 +404,26 @@ wick-chart {
 @media (max-width: 760px) {
   .hint { display: none; }
   .brand-tag { display: none; }
+
+  /* The toolbar is a row of nowrap clusters, which on a phone laid the page
+     out 970px wide — the browser then zoomed the whole demo out to fit. Let
+     the clusters and the segmented groups inside them wrap instead; the
+     dividers and the trade cluster's auto margin only make sense on one line. */
+  .cluster,
+  .seg,
+  .chips { flex-wrap: wrap; }
+  /* Both axes, not just overflow-x: a visible axis paired with a clipped one
+     computes back to auto, which would leave the cluster a scroller and give
+     its chips unlimited width to lay out in — so they would never wrap. */
+  .cluster-studies { overflow: visible; }
+  /* and they must be allowed to shrink, or each group keeps its max-content
+     width and the wrap never happens */
+  .cluster-studies .chips,
+  .cluster-studies .script-row { flex: 1 1 auto; min-width: 0; }
+  .topbar-second .cluster + .cluster,
+  .topbar-main .cluster + .cluster { padding-left: 0; border-left: none; }
+  .cluster-trade { margin-left: 0; }
+  .script-row { min-width: 0; }
 }
 
 /* ---------------- AI summary panel ---------------- */

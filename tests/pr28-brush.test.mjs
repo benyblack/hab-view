@@ -106,7 +106,9 @@ test('brush is wired into the chart: attribute, pointer flow, escape, draw', () 
   assert.match(pd, /this\._brushDrag = null;/, 'pinch cancels a live brush');
   const pm = src.slice(src.indexOf('_pointerMove(e) {'), src.indexOf('_pointerUp(e) {'));
   assert.match(pm, /this\._brushDrag\.i1 = idx/, 'move extends the selection');
-  const up = src.slice(src.indexOf('_pointerUp(e) {'), src.indexOf('_pointerUp(e) {') + 900);
+  // Bound by the next method rather than a character count — the window
+  // silently stops covering the function as soon as anything is added to it.
+  const up = src.slice(src.indexOf('_pointerUp(e) {'), src.indexOf('_yToPrice(y) {'));
   assert.match(up, /_brushFinish\(/, 'release commits via _brushFinish');
   const kd = src.slice(src.indexOf('_keydown(e) {'), src.indexOf('_keydown(e) {') + 400);
   assert.match(kd, /Escape/, 'Escape clears the selection');

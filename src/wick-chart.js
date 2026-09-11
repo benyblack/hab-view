@@ -65,6 +65,9 @@ class WickChart extends HTMLElementBase {
             height: 100%;
             min-height: 220px;
             contain: content;
+            /* the overlays lay themselves out against the chart's own width
+               (see the @container rule at the end of this sheet) */
+            container-type: inline-size;
           }
           :host(:focus-visible) {
             outline: 2px solid var(--wick-accent, var(--hab-accent, #4c8dff));
@@ -75,10 +78,17 @@ class WickChart extends HTMLElementBase {
             position: absolute; inset: 0;
             width: 100%; height: 100%;
             display: block;
-            touch-action: none;
+            /* pan-y, not none: a vertical swipe belongs to the page, or a
+               chart embedded in a phone article becomes a dead zone the
+               reader cannot scroll past. Horizontal drags and pinches still
+               arrive as pointer events; _onTouchMove takes the gesture back
+               (preventDefault) once the chart owns it. */
+            touch-action: pan-y;
             cursor: crosshair;
             user-select: none;
             -webkit-user-select: none;
+            /* long-press is the scrub gesture — suppress the iOS callout */
+            -webkit-touch-callout: none;
           }
           canvas.grabbing { cursor: grabbing; }
           .legend {
@@ -150,6 +160,32 @@ class WickChart extends HTMLElementBase {
           .hud .v { color: var(--wick-text-strong, var(--hab-text-strong, #e6edf3)); font-variant-numeric: tabular-nums; }
           .hud .up { color: var(--wick-up, var(--hab-up, #16c784)); }
           .hud .dn { color: var(--wick-down, var(--hab-down, #ea3943)); }
+
+          /* Narrow charts: the legend (top-left) and the HUD (top-right) are
+             both pinned to the top, so on a phone they land on top of each
+             other — a label plus a few indicators wraps the legend to three
+             rows and the stats row draws straight through it. Below 560px
+             they stack instead.
+
+             A container query, not a media query: what matters is how wide
+             the chart is, not the screen. A narrow chart in a sidebar on a
+             desktop has exactly the same problem.
+
+             They become position:relative rather than static so they stay in
+             flow *and* keep their stacking context — an unpositioned box would
+             paint underneath the absolutely positioned canvas. The canvas is
+             out of flow either way, so the flex column never moves it. */
+          @container (max-width: 560px) {
+            .wrap { display: flex; flex-direction: column; align-items: flex-start; }
+            .legend, .hud {
+              position: relative;
+              left: auto; right: auto; top: auto;
+              max-width: calc(100% - 20px);
+            }
+            .legend { margin: 8px 10px 0; }
+            .hud { margin: 4px 10px 0; align-items: flex-start; }
+            .hud .pos, .hud .statsrow { white-space: normal; }
+          }
         </style>
         <div class="wrap" part="wrap">
           <canvas part="canvas" role="img"></canvas>
@@ -234,6 +270,11 @@ class WickChart extends HTMLElementBase {
       this._pointers = new Map();
       this._pan = null;
       this._pinch = null;
+      // long-press scrub: touch has no hover, so reading a bar needs a
+      // gesture of its own (see _armPress)
+      this._scrub = false;
+      this._pressTimer = 0;
+      this._pressOrigin = null;
 
       // plugin layers: external draw hooks + pointer claims (see addLayer)
       this._layers = [];
@@ -280,6 +321,21 @@ class WickChart extends HTMLElementBase {
         this.fit();
       };
       this._onKey = (e) => this._keydown(e);
+      // The canvas leaves vertical scrolling to the page (touch-action:
+      // pan-y). Once a chart gesture owns the touch — a pinch, a scrub, a
+      // layer drag, or a pan that has committed to a direction — the
+      // gesture is taken back, or the browser would hand it to the scroller
+      // halfway through. Must be non-passive to be allowed to.
+      this._onTouchMove = (e) => {
+        if (
+          this._scrub ||
+          this._pointers.size >= 2 ||
+          this._layerClaim ||
+          (this._pan && this._pan.moved)
+        ) {
+          e.preventDefault();
+        }
+      };
       // devicePixelRatio changes without the CSS box changing size — dragging
       // the window to a monitor with a different ratio, or a browser zoom
       // that lands on the same layout width. ResizeObserver stays silent for
@@ -311,6 +367,7 @@ class WickChart extends HTMLElementBase {
       cv.addEventListener('pointercancel', this._onPointerUp);
       cv.addEventListener('pointerleave', this._onPointerLeave);
       cv.addEventListener('wheel', this._onWheel, { passive: false });
+      cv.addEventListener('touchmove', this._onTouchMove, { passive: false });
       cv.addEventListener('dblclick', this._onDbl);
       this.addEventListener('keydown', this._onKey);
 
@@ -351,8 +408,11 @@ class WickChart extends HTMLElementBase {
       cv.removeEventListener('pointercancel', this._onPointerUp);
       cv.removeEventListener('pointerleave', this._onPointerLeave);
       cv.removeEventListener('wheel', this._onWheel);
+      cv.removeEventListener('touchmove', this._onTouchMove);
       cv.removeEventListener('dblclick', this._onDbl);
       this.removeEventListener('keydown', this._onKey);
+      this._disarmPress();
+      this._scrub = false;
       if (this._raf) cancelAnimationFrame(this._raf), (this._raf = 0);
     }
 
@@ -1273,6 +1333,11 @@ class WickChart extends HTMLElementBase {
      * ------------------------------------------------------------ */
 
     static _MAX_SP = 90;
+
+    /** Hold this long on a touchscreen to open the crosshair (ms). */
+    static _PRESS_MS = 350;
+    /** Finger travel that cancels the press and makes it a pan (px). */
+    static _PRESS_SLOP = 10;
 
     /**
      * Lowest allowed px/bar: either 0.35, or whatever fits the entire
@@ -3316,6 +3381,59 @@ class WickChart extends HTMLElementBase {
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     }
 
+    /**
+     * Put the crosshair on the bar under a point and announce it. Shared by
+     * mouse hover, keyboard walking and the touch scrub gesture.
+     */
+    _hoverAt(pt) {
+      if (!this._ly || !this._data.length) return;
+      const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
+      this._hover = { index: idx, x: this._xFor(idx), y: pt.y };
+      this._maybeSonify(idx);
+      this._emitCrosshair(this._hover);
+      this._invalidate();
+    }
+
+    /**
+     * Start the long-press timer for a touch. A touchscreen has no hover, so
+     * without this there is no way to read a bar's values on a phone: a tap
+     * selects, a drag pans, and the legend never leaves the last candle.
+     * Holding still opens the crosshair; moving first cancels and pans.
+     */
+    _armPress(pointerId, pt) {
+      this._disarmPress();
+      this._pressOrigin = { pointerId, x: pt.x, y: pt.y };
+      this._pressTimer = setTimeout(() => {
+        this._pressTimer = 0;
+        const origin = this._pressOrigin;
+        // Still one finger, still down, nothing else has claimed the gesture.
+        if (!origin || this._pointers.size !== 1 || this._layerClaim) return;
+        if (!this._pointers.has(origin.pointerId)) return;
+        this._scrub = true;
+        this._pan = null;
+        this._measuring = false;
+        this._canvas.classList.remove('grabbing');
+        this._hoverAt(origin);
+      }, WickChart._PRESS_MS);
+    }
+
+    _disarmPress() {
+      if (this._pressTimer) clearTimeout(this._pressTimer);
+      this._pressTimer = 0;
+      this._pressOrigin = null;
+    }
+
+    /** Leave scrub mode and put the crosshair away. */
+    _endScrub() {
+      if (!this._scrub) return;
+      this._scrub = false;
+      if (this._hover) {
+        this._hover = null;
+        this._emitCrosshair(null);
+        this._invalidate();
+      }
+    }
+
     _pointerDown(e) {
       if (e.button !== 0) return;
       this._stopPlayback(); // any touch interrupts the story
@@ -3336,6 +3454,9 @@ class WickChart extends HTMLElementBase {
         }
       }
       if (this._pointers.size === 2) {
+        // a second finger is a pinch, never a press or a scrub
+        this._disarmPress();
+        this._endScrub();
         const [a, b] = [...this._pointers.values()];
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
         this._pinch = {
@@ -3371,6 +3492,7 @@ class WickChart extends HTMLElementBase {
       } else {
         this._pan = { x: pt.x, rightIndex: this._view.rightIndex, moved: false };
         this._canvas.classList.add('grabbing');
+        if (e.pointerType === 'touch') this._armPress(e.pointerId, pt);
       }
     }
 
@@ -3384,6 +3506,20 @@ class WickChart extends HTMLElementBase {
       const pt = this._localPoint(e);
       if (this._pointers.has(e.pointerId)) this._pointers.set(e.pointerId, pt);
       const ly = this._ly;
+
+      // A finger that wanders before the press lands wanted to pan.
+      const origin = this._pressOrigin;
+      if (this._pressTimer && origin && origin.pointerId === e.pointerId) {
+        if (Math.hypot(pt.x - origin.x, pt.y - origin.y) > WickChart._PRESS_SLOP) {
+          this._disarmPress();
+        }
+      }
+
+      // Scrub: the finger walks the crosshair, the viewport stays put.
+      if (this._scrub && this._pointers.has(e.pointerId)) {
+        this._hoverAt(pt);
+        return;
+      }
 
       if (this._pinch && this._pointers.size >= 2 && ly) {
         const [a, b] = [...this._pointers.values()];
@@ -3432,11 +3568,7 @@ class WickChart extends HTMLElementBase {
 
       if (!ly) return;
       // hover / crosshair
-      const idx = clamp(Math.round(this._indexForX(pt.x)), 0, this._data.length - 1);
-      this._hover = { index: idx, x: this._xFor(idx), y: pt.y };
-      this._maybeSonify(idx);
-      this._emitCrosshair(this._hover);
-      this._invalidate();
+      this._hoverAt(pt);
     }
 
     _pointerUp(e) {
@@ -3450,8 +3582,12 @@ class WickChart extends HTMLElementBase {
       }
       const had = this._pointers.delete(e.pointerId);
       if (this._pointers.size < 2) this._pinch = null;
+      if (this._pressOrigin && this._pressOrigin.pointerId === e.pointerId) this._disarmPress();
       if (this._pointers.size === 0) {
         this._canvas.classList.remove('grabbing');
+        // Lifting ends the scrub — the crosshair is not left stranded on a
+        // touchscreen, where nothing else would ever clear it.
+        this._endScrub();
         if (this._brushDrag && had) {
           const b = this._brushDrag;
           this._brushDrag = null;

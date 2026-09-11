@@ -83,9 +83,13 @@ function makeChart() {
     '_layerPointerEvent',
     '_dockInset',
     '_yToPrice',
+    '_hoverAt',
     '_pointerDown',
     '_pointerMove',
     '_pointerUp',
+    '_armPress',
+    '_disarmPress',
+    '_endScrub',
     '_keydown',
   ]) {
     c[m] = WickChart.prototype[m];

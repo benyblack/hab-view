@@ -149,9 +149,18 @@
     }
     .note b { color: var(--text); }
     @media (max-width: 980px) {
-      .layout { flex-direction: column; }
+      /* see docs.html: without align-items: stretch the stacked <main> sizes
+         to its content, and the phone renders the whole page zoomed out */
+      .layout { flex-direction: column; align-items: stretch; }
       .side { position: static; width: 100%; flex: none; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
-      main { padding: 22px 18px 70px; max-width: none; }
+      main { padding: 22px 18px 70px; max-width: none; min-width: 0; }
+      table { display: block; width: max-content; max-width: 100%; overflow-x: auto; }
+      .topbar { flex-wrap: wrap; row-gap: 4px; }
+      /* the demo cards clip their overflow, so a segmented control wider than
+         the phone loses its last buttons outright — wrap them instead */
+      .seg { flex-wrap: wrap; }
+      /* nav links were 21px tall — comfortably under a fingertip */
+      .topbar nav a { display: inline-flex; align-items: center; min-height: 36px; }
     }
   </style>
 </head>
@@ -572,8 +581,16 @@ chart.<span class="attr">addEventListener</span>(<span class="str">'wick:tape'</
         foot.textContent = magnet ? 'magnet on — anchors snap to bars & OHLC' : 'magnet off — free placement';
       }).classList.add('on');
       mkBtn($('draw-tools'), 'Undo', 'undo the last drawing', () => draw.undo());
+      // Del/Backspace is the desktop route; a touchscreen has neither, so
+      // without a button a drawing made on a phone can never be removed.
+      const del = mkBtn($('draw-tools'), 'Delete', 'delete the selected drawing (or press Del)', () => {
+        if (!draw.deleteSelected()) foot.textContent = 'select a drawing first — tap it in select mode';
+      });
+      del.disabled = true;
       mkBtn($('draw-tools'), 'Clear', 'remove all drawings', () => draw.clear());
+      c.addEventListener('wick:drawselect', (e) => (del.disabled = !e.detail.id));
       c.addEventListener('wick:drawings', (e) => {
+        del.disabled = !draw.selectedId;
         const n = e.detail.drawings.length;
         foot.textContent = `${n} drawing${n === 1 ? '' : 's'} — ${e.detail.action}`;
       });
